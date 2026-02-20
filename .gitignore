@@ -24,3 +24,6 @@ mcp/
 # Temp files
 .tmp/
 .tmp_*
+
+# Reference repos
+reference/

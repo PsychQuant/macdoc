@@ -4,29 +4,28 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Repository Overview
 
-**docs_processing** 是一個原生 macOS 文件處理工具集，專注於文件格式解析、轉換和 OCR 功能。整個專案使用 Swift 開發，充分利用 Apple 平台的原生能力。
+**macdoc** 是一個原生 macOS 文件處理工具集，專注於文件格式解析、轉換和 OCR 功能。整個專案使用 Swift 開發，充分利用 Apple 平台的原生能力。
 
 ## Project Structure
 
 ```
-docs_processing/
-├── macdoc/                    # 主專案 CLI（給人用）
-│   ├── Sources/
-│   │   ├── MacDocCLI/         # CLI 入口點
-│   │   ├── MacDocCore/        # 核心協議和模型
-│   │   └── WordToMD/          # Word 轉 Markdown 實作
-│   ├── Tests/
-│   └── docs/logs/             # 開發對話記錄
-│
-├── packages/                  # 檔案格式解析套件
+macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
+├── Package.swift              # CLI 的 Swift Package 定義
+├── Sources/
+│   ├── MacDocCLI/             # CLI 入口點
+│   ├── MacDocCore/            # 核心協議和模型
+│   └── WordToMD/              # Word 轉 Markdown 實作
+├── Tests/
+├── docs/                      # 開發文檔和對話記錄
+├── packages/                  # 本地套件（各自獨立 git repo，.gitignore 忽略）
 │   ├── ooxml-swift/           # OOXML (Word/Excel) 解析
 │   ├── markdown-swift/        # Markdown 生成
 │   ├── marker-swift/          # 圖片分類 + Marker 輸出
 │   └── surya-swift/           # OCR 文字辨識
-│
-└── mcp/                       # MCP 工具（給 Claude 用）
-    ├── che-word-mcp/          # Word 文件處理 MCP（84 工具）
-    └── che-pdf-mcp/           # PDF 文件處理 MCP（25 工具）
+├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
+│   ├── che-word-mcp/          # Word 文件處理 MCP（84 工具）
+│   └── che-pdf-mcp/           # PDF 文件處理 MCP（25 工具）
+└── reference/                 # 參考專案（.gitignore 忽略）
 ```
 
 ## Package Dependencies
@@ -52,8 +51,7 @@ surya-swift              # 獨立套件，進階 OCR 功能
 ### Build & Run
 
 ```bash
-# 建構主專案
-cd macdoc
+# 建構主專案（在 repo 根目錄）
 swift build
 
 # 執行 CLI
@@ -76,8 +74,8 @@ cd mcp/che-pdf-mcp && swift build -c release
 ### Testing
 
 ```bash
-# 測試主專案
-cd macdoc && swift test
+# 測試主專案（在 repo 根目錄）
+swift test
 
 # 測試個別套件
 cd packages/ooxml-swift && swift test
@@ -88,7 +86,7 @@ cd packages/marker-swift && swift test
 
 ```bash
 # 清除快取（更新本地套件後建議執行）
-cd macdoc && swift package clean && swift build
+swift package clean && swift build
 ```
 
 ## Package Details
@@ -165,10 +163,10 @@ cd macdoc && swift package clean && swift build
 {
   "mcpServers": {
     "che-word-mcp": {
-      "command": "/path/to/docs_processing/mcp/che-word-mcp/.build/release/CheWordMCP"
+      "command": "/path/to/macdoc/mcp/che-word-mcp/.build/release/CheWordMCP"
     },
     "che-pdf-mcp": {
-      "command": "/path/to/docs_processing/mcp/che-pdf-mcp/.build/release/ChePDFMCP"
+      "command": "/path/to/macdoc/mcp/che-pdf-mcp/.build/release/ChePDFMCP"
     }
   }
 }
@@ -215,23 +213,26 @@ cd packages/ooxml-swift
 git add . && git commit -m "feat: 描述"
 git push origin main
 
-# 2. 在主專案清除快取
-cd ../../macdoc
+# 2. 回到主專案根目錄清除快取
+cd ../..
 swift package clean
 swift build
 ```
 
-## Git Status
+## Sub-Repositories
 
-| 專案 | Git | Remote |
-|------|-----|--------|
-| macdoc | ✅ | github.com/kiki830621/macdoc.git |
-| ooxml-swift | ✅ | github.com/kiki830621/ooxml-swift.git |
-| markdown-swift | ✅ | github.com/kiki830621/markdown-swift.git |
-| marker-swift | ✅ | (local only) |
-| surya-swift | ⚠️ | initialized, no commits |
-| che-word-mcp | ✅ | github.com/kiki830621/che-word-mcp.git |
-| che-pdf-mcp | ✅ | github.com/kiki830621/che-pdf-mcp.git |
+主 repo 透過 `.gitignore` 忽略以下目錄，各自獨立管理。重建環境時在對應目錄 `git clone` 即可。
+
+| 目錄 | Git Remote | 說明 |
+|------|-----------|------|
+| `.` (root) | https://github.com/kiki830621/macdoc.git | 主專案 CLI |
+| `packages/ooxml-swift` | https://github.com/kiki830621/ooxml-swift.git | OOXML 解析 |
+| `packages/markdown-swift` | https://github.com/kiki830621/markdown-swift.git | Markdown 生成 |
+| `packages/marker-swift` | (local only) | 圖片分類 |
+| `packages/surya-swift` | (local only) | OCR 文字辨識 |
+| `mcp/che-word-mcp` | https://github.com/kiki830621/che-word-mcp.git | Word MCP |
+| `mcp/che-pdf-mcp` | https://github.com/kiki830621/che-pdf-mcp.git | PDF MCP |
+| `reference/pandoc` | https://github.com/jgm/pandoc.git | 參考用 |
 
 ## Key Files
 
