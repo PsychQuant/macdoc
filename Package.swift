@@ -10,8 +10,11 @@ let package = Package(
         .library(name: "WordToMD", targets: ["WordToMD"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        // Local path dependencies during development
+        .package(path: "packages/ooxml-swift"),
+        .package(path: "packages/markdown-swift"),
+        .package(path: "packages/marker-swift"),
     ],
     targets: [
         .target(
@@ -21,7 +24,9 @@ let package = Package(
             name: "WordToMD",
             dependencies: [
                 "MacDocCore",
-                .product(name: "OOXMLSwift", package: "ooxml-swift")
+                .product(name: "OOXMLSwift", package: "ooxml-swift"),
+                .product(name: "MarkdownSwift", package: "markdown-swift"),
+                .product(name: "MarkerSwift", package: "marker-swift"),
             ]
         ),
         .executableTarget(

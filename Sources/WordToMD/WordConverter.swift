@@ -1,6 +1,7 @@
 import Foundation
 import MacDocCore
 import OOXMLSwift
+import MarkdownSwift
 
 /// Word 轉 Markdown 轉換器
 public struct WordConverter: DocumentConverter {
@@ -8,7 +9,7 @@ public struct WordConverter: DocumentConverter {
 
     public init() {}
 
-    public func convert<W: StreamingOutput>(
+    public func convert<W: MacDocCore.StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions
@@ -40,7 +41,7 @@ public struct WordConverter: DocumentConverter {
 
     // MARK: - Frontmatter
 
-    private func writeFrontmatter<W: StreamingOutput>(
+    private func writeFrontmatter<W: MacDocCore.StreamingOutput>(
         document: WordDocument,
         output: inout W
     ) throws {
@@ -63,7 +64,7 @@ public struct WordConverter: DocumentConverter {
 
     // MARK: - Paragraph Processing
 
-    private func processParagraph<W: StreamingOutput>(
+    private func processParagraph<W: MacDocCore.StreamingOutput>(
         _ paragraph: Paragraph,
         styles: [Style],
         numbering: Numbering,
@@ -134,19 +135,19 @@ public struct WordConverter: DocumentConverter {
             // 跳過空文字
             if text.isEmpty { continue }
 
-            // 套用格式
+            // 套用格式（使用 MarkdownSwift）
             let props = run.properties
             if props.bold && props.italic {
-                text = "***\(text)***"
+                text = MarkdownInline.boldItalic(text)
             } else if props.bold {
-                text = "**\(text)**"
+                text = MarkdownInline.bold(text)
             } else if props.italic {
-                text = "_\(text)_"
+                text = MarkdownInline.italic(text)
             }
 
             // 刪除線
             if props.strikethrough {
-                text = "~~\(text)~~"
+                text = MarkdownInline.strikethrough(text)
             }
 
             result += text
@@ -188,7 +189,7 @@ public struct WordConverter: DocumentConverter {
 
     // MARK: - Table Processing
 
-    private func processTable<W: StreamingOutput>(
+    private func processTable<W: MacDocCore.StreamingOutput>(
         _ table: Table,
         output: inout W,
         options: ConversionOptions
@@ -202,8 +203,9 @@ public struct WordConverter: DocumentConverter {
         // 正規化列（確保每列欄數相同）
         let normalizedRows = table.rows.map { row -> [String] in
             var cells = row.cells.map { cell -> String in
-                cell.paragraphs.map { formatRuns($0.runs) }.joined(separator: " ")
-                    .replacingOccurrences(of: "|", with: "\\|")  // 跳脫 pipe
+                let content = cell.paragraphs.map { formatRuns($0.runs) }.joined(separator: " ")
+                // 使用 MarkdownSwift 跳脫表格儲存格
+                return MarkdownEscaping.escape(content, context: .tableCell)
             }
             // 補足欄數
             while cells.count < columnCount {

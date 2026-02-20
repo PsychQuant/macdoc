@@ -1,15 +1,6 @@
 {
   "pins" : [
     {
-      "identity" : "ooxml-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kiki830621/ooxml-swift.git",
-      "state" : {
-        "revision" : "95a5ffa1ef1f8551338b85fbe71bd4284c6a583b",
-        "version" : "0.1.0"
-      }
-    },
-    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser",
