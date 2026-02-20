@@ -16,3 +16,11 @@ xcuserdata/
 
 # VS Code
 *.code-workspace
+
+# Local packages & MCP (separate git repos)
+packages/
+mcp/
+
+# Temp files
+.tmp/
+.tmp_*
