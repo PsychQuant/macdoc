@@ -13,38 +13,37 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Package.swift              # CLI 的 Swift Package 定義
 ├── Sources/
 │   ├── MacDocCLI/             # CLI 入口點
-│   ├── MacDocCore/            # 核心協議和模型
-│   └── WordToMD/              # Word 轉 Markdown 實作
+│   └── MarkerWordConverter/   # Marker 模式轉換器（依賴 MarkerSwift）
 ├── Tests/
 ├── docs/                      # 開發文檔和對話記錄
 ├── packages/                  # 本地套件（各自獨立 git repo，.gitignore 忽略）
-│   ├── ooxml-swift/           # OOXML (Word/Excel) 解析
-│   ├── markdown-swift/        # Markdown 生成
-│   ├── marker-swift/          # 圖片分類 + Marker 輸出
-│   └── surya-swift/           # OCR 文字辨識
+│   ├── doc-converter-swift/   # Layer 2: 轉換器協議（DocumentConverter, StreamingOutput）
+│   ├── word-to-md-swift/      # Layer 3: Word → Markdown 轉換器
+│   ├── ooxml-swift/           # Layer 1: OOXML (Word/Excel) 解析
+│   ├── markdown-swift/        # Layer 1: Markdown 生成
+│   ├── marker-swift/          # Layer 1: 圖片分類 + Marker 輸出
+│   └── surya-swift/           # Layer 1: OCR 文字辨識
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
-│   ├── che-word-mcp/          # Word 文件處理 MCP（84 工具）
-│   └── che-pdf-mcp/           # PDF 文件處理 MCP（25 工具）
+│   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
+│   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
 └── reference/                 # 參考專案（.gitignore 忽略）
 ```
 
 ## Package Dependencies
 
 ```
-macdoc (CLI)
-├── ooxml-swift          # Word 文件解析
-├── markdown-swift       # Markdown 輸出
-└── marker-swift         # 圖片處理 + metadata
-    └── markdown-swift   # (共用依賴)
+Layer 4 (Consumers)         Layer 3 (Converters)       Layer 2 (Protocols)     Layer 1 (Formats)
 
-che-word-mcp (MCP)
-└── ooxml-swift          # ← 共用本地套件！
-
-che-pdf-mcp (MCP)
-└── Vision.framework     # 原生 OCR（可選整合 surya-swift）
-
-surya-swift              # 獨立套件，進階 OCR 功能
+macdoc CLI ──────────┐
+                     ├──→ word-to-md-swift ──┬──→ doc-converter-swift    ooxml-swift
+che-word-mcp ────────┘                       ├──→ ooxml-swift            markdown-swift
+  └──→ ooxml-swift (直接讀寫)                 └──→ markdown-swift         marker-swift
+                                                                        surya-swift
+che-pdf-mcp
+└──→ Vision.framework / surya-swift
 ```
+
+詳見 [`docs/modular-architecture.md`](docs/modular-architecture.md)。
 
 ## Development Commands
 
@@ -91,60 +90,54 @@ swift package clean && swift build
 
 ## Package Details
 
-### macdoc (主專案)
-- **用途**：CLI 工具，整合各套件功能
-- **主要功能**：Word 轉 Markdown
-- **輸出模式**：
-  - 標準模式：單一 `.md` 文件
-  - Marker 模式：`.md` + `_meta.json` + `images/`
+### Layer 1: Format Packages
 
-### ooxml-swift
+#### ooxml-swift
 - **用途**：解析 Office Open XML 格式（.docx）
-- **功能**：
-  - 段落、表格、清單解析
-  - 圖片提取（嵌入式 + 連結）
-  - 語義標註（標題層級、公式、圖片類型）
-  - 樣式解析
+- **功能**：段落、表格、清單解析、圖片提取、語義標註、樣式解析
 - **依賴**：ZIPFoundation
 
-### markdown-swift
+#### markdown-swift
 - **用途**：生成 Markdown 文本
-- **功能**：
-  - Streaming 輸出（低記憶體佔用）
-  - 行內格式（粗體、斜體、連結）
-  - 特殊字元跳脫
+- **功能**：Streaming 輸出、行內格式、特殊字元跳脫
 - **依賴**：無
 
-### marker-swift
+#### marker-swift
 - **用途**：圖片分類和 Marker 格式輸出
-- **功能**：
-  - 圖片分類協議（可擴展 ML 分類器）
-  - Metadata JSON 生成
-  - 圖片管理和輸出
 - **依賴**：markdown-swift
 
-### surya-swift
-- **用途**：OCR 文字辨識
-- **功能**：
-  - 文字偵測（Detection）
-  - 文字辨識（Recognition）
-  - 表格偵測（Table）
-  - 閱讀順序分析（ReadingOrder）
-  - LaTeX 公式辨識
+#### surya-swift
+- **用途**：OCR 文字辨識（Detection、Recognition、Table、ReadingOrder、LaTeX）
 - **依賴**：swift-async-algorithms
 - **平台**：macOS 14+, iOS 17+
 
-## MCP Tools
+### Layer 2: Protocol Package
 
-### che-word-mcp（84 工具）
+#### doc-converter-swift
+- **用途**：轉換器共用協議和模型
+- **內容**：`DocumentConverter` protocol, `StreamingOutput` protocol, `ConversionOptions`, `ConversionError`
+- **依賴**：無
+
+### Layer 3: Converter Packages
+
+#### word-to-md-swift
+- **用途**：Word → Markdown 轉換
+- **功能**：streaming 轉換、標題/清單/表格偵測、行內格式、YAML frontmatter
+- **依賴**：doc-converter-swift + ooxml-swift + markdown-swift
+- **API**：`WordConverter.convert(input:)` / `WordConverter.convert(document:)` / `convertToString()`
+
+### Layer 4: Consumers
+
+#### macdoc (CLI)
+- **用途**：CLI 工具，整合各套件功能
+- **輸出模式**：標準模式（`.md`）、Marker 模式（`.md` + `_meta.json` + `images/`）
+- **依賴**：word-to-md-swift + marker-swift + ArgumentParser
+
+#### che-word-mcp（145 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
-- **功能**：
-  - OOXML 解析（段落、表格、清單、圖片）
-  - 樣式和格式資訊提取
-  - 文件結構分析
-  - 圖片提取
-- **依賴**：ooxml-swift（本地 path 依賴）
-- **架構**：單一 Server.swift（~4500 行）
+- **功能**：OOXML 讀寫（段落、表格、清單、圖片、樣式）+ Markdown 匯出
+- **依賴**：ooxml-swift + word-to-md-swift
+- **架構**：單一 Server.swift（~9100 行）
 - **Binary**：`.build/release/CheWordMCP`
 
 ### che-pdf-mcp（25 工具）
@@ -203,21 +196,24 @@ case .paragraph: // ...
 - `ImageClassifier` - 圖片分類協議
 - `StreamingOutput` - 輸出協議
 
-## Local Package Update Workflow
+## Package Update Workflow
 
-由於使用 `path:` 本地依賴，更新套件後：
+大部分套件使用 `url:` 遠端依賴（`marker-swift` 除外，仍為 `path:` 本地依賴）。
 
 ```bash
-# 1. 在套件目錄提交變更
+# 1. 在套件目錄提交、推送、打 tag
 cd packages/ooxml-swift
 git add . && git commit -m "feat: 描述"
 git push origin main
+git tag v0.3.0 && git push --tags
 
-# 2. 回到主專案根目錄清除快取
+# 2. 回到主專案更新依賴
 cd ../..
-swift package clean
+swift package update
 swift build
 ```
+
+若需要本地開發迭代，可暫時將 `Package.swift` 中的 `url:` 改為 `path:` 指向本地路徑，完成後再改回。
 
 ## Sub-Repositories
 
@@ -226,6 +222,8 @@ swift build
 | 目錄 | Git Remote | 說明 |
 |------|-----------|------|
 | `.` (root) | https://github.com/kiki830621/macdoc.git | 主專案 CLI |
+| `packages/doc-converter-swift` | https://github.com/kiki830621/doc-converter-swift.git | 轉換器協議 |
+| `packages/word-to-md-swift` | https://github.com/kiki830621/word-to-md-swift.git | Word → MD 轉換 |
 | `packages/ooxml-swift` | https://github.com/kiki830621/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/kiki830621/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | (local only) | 圖片分類 |
@@ -238,24 +236,25 @@ swift build
 
 ### macdoc
 - `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點
-- `Sources/WordToMD/WordConverter.swift` - 標準轉換器
-- `Sources/WordToMD/MarkerWordConverter.swift` - Marker 模式轉換器
+- `Sources/MarkerWordConverter/MarkerWordConverter.swift` - Marker 模式轉換器
+
+### doc-converter-swift
+- `Sources/DocConverterSwift/Protocols/DocumentConverter.swift` - 轉換器 protocol
+- `Sources/DocConverterSwift/Protocols/StreamingOutput.swift` - 串流輸出 protocol
+
+### word-to-md-swift
+- `Sources/WordToMDSwift/WordConverter.swift` - Word → Markdown 轉換器
 
 ### ooxml-swift
 - `Sources/OOXMLSwift/IO/DocxReader.swift` - Word 文件讀取
 - `Sources/OOXMLSwift/Models/SemanticAnnotation.swift` - 語義標註定義
-- `Sources/OOXMLSwift/Models/Paragraph.swift` - 段落模型
-
-### marker-swift
-- `Sources/MarkerSwift/MarkerWriter.swift` - Marker 輸出
-- `Sources/MarkerSwift/Protocols/ImageClassifier.swift` - 分類協議
 
 ### che-word-mcp
-- `Sources/CheWordMCP/Server.swift` - MCP 伺服器主體（84 工具定義）
-- `Package.swift` - 依賴宣告（使用本地 ooxml-swift）
+- `Sources/CheWordMCP/Server.swift` - MCP 伺服器主體（145 工具）
+- `Package.swift` - 依賴 ooxml-swift + word-to-md-swift
 
 ### che-pdf-mcp
-- `Sources/ChePDFMCP/Server.swift` - MCP 伺服器主體（25 工具定義）
+- `Sources/ChePDFMCP/Server.swift` - MCP 伺服器主體（25 工具）
 - `Sources/ChePDFMCP/VisionOCR.swift` - Vision OCR 實作
 
 ## Testing Files

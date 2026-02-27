@@ -1,5 +1,5 @@
 import Foundation
-import MacDocCore
+import DocConverterSwift
 import OOXMLSwift
 import MarkdownSwift
 import MarkerSwift

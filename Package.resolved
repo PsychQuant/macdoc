@@ -1,12 +1,39 @@
 {
   "pins" : [
     {
+      "identity" : "doc-converter-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kiki830621/doc-converter-swift.git",
+      "state" : {
+        "revision" : "99dc7a16ff5598128cd51327555ecfd05d7db133",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "ooxml-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kiki830621/ooxml-swift.git",
+      "state" : {
+        "revision" : "9aacc5ca26ac7eaa77c0da6309c3759ddf3d2927",
+        "version" : "0.2.0"
+      }
+    },
+    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser",
       "state" : {
         "revision" : "c5d11a805e765f52ba34ec7284bd4fcd6ba68615",
         "version" : "1.7.0"
+      }
+    },
+    {
+      "identity" : "word-to-md-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kiki830621/word-to-md-swift.git",
+      "state" : {
+        "revision" : "dc276c1e5b4164c6ef5dd3550eaabbc50bf8749e",
+        "version" : "0.1.0"
       }
     },
     {

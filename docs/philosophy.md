@@ -49,23 +49,27 @@ Streaming 適合**順序轉換**任務，如：
 ### 分離關注點
 
 ```
-ooxml-swift     → 讀取 Office 格式（OOXML 解析）
-markdown-swift  → 生成 Markdown（格式化、跳脫）
-macdoc          → 串接兩者（轉換邏輯）
+ooxml-swift           → 讀取 Office 格式（OOXML 解析）     Layer 1: Format
+markdown-swift        → 生成 Markdown（格式化、跳脫）       Layer 1: Format
+doc-converter-swift   → 轉換器協議（DocumentConverter 等）  Layer 2: Protocol
+word-to-md-swift      → Word → Markdown 轉換邏輯           Layer 3: Converter
+macdoc / MCP          → 組裝 packages，提供使用者介面       Layer 4: Consumer
 ```
 
-每個模組專注單一職責，可獨立開發、測試、重用。
+每個 package 專注單一職責，可獨立開發、測試、重用。
+Package 不屬於任何消費者——CLI、MCP、App 是不同的消費者，組合需要的 package。
+
+詳見 [`modular-architecture.md`](modular-architecture.md)。
 
 ### 依賴方向
 
 ```
-macdoc ─────────┬──→ ooxml-swift (讀取)
-                │
-                └──→ markdown-swift (輸出)
-
-che-word-mcp ───────→ ooxml-swift
-其他專案 ───────────→ markdown-swift
+Layer 4:  macdoc CLI ──────┬──→ word-to-md-swift ──┬──→ doc-converter-swift
+          che-word-mcp ────┘                       ├──→ ooxml-swift
+            └──→ ooxml-swift (直接讀寫)             └──→ markdown-swift
 ```
+
+依賴永遠是 Layer 4 → 3 → 2 → 1，不反向、不跨層。
 
 ---
 
@@ -114,5 +118,6 @@ writer.bulletList(["A", "B"])
 | `markdown-swift` | `docs/references.md` | CommonMark / GFM 規範 |
 | `macdoc` | `docs/philosophy.md` | 設計哲學與架構 |
 | `macdoc` | `docs/functional-correspondence.md` | 轉換映射理論 |
+| `macdoc` | `docs/modular-architecture.md` | Package 可重組架構與遷移路徑 |
 
 這樣當其他人使用某個套件時，可以直接參考相關的規範文件，不需要去其他專案找。

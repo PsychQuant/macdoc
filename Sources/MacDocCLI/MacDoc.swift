@@ -1,7 +1,8 @@
 import ArgumentParser
 import Foundation
-import MacDocCore
-import WordToMD
+import DocConverterSwift
+import WordToMDSwift
+import MarkerWordConverter
 
 @main
 struct MacDoc: AsyncParsableCommand {
