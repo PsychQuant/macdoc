@@ -2,6 +2,14 @@
 
 完全不失真的文件格式轉換——理論基礎與分層設計。
 
+> **Marker format** = Markdown + Figures + Metadata
+>
+> 這個 pattern 源自 [Marker](https://github.com/datalab-to/marker)——將文件轉為
+> Markdown 並同時提取圖片和 metadata 的開創性工具。Marker 定義了現代文件轉換的
+> paradigm：**乾淨的 Markdown + 提取的圖片 + 結構化 metadata**。
+> 我們沿用 **Marker** 這個名稱來指稱完整的不失真輸出格式（Tier 3），
+> 致敬這個轉檔領域最重要的發明。
+
 ---
 
 ## 1. 問題陳述
@@ -87,11 +95,11 @@ W ──convert──→ M × F × Meta
 
 ### 3.1 三個層級
 
-| Tier | 輸出 | Injective? | 適用場景 |
-|------|------|-----------|---------|
-| **Tier 1: Pure Markdown** | M | 否（lossy） | 快速預覽、終端顯示、純文字場景 |
-| **Tier 2: Markdown + Figures** | M × F | 否（less lossy） | 文件、部落格、知識庫匯入 |
-| **Tier 3: Markdown + Figures + Metadata** | M × F × Meta | **是（lossless）** | 歸檔、資料遷移、學術保存 |
+| Tier | 名稱 | 輸出 | Injective? | 適用場景 |
+|------|------|------|-----------|---------|
+| **Tier 1** | **Markdown** | M | 否（lossy） | 快速預覽、終端顯示、純文字場景 |
+| **Tier 2** | **Markdown + Figures** | M × F | 否（less lossy） | 文件、部落格、知識庫匯入 |
+| **Tier 3** | **Marker** | M × F × Meta | **是（lossless）** | 歸檔、資料遷移、學術保存 |
 
 ### 3.2 形式化
 
@@ -101,13 +109,13 @@ Tier 2:  convert₂(w) = π_{M×F}(convert(w))     -- 取 Markdown + Figures
 Tier 3:  convert₃(w) = convert(w)              -- 完整輸出（bijective）
 ```
 
-**Tier 3 是唯一 injective 的。** Tier 1 和 Tier 2 是刻意選擇丟棄部分資訊——使用者知情的有損壓縮。
+**只有 Marker（Tier 3）是 injective 的。** Tier 1 和 Tier 2 是刻意選擇丟棄部分資訊——使用者知情的有損壓縮。
 
-### 3.3 設計原則：Tier 3 驅動設計，Tier 1/2 是投影
+### 3.3 設計原則：Marker 驅動設計，Tier 1/2 是投影
 
 ```
-設計時：  永遠按 Tier 3 的標準思考（每個元素的完整資訊在哪裡？）
-實作時：  Tier 1/2 只是對 Tier 3 做投影（省略 F 或 Meta 的部分）
+設計時：  永遠按 Marker（Tier 3）的標準思考（每個元素的完整資訊在哪裡？）
+實作時：  Tier 1/2 只是對 Marker 做投影（省略 F 或 Meta 的部分）
 ```
 
 這確保：
@@ -159,7 +167,7 @@ Markdown 不能原生表達，但可透過內嵌 HTML 近似表達。
 
 **注意**：Layer B 是 Tier 1 的可選擴展。啟用後 Markdown 可讀性會下降，但資訊保留更多。仍然不是 injective（例如 underline 的 7 種子類型都 collapse 為 `<u>`）。
 
-### 4.3 Layer C — Metadata 專屬（Tier 3 限定）
+### 4.3 Layer C — Metadata 專屬（Marker / Tier 3 限定）
 
 只能透過 Metadata 管道保存的資訊。這些是讓 `convert` 成為 injection 的關鍵。
 
@@ -236,9 +244,9 @@ output/
 └── document.meta.yaml       # Tier 3: Metadata sidecar
 ```
 
-**Tier 1** 只產生 `document.md`。
-**Tier 2** 產生 `document.md` + `figures/`。
-**Tier 3** 產生全部三者。
+**Tier 1 (Markdown)** 只產生 `document.md`。
+**Tier 2 (Markdown + Figures)** 產生 `document.md` + `figures/`。
+**Tier 3 (Marker)** 產生全部三者——這就是完整的 Marker format。
 
 ### 5.3 Metadata Sidecar 結構
 
@@ -371,7 +379,7 @@ for element in source.elements:
 public enum FidelityTier: Sendable {
     case markdown           // Tier 1: 純 Markdown
     case markdownWithFigures // Tier 2: + 圖片提取
-    case lossless           // Tier 3: + Metadata（bijective）
+    case marker             // Tier 3: Marker format（MD + Figures + Meta, bijective）
 }
 
 public struct ConversionOptions: Sendable {
@@ -416,14 +424,14 @@ func convert<W: StreamingOutput>(
             try extractFigures(child, directory: options.figuresDirectory)
         }
 
-        // Metadata 通道（Tier 3）
-        if options.fidelity == .lossless {
+        // Metadata 通道（Marker）
+        if options.fidelity == .marker {
             try collectMetadata(child)
         }
     }
 
-    // Tier 3: streaming 結束後寫出 metadata sidecar
-    if options.fidelity == .lossless {
+    // Marker: streaming 結束後寫出 metadata sidecar
+    if options.fidelity == .marker {
         try writeMetadata(to: options.metadataOutput)
     }
 }
@@ -466,7 +474,7 @@ func convert<W: StreamingOutput>(
 | comment | — | — | ✅ | |
 | ... | | | | |
 
-**目標**：每個元素至少在一個通道中被保存。Tier 3 的合集必須覆蓋 100% 的元素。
+**目標**：每個元素至少在一個通道中被保存。Marker（Tier 3）的合集必須覆蓋 100% 的元素。
 
 ---
 
@@ -483,14 +491,14 @@ Markdown 本身無法 injection（表達能力不足）
 ### Fidelity Tiers
 
 ```
-Tier 1:  W → M              快速、有損、可讀
-Tier 2:  W → M × F          含圖、有損、實用
-Tier 3:  W → M × F × Meta   完整、無損、bijective
+Tier 1 (Markdown):            W → M              快速、有損、可讀
+Tier 2 (Markdown + Figures):  W → M × F          含圖、有損、實用
+Tier 3 (Marker):              W → M × F × Meta   完整、無損、bijective
 ```
 
 ### 設計原則
 
-1. **Tier 3 驅動設計** — 所有元素都必須有去處（M 或 Meta）
+1. **Marker 驅動設計** — 所有元素都必須有去處（M 或 Meta）
 2. **Sparse Metadata** — 只記錄 Markdown 無法表達的部分
 3. **Streaming 兼容** — 三通道平行輸出，O(1) 記憶體
 4. **使用者選擇** — 有損是刻意的選擇，不是設計缺陷
