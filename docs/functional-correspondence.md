@@ -449,3 +449,5 @@ fRun(r) = match (r.bold, r.italic, r.strike) {
 | `Code` (style) | `` `code` `` | 🔲 TODO |
 | `CodeBlock` | ``` ``` | 🔲 TODO |
 | `Blockquote` (style) | `> ` | 🔲 TODO |
+
+完整的元素映射分類（含 Markdown 無法表達的部分）見 [`lossless-conversion.md`](lossless-conversion.md)。
