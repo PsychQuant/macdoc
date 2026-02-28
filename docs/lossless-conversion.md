@@ -17,6 +17,210 @@
 
 ---
 
+## 0. 第零原則：完美可逆 (Perfect Reversibility)
+
+> **這是整份文件中最重要的原則。所有其他設計決策都從這裡推導。**
+
+### 0.1 公理
+
+> **轉換必須是完美可逆的。轉出去再轉回來，檔案必須與原檔完全相同。**
+>
+> ```
+> ∀ w ∈ W:  convert⁻¹(convert(w)) ≡ w
+> ```
+>
+> 其中 `≡` 是**嚴格相等**——不是「語意等價」、不是「看起來一樣」、不是「大致相同」。
+> 是**同一份檔案**。
+
+這不是「nice to have」，這是 bijection 的數學定義。如果 `f` 是 bijection，`f⁻¹` 就必須存在，
+而且 `f⁻¹ ∘ f = id`。如果做不到這一點，就不要叫 bijective——那只是 injective。
+
+### 0.2 推論
+
+從第零原則直接推導出的設計約束：
+
+**推論 1：逆轉換器必須存在**
+
+```
+word-to-md-swift:  Word → (MD, Figures, Meta)    -- 正向
+md-to-word-swift:  (MD, Figures, Meta) → Word    -- 逆向（必須實作）
+```
+
+這不是可選功能。沒有逆轉換器，bijection 就是空話。
+
+**推論 2：Metadata 必須捕捉所有差異**
+
+如果兩份 Word 文件在任何地方不同，`(MD, Figures, Meta)` 的某個通道必須反映這個差異。
+否則逆轉換器無法區分它們，完美可逆就不可能。
+
+```
+∀ w₁, w₂ ∈ W:  w₁ ≠ w₂ ⟹ convert(w₁) ≠ convert(w₂)
+```
+
+**推論 3：Metadata 的完整性沒有上限**
+
+`.docx` 是 ZIP 打包的 XML。一份檔案除了語意內容，還有大量「格式層」資訊：
+
+- XML 屬性排列順序
+- ZIP 內檔案排列順序與壓縮參數
+- Relationship ID 的具體編號
+- 精確的時間戳（created, modified, revision）
+- XML 空白、換行模式
+- 預設值是寫出還是省略
+
+**這些全部都是資訊。如果 metadata 沒有記錄它們，逆轉換器就無法重建原檔。**
+沒有什麼「不影響語意所以可以忽略」——完美可逆的定義就是 byte-identical，
+不是 semantic-identical。語意等價是一個更弱的目標，不是我們的目標。
+
+```
+Metadata 的職責 = 捕捉原始檔案的 100% 資訊
+                 = 語意內容 + 結構資訊 + 序列化細節
+
+沒有「可以忽略的細節」。如果忽略了，round-trip 就會 break。
+```
+
+如果覺得 metadata 太大，正確的反應不是「少記一點」，
+而是「設計更好的壓縮方式」或「把結構資訊放在獨立通道」。
+
+### 0.3 驗證方式
+
+```
+Round-Trip Test（最終驗收標準）:
+    ∀ w ∈ W_test:
+        let marker = convert(w)
+        let w' = convert⁻¹(marker)
+        assert: sha256(w') == sha256(w)   -- byte-identical to original
+```
+
+**不存在「正規化」的逃脫口。** 不是先把原檔 canonicalize 再比較——
+是直接跟原檔比較。如果做不到，就是 metadata 還沒寫完整，繼續補。
+
+其他所有測試（injective、sparse metadata、bijection pairs）
+都是這個標準的弱化近似。它們有用（可以提前發現問題），
+但最終只有 round-trip byte-identical 才算通過。
+
+### 0.4 Galois Connection 與 Retraction
+
+§0.1 宣稱 `f⁻¹ ∘ f = id`，但在實務中，正向和逆向轉換器之間的關係
+更精確地對應到 **Galois connection（伽羅瓦連接）** 的數學結構。
+這一節分析兩者的差距，以及如何分階段趨近完美 bijection。
+
+#### 0.4.1 為什麼完美 bijection 不是一步到位
+
+設：
+- `f: W → M`（正向：Word → Marker）
+- `g: M → W`（逆向：Marker → Word）
+
+完美 bijection 要求兩個方向：
+
+```
+g ∘ f = id_W    （所有 Word 文件 round-trip 不變）
+f ∘ g = id_M    （所有 Marker 表達 round-trip 不變）
+```
+
+但 `f ∘ g = id_M` 對 **全部** M 不可能成立。原因：Markdown 空間中
+同一個語意有多種語法表達（syntactic variants），而 Word 只有一種表達。
+
+```
+Markdown 語法變體               Word 內部表達
+─────────────────               ──────────────
+*italic*  ──┐
+            ├──→  Run(italic: true)  ──f──→  _italic_
+_italic_  ──┘
+
+**bold**  ──┐
+            ├──→  Run(bold: true)    ──f──→  **bold**
+__bold__  ──┘
+
+- item    ──┐
+* item    ──├──→  bullet numbering   ──f──→  - item
++ item    ──┘
+
+# H1        ──┐
+              ├──→  style: Heading1  ──f──→  # H1
+H1\n===     ──┘
+```
+
+`g` 是多對一映射——多種 Markdown 語法折疊為同一個 Word 結構。
+`f` 必須從 Word 結構中選擇一種 canonical 語法輸出。
+因此 `f(g(*italic*)) = _italic_ ≠ *italic*`，`f ∘ g ≠ id_M`。
+
+> 類比：分數化簡。`2/4` 和 `1/2` 表示同一個有理數。
+> 經過「化簡→展開」後永遠得到 `1/2`（canonical form），不會回到 `2/4`。
+
+#### 0.4.2 Galois Connection 的 Retraction 定理
+
+當 (f, g) 構成 Galois connection 時，有以下性質：
+
+```
+f ∘ g ∘ f = f        （一次 round-trip 後正向輸出穩定）
+g ∘ f ∘ g = g        （一次 round-trip 後逆向輸出穩定）
+```
+
+由此推導出 **idempotent（冪等）性質**：
+
+```
+(f ∘ g) ∘ (f ∘ g) = f ∘ g     — f ∘ g 是 retraction
+(g ∘ f) ∘ (g ∘ f) = g ∘ f     — g ∘ f 是 retraction
+```
+
+**Retraction**（投影）的數學意義：
+- `f ∘ g` 把 M 映射到 **canonical subset** M* ⊆ M
+- 在 M* 上，`f ∘ g = id`——bijection 在此子集上成立
+- 一次 round-trip 就到達 fixed point，之後無論再轉幾次都不變
+
+```
+M（全部 Markdown）
+├── *italic*     ──f∘g──→  _italic_   ∈ M*
+├── _italic_     ──f∘g──→  _italic_   ∈ M*  ← fixed point
+├── __bold__     ──f∘g──→  **bold**   ∈ M*
+├── **bold**     ──f∘g──→  **bold**   ∈ M*  ← fixed point
+└── ...
+
+M*（canonical subset）= Im(f ∘ g) = { m ∈ M | f(g(m)) = m }
+```
+
+#### 0.4.3 三個驗證層級
+
+| 層級 | 性質 | 公式 | 驗證方式 |
+|------|------|------|---------|
+| **Level 1: Retraction** | 二次 round-trip 穩定 | `f(g(f(g(m)))) = f(g(m))` | MD → W → MD' → W' → MD''，確認 MD' = MD'' |
+| **Level 2: Canonical Bijection** | canonical form 上 bijection 成立 | `∀ m ∈ M*: f(g(m)) = m` | 直接比較 MD = MD'（只對 canonical MD 測試） |
+| **Level 3: Perfect Bijection** | 完美可逆（§0.1 的目標） | `g(f(w)) ≡ w`，byte-identical | sha256 比對（需要 Tier 3 metadata 完整） |
+
+**Level 1 → Level 2** 的跨越：只是測試輸入的限定。
+如果輸入的 MD 本身就是 canonical form（由 `f` 產生），Level 1 自動升級為 Level 2。
+
+**Level 2 → Level 3** 的跨越：需要 Tier 3 的 metadata sidecar。
+Metadata 記錄語法選擇（用 `*` 還是 `_`）、序列化細節（XML 排列、ZIP 參數）等
+所有被折疊的資訊，讓 `g` 能夠精確還原，消除 canonical form 的限制。
+
+```
+Level 1:  不需要 metadata。只要系統穩定就好。
+Level 2:  不需要 metadata。只要在 canonical subset 上工作。
+Level 3:  需要完整 metadata。消除所有語法歧義和序列化差異。
+```
+
+#### 0.4.4 實務意義
+
+1. **開發順序**：先達成 Level 1（retraction），再 Level 2（canonical bijection），
+   最後 Level 3（perfect bijection）。不需要一步到位。
+
+2. **測試策略**：
+   - 方向 A 測試（`W → M → W → M`）：建構 WordDocument，驗證 `f(g(f(w))) = f(w)`
+   - 方向 B 測試（`M → W → M`）：用 canonical MD 驗證 `f(g(m)) = m`；
+     用非 canonical MD 驗證 `f(g(f(g(m)))) = f(g(m))`（idempotent）
+
+3. **當 round-trip 結果不同時的診斷**：
+   - 如果 `f(g(m)) ≠ m` 但 `f(g(f(g(m)))) = f(g(m))`
+     → 輸入不在 canonical subset，這是**正常行為**，不是 bug
+   - 如果 `f(g(f(g(m)))) ≠ f(g(m))`
+     → **系統不穩定，是 bug**。正向和逆向轉換器之間有不一致
+   - 如果 Level 2 通過但 Level 3 不通過
+     → Metadata 還不夠完整，需要繼續補充
+
+---
+
 ## 1. 問題陳述
 
 ### 1.1 Markdown 的表達能力缺口
@@ -126,6 +330,66 @@ Tier 3:  convert₃(w) = convert(w)              -- 完整輸出（bijective）
 這確保：
 1. 即使只用 Tier 1，設計上也已考慮到完整資訊，未來升級不需重構
 2. Tier 間的切換只是「包含/排除」某些輸出通道，邏輯不變
+
+### 3.4 資訊下沉原則
+
+> **每個資訊元素都應該在它能被表達的最低 Tier 中被表達。**
+>
+> ```
+> 對於 OOXML 元素 e，定義其「可表達下限」：
+>
+> tier_min(e) = min { t ∈ {1, 2, 3} | Tier t 能表達 e }
+>
+> 轉換器必須在 tier_min(e) 表達 e，不得無故上推。
+> ```
+
+這是 push-down 原則——類似資料庫查詢優化中「把過濾條件越早套用越好」的 predicate push-down，
+這裡是「把資訊越早（低 Tier）表達越好」。
+
+**為什麼重要：**
+
+1. **可讀性最大化** — Tier 1 是人讀的。能放進 Markdown 的資訊越多，使用者不需要 Tier 3 就能取得越多有用內容
+2. **投影品質** — Tier 1 = π_M(Marker)。如果資訊被懶惰地推到 Tier 3，Tier 1 投影會退化成空殼
+3. **漸進式採用** — 大多數使用者只用 Tier 1。資訊下沉確保他們不被懲罰
+
+**具體判定：**
+
+| 元素 | tier_min | 理由 |
+|------|----------|------|
+| Bold / Italic / Strikethrough | 1 | Markdown 原生支援 |
+| Hyperlink | 1 | `[text](url)` |
+| Footnote / Endnote | 1 | `[^id]: text` |
+| Code (style-based) | 1 | `` `code` `` / ```` ``` ```` |
+| Blockquote (style-based) | 1 | `> text` |
+| Horizontal rule | 1 | `---` |
+| Underline | 1 (Layer B) / 3 | `<u>` 需要啟用 HTML 擴展 |
+| Superscript / Subscript | 1 (Layer B) / 3 | `<sup>` / `<sub>` 需要啟用 HTML 擴展 |
+| Highlight | 1 (Layer B) / 3 | `<mark>` 需要啟用 HTML 擴展（顏色丟失） |
+| Image reference | 1 | `![alt](path)` — 路徑在 Tier 1 就出現 |
+| Image file | 2 | 實際 binary 需要 Tier 2 的 figures 通道 |
+| Font color / size | 3 | Markdown 完全無法表達 |
+| Alignment / Spacing | 3 | Markdown 完全無法表達 |
+| Comments | 3 | Markdown 完全無法表達 |
+| Revision tracking | 3 | Markdown 完全無法表達 |
+
+**反面模式（Anti-pattern）：**
+
+```
+❌  把 hyperlink 的 text 放在 Markdown，但把 URL 放在 metadata
+    → 違反：hyperlink 的 tier_min = 1，完整的 [text](url) 應在 Tier 1
+
+❌  把 footnote text 放在 metadata 而非 Markdown 的 [^1]: text
+    → 違反：footnote 的 tier_min = 1
+
+✅  把 font color 放在 metadata（Tier 3）
+    → 正確：Markdown 無法表達 color，tier_min = 3
+```
+
+**與 Sparse Metadata（§5.4）的關係：**
+
+Sparse Metadata 從 metadata 視角說「別重複記錄」，
+資訊下沉從全域視角說「往低 Tier 推」。
+兩者互補——下沉原則決定**元素該去哪裡**，Sparse 原則決定 **metadata 不該放什麼**。
 
 ---
 
@@ -444,11 +708,25 @@ func convert<W: StreamingOutput>(
 
 ---
 
-## 7. Bijection 的驗證策略
+## 7. 驗證策略
 
-不實作逆向轉換器（MD+Meta→Word），但需要驗證 injective 性質。
+### 7.1 最終標準：Round-Trip Byte-Identical（§0 的直接應用）
 
-### 7.1 Property-Based Testing
+```
+∀ w ∈ W_test:
+    let marker = convert(w)           -- word-to-md-swift
+    let w' = convert⁻¹(marker)       -- md-to-word-swift
+    assert: sha256(w') == sha256(w)   -- byte-identical
+```
+
+這是唯一的「通過/不通過」標準。以下測試都是這個標準的子集，
+用於在逆轉換器完成前提前發現問題。
+
+### 7.2 前置驗證：Injective Testing
+
+在逆轉換器（md-to-word-swift）完成前，先驗證正向轉換的 injective 性質：
+
+**Property-Based Testing：**
 
 ```
 ∀ w ∈ W_test:
@@ -456,7 +734,7 @@ func convert<W: StreamingOutput>(
     assert: meta 包含 w 中所有不在 md 裡的屬性
 ```
 
-### 7.2 Differential Testing
+**Differential Testing：**
 
 ```
 ∀ w₁, w₂ ∈ W_test:
@@ -464,7 +742,8 @@ func convert<W: StreamingOutput>(
         assert: convert₃(w₁) ≠ convert₃(w₂)
 ```
 
-如果兩份不同的 Word 文件產生了完全相同的 (md, fig, meta)，就是 bug。
+如果兩份不同的 Word 文件產生了完全相同的 (md, fig, meta)，就是 bug——
+意味著 metadata 丟失了資訊，逆轉換器將無法區分它們。
 
 ### 7.3 Coverage Checklist
 
@@ -480,6 +759,21 @@ func convert<W: StreamingOutput>(
 | ... | | | | |
 
 **目標**：每個元素至少在一個通道中被保存。Marker（Tier 3）的合集必須覆蓋 100% 的元素。
+
+### 7.4 驗證的階段性路線
+
+```
+Phase 1（現在）:  Injective testing（§7.2）— 確保正向轉換不丟資訊
+Phase 2:          實作 md-to-word-swift — 逆轉換器
+Phase 3:          Round-trip testing（§7.1）— 最終驗收
+Phase 4:          持續擴展 — 遇到新的 OOXML 元素就補 metadata + 補 round-trip 測試
+```
+
+每當 round-trip test 失敗，修復流程永遠是：
+1. 找出原檔中有但 metadata 中沒有的資訊
+2. 擴展 MetadataCollector 捕捉該資訊
+3. 擴展逆轉換器使用該資訊
+4. 重跑 round-trip test 直到 byte-identical
 
 ---
 
@@ -503,7 +797,9 @@ Tier 3 (Marker):              W → M × F × Meta   完整、無損、bijective
 
 ### 設計原則
 
+0. **完美可逆（§0）** — `convert⁻¹(convert(w)) ≡ w`，byte-identical。這是最高原則，其他所有原則都從這裡推導
 1. **Marker 驅動設計** — 所有元素都必須有去處（M 或 Meta）
-2. **Sparse Metadata** — 只記錄 Markdown 無法表達的部分
-3. **Streaming 兼容** — 三通道平行輸出，O(1) 記憶體
-4. **使用者選擇** — 有損是刻意的選擇，不是設計缺陷
+2. **資訊下沉** — 每個元素在它能被表達的最低 Tier 中表達（push-down）
+3. **Metadata 無上限** — 任何讓 round-trip break 的遺漏都是 bug，不是「可接受的妥協」
+4. **Streaming 兼容** — 三通道平行輸出，O(1) 記憶體
+5. **使用者選擇** — 有損是刻意的選擇（Tier 1/2），不是設計缺陷
