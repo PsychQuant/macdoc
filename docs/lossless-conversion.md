@@ -4,11 +4,16 @@
 
 > **Marker format** = Markdown + Figures + Metadata
 >
-> 這個 pattern 源自 [Marker](https://github.com/datalab-to/marker)——將文件轉為
-> Markdown 並同時提取圖片和 metadata 的開創性工具。Marker 定義了現代文件轉換的
-> paradigm：**乾淨的 Markdown + 提取的圖片 + 結構化 metadata**。
+> 這個 pattern 源自 [Marker](https://github.com/datalab-to/marker)。
+>
+> 在 Marker 之前，文件轉換工具（Pandoc、pdftotext、Apache Tika）關注的都是
+> 「如何轉換」——把 A 格式變成 B 格式，接受資訊損失是理所當然的代價。
+> Marker 是第一個把「不失真」當作設計目標的專案。它的三通道輸出
+> （Markdown + Figures + Metadata）不只是一種輸出格式，
+> 而是一種思維方式：**轉換不應該丟資訊，丟資訊應該是使用者的選擇，不是工具的限制。**
+>
 > 我們沿用 **Marker** 這個名稱來指稱完整的不失真輸出格式（Tier 3），
-> 致敬這個轉檔領域最重要的發明。
+> 致敬這個轉檔領域最重要的 paradigm shift。
 
 ---
 
