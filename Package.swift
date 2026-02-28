@@ -13,7 +13,7 @@ let package = Package(
         .package(url: "https://github.com/kiki830621/word-to-md-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.2.0"),
         .package(url: "https://github.com/kiki830621/markdown-swift.git", from: "0.1.0"),
-        .package(path: "packages/marker-swift"),
+        .package(url: "https://github.com/kiki830621/marker-swift.git", from: "0.1.0"),
     ],
     targets: [
         .target(

@@ -198,7 +198,7 @@ case .paragraph: // ...
 
 ## Package Update Workflow
 
-大部分套件使用 `url:` 遠端依賴（`marker-swift` 除外，仍為 `path:` 本地依賴）。
+所有套件皆使用 `url:` 遠端依賴。
 
 ```bash
 # 1. 在套件目錄提交、推送、打 tag
@@ -226,7 +226,7 @@ swift build
 | `packages/word-to-md-swift` | https://github.com/kiki830621/word-to-md-swift.git | Word → MD 轉換 |
 | `packages/ooxml-swift` | https://github.com/kiki830621/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/kiki830621/markdown-swift.git | Markdown 生成 |
-| `packages/marker-swift` | (local only) | 圖片分類 |
+| `packages/marker-swift` | https://github.com/kiki830621/marker-swift.git | 圖片分類 |
 | `packages/surya-swift` | (local only) | OCR 文字辨識 |
 | `mcp/che-word-mcp` | https://github.com/kiki830621/che-word-mcp.git | Word MCP |
 | `mcp/che-pdf-mcp` | https://github.com/kiki830621/che-pdf-mcp.git | PDF MCP |

@@ -10,6 +10,24 @@
       }
     },
     {
+      "identity" : "markdown-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kiki830621/markdown-swift.git",
+      "state" : {
+        "revision" : "1995a4dde95afa95408c6ebb8dab36cc0c2f8c32",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "marker-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kiki830621/marker-swift.git",
+      "state" : {
+        "revision" : "9396a51be02b61c242507bc3481049ac73cd6329",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "ooxml-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kiki830621/ooxml-swift.git",
