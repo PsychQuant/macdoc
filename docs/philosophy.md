@@ -119,5 +119,6 @@ writer.bulletList(["A", "B"])
 | `macdoc` | `docs/philosophy.md` | 設計哲學與架構 |
 | `macdoc` | `docs/functional-correspondence.md` | 轉換映射理論 |
 | `macdoc` | `docs/modular-architecture.md` | Package 可重組架構與遷移路徑 |
+| `macdoc` | `docs/lossless-conversion.md` | 不失真轉換協議與 Fidelity Tiers |
 
 這樣當其他人使用某個套件時，可以直接參考相關的規範文件，不需要去其他專案找。
