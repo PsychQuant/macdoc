@@ -11,7 +11,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
         .package(url: "https://github.com/kiki830621/doc-converter-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/kiki830621/word-to-md-swift.git", from: "0.1.0"),
-        .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.2.0"),
+        .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/kiki830621/markdown-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/kiki830621/marker-swift.git", from: "0.1.0"),
     ],
