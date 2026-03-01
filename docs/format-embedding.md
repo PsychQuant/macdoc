@@ -4,6 +4,54 @@
 
 ---
 
+## 0. 數學背景：從抽象代數到 Model Theory
+
+本文的理論基礎不是新發明——它是 19 世紀以來代數學的直接應用。
+
+### 0.1 推廣脈絡
+
+抽象代數研究特定的代數結構（group 有一個運算，ring 有兩個，field 加上除法⋯）和它們之間的 **homomorphism**（結構保持映射）。Model theory 把這個推廣到**任意 signature**——不限於特定運算，你可以定義任意的 sorts、relations、functions。
+
+```
+抽象代數                     Model Theory                 本文的應用
+(固定結構)                   (任意 signature)              (文件格式)
+────────────                ─────────────                ──────────
+
+Group (G, ·)                Structure (M, σ)             Word Document (M, σ_Word)
+Ring (R, +, ·)              — σ 可以是任意符號集合 —       MD Document (M, σ_MD)
+Field (F, +, ·, ⁻¹)                                     HTML Document (M, σ_HTML)
+
+Group homo:                 Homomorphism:                Format conversion:
+  f(a·b) = f(a)·f(b)         sort → sort                  Image → Image
+                              R(a) ⟹ R(f(a))              bold(a) ⟹ bold(f(a))
+                              f(g(a)) = g(f(a))            f(color(a)) = color(f(a))
+
+Subgroup H ≤ G              Substructure A ⊆ B           MD ⊆ᵢ Word
+Injective homo              Embedding                    Lossless conversion
+Isomorphism                 Isomorphism                  Format equivalence
+Quotient G/N                A / ker(f) ≅ Im(f)           Lossy conversion 的 kernel
+```
+
+### 0.2 為什麼這個框架適合文件格式
+
+文件格式天然具有代數結構：
+- **Sorts** = 元素類型（Text, Heading, Image, ...）
+- **Relations** = 布林屬性（bold, italic, ...）
+- **Functions** = 值屬性（color, fontSize, ...）
+
+把格式定義為 model theory 的 structure 後，所有代數定理自動適用：
+
+| 代數定理 | 在文件格式中的意義 |
+|---------|-------------------|
+| **第一同構定理** A/ker(f) ≅ Im(f) | 格式轉換的 collapse（如顏色丟失）可以用 kernel 精確描述 |
+| **Embedding 構成偏序** | 格式之間的 ⊆ᵢ 關係是偏序（自反、反對稱、遞移） |
+| **子結構保持性質** | 經 hub 轉換 = 先投影到子結構再嵌入，資訊 ≤ 直接映射 |
+
+本文不是發明新理論，而是把成熟的數學工具應用到文件格式這個 domain。
+理論本身是現成的，有趣的是**應用的結論**——hub 損失定理（§6）和 AI 讓 O(n²) 變可行（§7）。
+
+---
+
 ## 1. 格式即結構 (Format as Structure)
 
 ### 1.1 Signature：格式能表達什麼
