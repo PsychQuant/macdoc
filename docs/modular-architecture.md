@@ -65,7 +65,7 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 | Consumer | 組合方式 | 介面 |
 |----------|---------|------|
 | `macdoc` CLI | `word-to-md-swift` + `marker-swift` + ArgumentParser | 命令列 |
-| `che-word-mcp` | `ooxml-swift` + `word-to-md-swift` | MCP (Claude) |
+| `che-word-mcp` | `ooxml-swift`（讀寫）+ `macdoc` CLI（轉換） | MCP (Claude) |
 | *(未來)* `che-pdf-mcp` | PDFKit + `pdf-to-md-swift` | MCP (Claude) |
 
 消費者的規則：
@@ -73,6 +73,7 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 - **不實作轉換邏輯**（轉換在 Layer 3）
 - **不實作格式解析**（解析在 Layer 1）
 - **只負責：參數解析、路由、輸出呈現**
+- **轉換功能優先委託 CLI**，而非直接嵌入 library（見 [adr-mcp-delegates-to-cli.md](adr-mcp-delegates-to-cli.md)）
 
 ---
 
@@ -82,11 +83,13 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 Layer 4 (Consumers)          Layer 3 (Converters)       Layer 2 (Protocols)     Layer 1 (Formats)
 ─────────────────           ──────────────────         ─────────────────       ────────────────
 
-macdoc CLI ──────────┐
-                     ├──→ word-to-md-swift ──┬──→ doc-converter-swift    ooxml-swift
-che-word-mcp ────────┘                       │                          markdown-swift
-  └──→ ooxml-swift (直接讀寫 Word)            ├──→ ooxml-swift
-                                             └──→ markdown-swift
+macdoc CLI ──────────────→ word-to-md-swift ──┬──→ doc-converter-swift    ooxml-swift
+  └──→ marker-swift                          ├──→ ooxml-swift            markdown-swift
+                                             └──→ markdown-swift         marker-swift
+
+che-word-mcp
+  ├──→ ooxml-swift (直接讀寫 Word, 145 tools)
+  └──→ macdoc CLI (轉換委託, exec binary)
 
 che-pdf-mcp ─────────────→ pdf-to-md-swift ──┬──→ doc-converter-swift
                                              └──→ surya-swift / PDFKit
@@ -111,13 +114,15 @@ dependencies: [
 ### 場景 B：MCP Server 需要讀寫 Word + 匯出 Markdown
 
 ```swift
+// Swift 依賴只需要 ooxml-swift
 dependencies: [
-    .package(url: ".../ooxml-swift.git", from: "0.1.0"),
-    .package(url: ".../word-to-md-swift.git", from: "0.1.0")
+    .package(url: ".../ooxml-swift.git", from: "0.3.0")
 ]
 ```
 
-`che-word-mcp` 用 `ooxml-swift` 做 Word 操作，用 `word-to-md-swift` 做 `export_markdown`。
+`che-word-mcp` 用 `ooxml-swift` 做 Word 操作（145 tools）。
+`export_markdown` 改為呼叫 `macdoc` CLI binary，不再嵌入轉換 library。
+詳見 [adr-mcp-delegates-to-cli.md](adr-mcp-delegates-to-cli.md)。
 
 ### 場景 C：CLI 需要轉換 + Marker 模式
 
@@ -215,18 +220,22 @@ che-word-mcp          (consumer, Layer 4)
 
 共用 protocol 層確保所有轉換器有一致的介面，消費者可以用相同的方式呼叫任何轉換器。
 
-### 為什麼 MCP 同時依賴 `ooxml-swift` 和 `word-to-md-swift`？
+### 為什麼 MCP 只依賴 `ooxml-swift`，轉換功能委託 CLI？
 
-`che-word-mcp` 的核心職責是**讀寫 Word 文件**（插入段落、改格式、存檔），這需要直接操作 `ooxml-swift`。
-`export_markdown` 只是其中一個 tool，它需要的是**轉換能力**，由 `word-to-md-swift` 提供。
+`che-word-mcp` 的核心職責是**讀寫 Word 文件**（插入段落、改格式、存檔），需要 `ooxml-swift` 的記憶體模型。
+`export_markdown` 的轉換功能改為呼叫 `macdoc` CLI，原因：
+
+1. **避免 API 鏡像維護**：不需要在 MCP 側重複 `ConversionOptions` 的每個欄位
+2. **效能分離**：MCP 記憶體常駐模型無法 streaming，CLI 可以（O(1) 記憶體）
+3. **單一真相來源**：macdoc CLI 是轉換功能的唯一入口
 
 ```
 che-word-mcp
-├── ooxml-swift          ← 145 個 tools 中大部分用這個
-└── word-to-md-swift     ← export_markdown 用這個
+├── ooxml-swift          ← 145 個 tools 直接操作
+└── macdoc (exec)        ← export_markdown 委託 CLI
 ```
 
-MCP 是組裝者，不是實作者。
+詳見 [adr-mcp-delegates-to-cli.md](adr-mcp-delegates-to-cli.md)。
 
 ### 為什麼不把 `MarkerWordConverter` 也放進 `word-to-md-swift`？
 

@@ -145,6 +145,8 @@ H1\n===     ──┘
 `f` 必須從 Word 結構中選擇一種 canonical 語法輸出。
 因此 `f(g(*italic*)) = _italic_ ≠ *italic*`，`f ∘ g ≠ id_M`。
 
+這些 canonical 選擇的完整規格見 **§0.5 Canonical Forms (MD*)**。
+
 > 類比：分數化簡。`2/4` 和 `1/2` 表示同一個有理數。
 > 經過「化簡→展開」後永遠得到 `1/2`（canonical form），不會回到 `2/4`。
 
@@ -165,19 +167,19 @@ g ∘ f ∘ g = g        （一次 round-trip 後逆向輸出穩定）
 ```
 
 **Retraction**（投影）的數學意義：
-- `f ∘ g` 把 M 映射到 **canonical subset** M* ⊆ M
-- 在 M* 上，`f ∘ g = id`——bijection 在此子集上成立
+- `f ∘ g` 把 M 映射到 **MD*** ⊆ M（canonical subset，見 §0.5）
+- 在 MD* 上，`f ∘ g = id`——bijection 在此子集上成立
 - 一次 round-trip 就到達 fixed point，之後無論再轉幾次都不變
 
 ```
 M（全部 Markdown）
-├── *italic*     ──f∘g──→  _italic_   ∈ M*
-├── _italic_     ──f∘g──→  _italic_   ∈ M*  ← fixed point
-├── __bold__     ──f∘g──→  **bold**   ∈ M*
-├── **bold**     ──f∘g──→  **bold**   ∈ M*  ← fixed point
+├── *italic*     ──f∘g──→  _italic_   ∈ MD*
+├── _italic_     ──f∘g──→  _italic_   ∈ MD*  ← fixed point
+├── __bold__     ──f∘g──→  **bold**   ∈ MD*
+├── **bold**     ──f∘g──→  **bold**   ∈ MD*  ← fixed point
 └── ...
 
-M*（canonical subset）= Im(f ∘ g) = { m ∈ M | f(g(m)) = m }
+MD*（canonical subset）= Im(f ∘ g) = { m ∈ M | f(g(m)) = m }
 ```
 
 #### 0.4.3 三個驗證層級
@@ -185,11 +187,11 @@ M*（canonical subset）= Im(f ∘ g) = { m ∈ M | f(g(m)) = m }
 | 層級 | 性質 | 公式 | 驗證方式 |
 |------|------|------|---------|
 | **Level 1: Retraction** | 二次 round-trip 穩定 | `f(g(f(g(m)))) = f(g(m))` | MD → W → MD' → W' → MD''，確認 MD' = MD'' |
-| **Level 2: Canonical Bijection** | canonical form 上 bijection 成立 | `∀ m ∈ M*: f(g(m)) = m` | 直接比較 MD = MD'（只對 canonical MD 測試） |
+| **Level 2: Canonical Bijection** | canonical form 上 bijection 成立 | `∀ m ∈ MD*: f(g(m)) = m` | 直接比較 MD = MD'（只對 MD* 測試） |
 | **Level 3: Perfect Bijection** | 完美可逆（§0.1 的目標） | `g(f(w)) ≡ w`，byte-identical | sha256 比對（需要 Tier 3 metadata 完整） |
 
 **Level 1 → Level 2** 的跨越：只是測試輸入的限定。
-如果輸入的 MD 本身就是 canonical form（由 `f` 產生），Level 1 自動升級為 Level 2。
+如果輸入的 MD 本身就屬於 MD*（由 `f` 產生的 canonical form，見 §0.5），Level 1 自動升級為 Level 2。
 
 **Level 2 → Level 3** 的跨越：需要 Tier 3 的 metadata sidecar。
 Metadata 記錄語法選擇（用 `*` 還是 `_`）、序列化細節（XML 排列、ZIP 參數）等
@@ -218,6 +220,151 @@ Level 3:  需要完整 metadata。消除所有語法歧義和序列化差異。
      → **系統不穩定，是 bug**。正向和逆向轉換器之間有不一致
    - 如果 Level 2 通過但 Level 3 不通過
      → Metadata 還不夠完整，需要繼續補充
+
+### 0.5 Canonical Forms (MD*)
+
+§0.4 證明了 `f ∘ g` 是 retraction，其像集 M* = Im(f ∘ g) 是 **canonical subset**。
+M* 中的每個元素都是正向轉換器 `f` 的輸出——也就是說，M* 的定義完全取決於
+**`f` 對每個語法歧義做的選擇**。
+
+這些選擇不應該是「碰巧的實作細節」，而是**明確的規範**。
+定義 MD*（讀作 "MD star"）為正向轉換器 `f` 輸出的 canonical Markdown 格式。
+
+#### 0.5.1 Canonical Form 規格
+
+| 格式元素 | 候選語法 | MD* 選擇 | 來源 |
+|---------|---------|---------|------|
+| **Italic** | `*text*` / `_text_` | `_text_` | `MarkdownInline.italic()` |
+| **Bold** | `**text**` / `__text__` | `**text**` | `MarkdownInline.bold()` |
+| **Bold+Italic** | `***text***` / `**_text_**` / `_**text**_` | `***text***` | `MarkdownInline.boldItalic()` |
+| **Strikethrough** | `~~text~~` | `~~text~~` | 無歧義（GFM 唯一語法） |
+| **Inline code** | `` `code` `` | `` `code` `` | 無歧義 |
+| **Heading** | ATX (`# Title`) / Setext (`Title\n===`) | ATX (`# Title`) | `WordConverter` 使用 `#` prefix |
+| **Unordered list** | `- item` / `* item` / `+ item` | `- item` | `WordConverter`: `"- "` prefix |
+| **Ordered list number** | `1. 2. 3.` / `1. 1. 1.` | `1. 1. 1.` | `WordConverter`: 固定 `"1. "` prefix |
+| **List indent** | 2 spaces / 4 spaces / tab | 2 spaces | `MarkdownWriter`: `"  "` per level |
+| **Code fence** | backtick `` ``` `` / tilde `~~~` | backtick `` ``` `` | `WordConverter`: backtick fence |
+| **Thematic break** | `---` / `***` / `___` | `---` | `WordConverter`: `"---"` |
+| **Blockquote** | `> text` | `> text` | 無歧義 |
+| **Link** | `[text](url)` / `[text][ref]` | `[text](url)` | inline style |
+| **Image** | `![alt](path)` / `![alt][ref]` | `![alt](path)` | inline style |
+| **Footnote ref** | `[^1]` / `[^id]` | `[^{numeric_id}]` | 使用原始數字 ID |
+| **Footnote def** | `[^1]: text` | `[^{id}]: text` | 在文件末尾集中輸出 |
+| **Blank lines** | 0 / 1 / 多行 | 段落之間 1 行，list 內無空行 | `MarkdownWriter.ensureBlankLine()` |
+
+#### 0.5.2 MD* 的形式定義
+
+```
+MD* = { m ∈ M | f(g(m)) = m }
+    = Im(f ∘ g)
+    = Im(f)          （因為 f 的值域就是 canonical forms）
+```
+
+等價地：**一個 Markdown 字串屬於 MD* 若且唯若它是 `word-to-md-swift` 的可能輸出。**
+
+判定方法：對於任意 Markdown 字串 m，如果 `f(g(m)) = m`，則 m ∈ MD*。
+
+#### 0.5.3 雙層架構：Canonicalization + Bijection
+
+整個轉換系統分解為兩個獨立的關係：
+
+```
+            Canonicalization              Bijection (Tier 3)
+M ─────────────────────────→ MD* ←─────────────────────────→ W
+    f ∘ g（多對一投影）              f / g（一對一）
+    *italic*  → _italic_           _italic_ ↔ Run(italic:true)
+    __bold__  → **bold**           **bold**  ↔ Run(bold:true)
+    + item    → - item             - item   ↔ bullet numbering
+```
+
+**關係 1：W ↔ MD* — Bijection（核心轉換）**
+
+```
+f:  W → MD*        正向轉換器，永遠輸出 canonical form
+g|_{MD*}: MD* → W  逆向轉換器，從 canonical form 精確還原
+```
+
+- 對全部 W：surjection（多個 W 摺疊成同一個 MD*，因為 Layer C 資訊丟失）
+- 對 W* = Im(g)：**Tier 1 bijection**（見下方「Tier 1 Canonical Bijection」）
+- 對全部 W + Tier 3 metadata：**perfect bijection**（`g(f(w)) ≡ w`，byte-identical）
+
+**關係 2：M → MD* — Canonicalization（語法正規化）**
+
+```
+f ∘ g: M → MD*     正規化映射（投影）
+```
+
+- 多對一：`*italic*` 和 `_italic_` 都映射到 `_italic_`
+- 冪等：`(f ∘ g)² = f ∘ g`——做一次就穩定
+- 不需要 metadata，純粹是語法層面的正規化
+- 本質是把 M 中的等價類摺疊到各自的 canonical representative
+
+**Tier 1 Canonical Bijection：MD* ↔ W***
+
+定義 **W*** = Im(g|_{MD*})——由逆向轉換器從 canonical Markdown 產生的 Word 文件子集。
+
+```
+MD* ←──────────→ W*
+  g: MD* → W*     逆向轉換，產生 canonical Word 文件
+  f: W* → MD*     正向轉換，回到 canonical Markdown
+
+  f(g(m)) = m         ∀ m ∈ MD*   （Direction B 測試已證明）
+  g(f(w)) = w         ∀ w ∈ W*    （由 retraction 性質 g∘f∘g = g 保證）
+```
+
+這是一個**不需要 metadata 的 bijection**——純 Tier 1 就成立。
+
+意義：
+- **從 Markdown 出發**的文件（或用逆向轉換器建立的 Word 文件），
+  round-trip 本來就是 lossless，不需要任何 metadata
+- **從任意 Word 出發**的文件，Tier 1 round-trip 會丟失 Layer C 資訊（字體、顏色、間距…），
+  但語意內容（Layer A）會穩定在 canonical form
+
+Metadata 的角色因此重新定義：
+
+| 起點 | 目標 | 需要 metadata? |
+|------|------|---------------|
+| MD* → W* → MD* | Tier 1 canonical bijection | **不需要** — 已經成立 |
+| M → MD* | Canonicalization | **不需要** — 純語法正規化 |
+| W → MD* → W' ≡ W | 完美還原原始 Word（全部 W） | **需要** — W \ W* 的差異靠 metadata 補 |
+
+```
+Metadata 的精確職責 = 補完 W 與 W* 之間的差異
+                    = Layer C 資訊（字體、顏色、間距、樣式…）
+                    + 序列化細節（XML 排列、ZIP 參數…）
+
+如果 w ∈ W*，metadata 為空（或只含預設值）——不需要 metadata。
+如果 w ∈ W \ W*，metadata 記錄 w 與 g(f(w)) 之間的差異。
+```
+
+**兩層的獨立性**
+
+| 關注點 | 輸入 → 輸出 | 測試方式 | 需要 metadata? |
+|--------|------------|---------|---------------|
+| Canonicalization | M → MD* | 輸入非 canonical MD，驗證 idempotent | 否 |
+| Tier 1 Bijection | MD* ↔ W* | 輸入 canonical MD，驗證 `f(g(m)) = m` | 否 |
+| Full Bijection | W ↔ (MD* × F × Meta) | 輸入任意 Word，驗證 byte-identical | 是 |
+
+三層可以**獨立開發和測試**：
+- Canonicalization 只涉及 Markdown 語法變體，與 Word 模型無關
+- Tier 1 Bijection 只在 MD* ↔ W* 上工作，不需要 metadata
+- Full Bijection 在已有 Tier 1 基礎上，只需要額外補 metadata 通道
+
+#### 0.5.4 規範的約束力
+
+1. **正向轉換器 (`word-to-md-swift`)**：必須只輸出 MD* 中的語法。
+   任何輸出都隱式定義了 MD*，所以這是自動滿足的——但要確保**不同 code path 之間一致**。
+   例如：不能一處輸出 `*italic*`，另一處輸出 `_italic_`。
+
+2. **逆向轉換器 (`md-to-word-swift`)**：必須接受**所有** M（不只是 MD*）。
+   `*italic*` 和 `_italic_` 都要能正確解析為 italic。
+   但 round-trip 後輸出永遠是 MD* 格式（`_italic_`）。
+
+3. **Round-trip 測試**：
+   - **B 方向測試（M → W → M）**：如果輸入 ∈ MD*，期望 `f(g(m)) = m`
+   - **B 方向測試（非 canonical）**：如果輸入 ∉ MD*，期望 `f(g(f(g(m)))) = f(g(m))`（idempotent）
+
+4. **新增格式支援時**：必須同時決定 canonical form 並更新此表。
 
 ---
 
@@ -306,19 +453,22 @@ W ──convert──→ M × F × Meta
 
 | Tier | 名稱 | 輸出 | Injective? | 適用場景 |
 |------|------|------|-----------|---------|
-| **Tier 1** | **Markdown** | M | 否（lossy） | 快速預覽、終端顯示、純文字場景 |
-| **Tier 2** | **Markdown + Figures** | M × F | 否（less lossy） | 文件、部落格、知識庫匯入 |
-| **Tier 3** | **Marker** | M × F × Meta | **是（lossless）** | 歸檔、資料遷移、學術保存 |
+| **Tier 1** | **Markdown** | MD* | **MD* ↔ W*（bijective）**；W → MD*（lossy） | 快速預覽、Markdown-native 工作流 |
+| **Tier 2** | **Markdown + Figures** | MD* × F | 同 Tier 1 + 圖片保留 | 文件、部落格、知識庫匯入 |
+| **Tier 3** | **Marker** | MD* × F × Meta | **W ↔ Marker（fully bijective）** | 歸檔、資料遷移、學術保存 |
 
 ### 3.2 形式化
 
 ```
-Tier 1:  convert₁(w) = π_M(convert(w))         -- 只取 Markdown
-Tier 2:  convert₂(w) = π_{M×F}(convert(w))     -- 取 Markdown + Figures
-Tier 3:  convert₃(w) = convert(w)              -- 完整輸出（bijective）
+Tier 1:  convert₁(w) = π_{MD*}(convert(w))       -- 只取 Markdown（輸出 ∈ MD*）
+Tier 2:  convert₂(w) = π_{MD*×F}(convert(w))     -- 取 Markdown + Figures
+Tier 3:  convert₃(w) = convert(w)                -- 完整輸出
 ```
 
-**只有 Marker（Tier 3）是 injective 的。** Tier 1 和 Tier 2 是刻意選擇丟棄部分資訊——使用者知情的有損壓縮。
+**Tier 1/2 在 W → MD* 方向是 surjective（有損）。**
+但在 **MD* ↔ W*** 方向，Tier 1 已經是 bijective（§0.5.3）——
+從 Markdown 出發的文件不需要 metadata 就能 lossless round-trip。
+Tier 3 把 bijection 擴展到全部 W。
 
 ### 3.3 設計原則：Marker 驅動設計，Tier 1/2 是投影
 
@@ -790,16 +940,25 @@ Markdown 本身無法 injection（表達能力不足）
 ### Fidelity Tiers
 
 ```
-Tier 1 (Markdown):            W → M              快速、有損、可讀
-Tier 2 (Markdown + Figures):  W → M × F          含圖、有損、實用
-Tier 3 (Marker):              W → M × F × Meta   完整、無損、bijective
+Tier 1 (Markdown):            W → MD*             MD* ↔ W* bijective；W → MD* lossy
+Tier 2 (Markdown + Figures):  W → MD* × F         同 Tier 1 + 圖片保留
+Tier 3 (Marker):              W → MD* × F × Meta  全部 W bijective（byte-identical）
+```
+
+### 雙層架構（§0.5.3）
+
+```
+M → MD*（Canonicalization）：語法正規化，不需要 metadata
+MD* ↔ W*（Tier 1 Bijection）：canonical subset 上的 lossless round-trip
+W ↔ Marker（Tier 3 Bijection）：全部 Word 的完美可逆
 ```
 
 ### 設計原則
 
 0. **完美可逆（§0）** — `convert⁻¹(convert(w)) ≡ w`，byte-identical。這是最高原則，其他所有原則都從這裡推導
-1. **Marker 驅動設計** — 所有元素都必須有去處（M 或 Meta）
-2. **資訊下沉** — 每個元素在它能被表達的最低 Tier 中表達（push-down）
-3. **Metadata 無上限** — 任何讓 round-trip break 的遺漏都是 bug，不是「可接受的妥協」
-4. **Streaming 兼容** — 三通道平行輸出，O(1) 記憶體
-5. **使用者選擇** — 有損是刻意的選擇（Tier 1/2），不是設計缺陷
+1. **Canonical Forms（§0.5）** — 正向轉換器的輸出定義 MD*，逆向轉換器接受全部 M
+2. **Marker 驅動設計** — 所有元素都必須有去處（MD* 或 Meta）
+3. **資訊下沉** — 每個元素在它能被表達的最低 Tier 中表達（push-down）
+4. **Metadata 無上限** — 任何讓 round-trip break 的遺漏都是 bug，不是「可接受的妥協」
+5. **Streaming 兼容** — 三通道平行輸出，O(1) 記憶體
+6. **使用者選擇** — 有損是刻意的選擇（Tier 1/2），不是設計缺陷
