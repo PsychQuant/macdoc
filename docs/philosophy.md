@@ -138,6 +138,8 @@ AI 改變了這個等式：
 
 本質上，macdoc 的哲學是：**用 AI 的生產力換取轉換品質**，消除以前因為人力限制而不得不做的妥協。
 
+完整的理論分析見 [`format-embedding.md`](format-embedding.md)。
+
 ---
 
 ## 設計原則
@@ -164,5 +166,6 @@ AI 改變了這個等式：
 | `macdoc` | `docs/modular-architecture.md` | Package 可重組架構與遷移路徑 |
 | `macdoc` | `docs/lossless-conversion.md` | 不失真轉換協議與 Fidelity Tiers |
 | `macdoc` | `docs/practical-defaults.md` | Practical Mode（圖片轉檔、Heading Heuristic） |
+| `macdoc` | `docs/format-embedding.md` | Information Embedding Theory（格式包含關係、O(n²) 可行性） |
 
 這樣當其他人使用某個套件時，可以直接參考相關的規範文件，不需要去其他專案找。
