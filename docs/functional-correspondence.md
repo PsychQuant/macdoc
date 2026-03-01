@@ -377,24 +377,86 @@ fRun(r) = match (r.bold, r.italic, r.strike) {
 
 ## 7. 並行擴展
 
-### 7.1 Producer-Consumer 模式
+### 7.1 Profiling 事實：瓶頸在 extract，不在 f
+
+實際 profiling（976K docx, 5367 paragraphs, 11734 runs, M4 Max）顯示：
 
 ```
-┌──────────┐     ┌─────────────────┐     ┌──────────┐
-│ extract  │ ──→ │ buffer (queue)  │ ──→ │ f + emit │
-│ Thread 1 │     │ size = k        │     │ Thread 2 │
-└──────────┘     └─────────────────┘     └──────────┘
+Sample distribution:
+  DocxReader.parseBody (extract)     80%   ← 瓶頸
+  ZIP + NSXMLDocument (DOM 載入)     15%
+  WordConverter (f + emit)           <1%   ← 幾乎免費
 ```
 
-### 7.2 記憶體 vs 並行度
+因此原始的 Producer-Consumer 雙線程模型效果有限——consumer 閒置 99% 的時間。
+**真正的加速來自 parallelizing extract itself。**
 
-| Queue size | 並行度 | 記憶體 | 適用場景 |
-|------------|--------|--------|----------|
-| 1 | 最低 | O(1) | 純 streaming |
-| k | 中等 | O(k) | buffered streaming |
-| n | 最高 | O(n) | 接近 AST（失去 streaming 優勢）|
+### 7.2 實作：Parallel Chunked Extract
 
-實務上選擇適當的 k（如 64），平衡記憶體和吞吐量。
+```
+┌────────────────────────────────────────────┐
+│  ZIP 解壓 + NSXMLDocument 載入 (serial)     │  15% — DOM 載入無法平行
+└────────────────────┬───────────────────────┘
+                     ↓
+   bodyNodes[0..N] 拆成 M 個 chunk（M = CPU cores, min 64 per chunk）
+                     ↓
+┌──────────┬──────────┬──────────┬──────────┐
+│ Core 1   │ Core 2   │ Core 3   │ Core 4   │  80% ÷ M
+│ parse    │ parse    │ parse    │ parse    │
+│ chunk 0  │ chunk 1  │ chunk 2  │ chunk 3  │
+│ → [E₀]   │ → [E₁]   │ → [E₂]   │ → [E₃]   │
+└────┬─────┴────┬─────┴────┬─────┴────┬─────┘
+     └──── ordered merge (by chunk index) ────┘
+                     ↓
+┌────────────────────────────────────────────┐
+│  f + emit (serial, in order)               │  <1%
+└────────────────────────────────────────────┘
+```
+
+Thread safety 保證：
+- 每個 chunk 處理 DOM 的**不相交子樹**（disjoint subtrees）
+- 共享資料 `relationships`, `styles`, `numbering` 為**唯讀 value types**
+- 使用 `DispatchQueue.concurrentPerform`，同步返回，無 async 傳染
+
+### 7.3 chunk size 選擇
+
+```
+chunk_count = min(cpu_cores, ceil(N / 64))
+chunk_size  = ceil(N / chunk_count)
+```
+
+| N (body children) | M4 Max (16 cores) | chunk size | 策略 |
+|-------------------|-------------------|------------|------|
+| ≤ 200 | — | N/A | **Serial path**（GCD overhead 不划算） |
+| 5,367 | 16 | ~335 | Parallel |
+| 50,000 | 16 | ~3,125 | Parallel |
+
+### 7.4 Benchmark
+
+976K docx (5367 paragraphs, 110 tables, 11734 runs), M4 Max:
+
+| 版本 | 時間 | 記憶體 | 改善 |
+|------|------|--------|------|
+| v0.3.0 (XPath) | >30s | 281MB | — |
+| v0.4.0 (children traversal) | ~1.8s | 189MB | 17x |
+| **v0.5.0 (parallel parse)** | **~0.64s** | **181MB** | **47x (vs v0.3), 2.8x (vs v0.4)** |
+
+user time (0.81s) > real time (0.64s) 確認多核心正在運作。
+
+### 7.5 未來：Streaming Extract Pipeline
+
+目前 `DocxReader.read()` 仍是 eager 全載：先解析完所有 body children，再交給 converter。
+若要實現真正的 O(1) streaming（§4 描述的 queue size = 1），需要：
+
+```
+未來設計：
+  DocxReader.stream(from:) → AsyncStream<BodyChild>
+       ↓ (bounded buffer, k = 64)
+  WordConverter: for await child in stream { emit(f(child)) }
+```
+
+這需要將 XML 解析改為 SAX-style（`XMLParser`）或將 DOM 遍歷包裝為 `AsyncSequence`。
+目前 parallel chunked parse 已經足夠快，streaming 改造的優先級較低。
 
 ---
 
@@ -405,14 +467,27 @@ fRun(r) = match (r.bold, r.italic, r.strike) {
 | `Paragraph` | style ∈ Heading{1-6} | `# ` ~ `###### ` |
 | `Paragraph` | style = Title | `# ` |
 | `Paragraph` | style = Subtitle | `## ` |
-| `Paragraph` | numbering.numFmt = bullet | `- ` |
-| `Paragraph` | numbering.numFmt = decimal | `1. ` |
+| `Paragraph` | numbering.numFmt = bullet | `- ` (支援巢狀 indent) |
+| `Paragraph` | numbering.numFmt = decimal | `1. ` (支援巢狀 indent) |
+| `Paragraph` | style ∈ Code/Source/Listing | ```` ``` ```` (fenced code block) |
+| `Paragraph` | style ∈ Quote/Block Text | `> ` (blockquote) |
+| `Paragraph` | hasPageBreak | `---` (horizontal rule) |
 | `Paragraph` | otherwise | plain text + blank line |
 | `Run` | bold = true | `**text**` |
 | `Run` | italic = true | `_text_` |
 | `Run` | bold ∧ italic | `***text***` |
 | `Run` | strikethrough = true | `~~text~~` |
-| `Table` | - | pipe table |
+| `Run` | semantic = codeBlock | `` `text` `` (inline code) |
+| `Run` | underline (HTML ext) | `<u>text</u>` |
+| `Run` | superscript (HTML ext) | `<sup>text</sup>` |
+| `Run` | subscript (HTML ext) | `<sub>text</sub>` |
+| `Run` | highlight (HTML ext) | `<mark>text</mark>` |
+| `Hyperlink` | external | `[text](url)` |
+| `Hyperlink` | internal (bookmark) | `[text](#anchor)` |
+| `Drawing` | inline/anchor image | `![alt](path)` |
+| `Footnote` | reference + definition | `[^id]` + `[^id]: text` |
+| `Endnote` | mapped to footnote | `[^enId]` + `[^enId]: text` |
+| `Table` | — | pipe table |
 | `TableCell` | contains `\|` | escape to `\|` |
 
 ---
@@ -439,15 +514,32 @@ fRun(r) = match (r.bold, r.italic, r.strike) {
 
 ---
 
-## 未實作映射（待擴展）
+## 實作狀態
 
-| OOXML | Markdown | 狀態 |
-|-------|----------|------|
-| `Hyperlink` | `[text](url)` | 🔲 TODO |
-| `Image` | `![alt](path)` | 🔲 TODO |
-| `Footnote` | `[^1]` | 🔲 TODO |
-| `Code` (style) | `` `code` `` | 🔲 TODO |
-| `CodeBlock` | ``` ``` | 🔲 TODO |
-| `Blockquote` (style) | `> ` | 🔲 TODO |
+### 已實作映射（word-to-md-swift）
+
+| OOXML | Markdown | 實作位置 |
+|-------|----------|---------|
+| `Hyperlink` (external) | `[text](url)` | `formatHyperlink` |
+| `Hyperlink` (internal) | `[text](#anchor)` | `formatHyperlink` |
+| `Image` / `Drawing` | `![alt](path)` | `formatDrawing` |
+| `Footnote` | `[^1]` + definition | `emitFootnoteDefinitions` |
+| `Endnote` | `[^en1]` (mapped to footnote) | `emitFootnoteDefinitions` |
+| `Code` (style detection) | `` `code` `` | `formatRun` (semantic) |
+| `CodeBlock` (style detection) | ```` ``` ```` | `processParagraph` |
+| `Blockquote` (style detection) | `> ` | `processParagraph` |
+| `PageBreak` | `---` | `processParagraph` |
+| `Superscript` | `<sup>` (HTML ext) | `formatRun` |
+| `Subscript` | `<sub>` (HTML ext) | `formatRun` |
+| `Underline` | `<u>` (HTML ext) | `formatRun` |
+| `Highlight` | `<mark>` (HTML ext) | `formatRun` |
+
+### 並行化狀態
+
+| 階段 | 實作 | 版本 |
+|------|------|------|
+| Parallel parseBody (chunked extract) | `DispatchQueue.concurrentPerform` | ooxml-swift v0.5.0 |
+| Streaming extract (AsyncSequence) | 未實作 | — |
+| Parallel f (多核 formatting) | 不需要（f < 1% 時間） | — |
 
 完整的元素映射分類（含 Markdown 無法表達的部分）見 [`lossless-conversion.md`](lossless-conversion.md)。
