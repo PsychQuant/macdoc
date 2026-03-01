@@ -571,6 +571,159 @@ MP3 → MIDI 需要解決：
 理論的預測：σ_Audio 比 σ_MIDI 更大（更多 sorts 和 functions），
 所以 Audio → MIDI 是 non-injective homomorphism（多對一），ker 很大。
 
+### 6.7 Case Study：Analog vs Digital——「失真偏好」定理
+
+#### 6.7.1 兩個 Signature
+
+```
+σ_Analog = {
+  sorts:     { ContinuousSample }
+  relations: { }
+  functions: { amplitude: ContinuousSample → ℝ,         ← 連續實數，無限精度
+               time: ContinuousSample → ℝ }              ← 連續時間
+}
+
+σ_Digital (CD) = {
+  sorts:     { DiscreteSample }
+  relations: { }
+  functions: { amplitude: DiscreteSample → {-2¹⁵..2¹⁵-1},   ← 量化，16-bit
+               time: DiscreteSample → ℕ × (1/44100) sec }    ← 離散，44.1kHz
+}
+```
+
+差異在 function 的 codomain：analog 用 ℝ（無限精度），digital 用有限集合（量化）。
+
+#### 6.7.2 Shannon-Nyquist 定理的 Axiom 依賴
+
+Shannon-Nyquist 採樣定理說：band-limited 信號以 2×f_max 取樣可完美重建。
+
+```
+加入 axiom:  ∀f > 22050Hz : spectral_energy(f) = 0   ← band-limited 假設
+
+在此 axiom 下:  Digital ≅ᵢ Analog   （isomorphism，ker = ∅）
+移除此 axiom:   ker(Analog → Digital) = { above_nyquist, inter_sample, quantization_residual }
+```
+
+Shannon-Nyquist 的結論 ker = ∅ **依賴一條理想化的 axiom**。
+真實訊號不完美 band-limited ⟹ ker ≠ ∅ ⟹ 數位化確實丟了東西。
+
+但丟的東西（>22kHz 的頻率成分、取樣間的微小行為）是否可被人耳感知，
+是目的因（final cause）的問題，不是形式因。理論只負責指出 ker 的內容。
+
+#### 6.7.3 兩條路徑，不同的 Kernel
+
+Analog 播放本身也有損失——物理媒體引入自己的 kernel：
+
+```
+ker(Original → CD playback) = {
+  above_nyquist_frequencies,      — Nyquist 以上的頻率截斷
+  quantization_residual,          — 振幅量化誤差
+  inter_sample_behavior           — 取樣點之間的精確波形
+}
+
+ker(Original → Vinyl playback) = {
+  noise_floor_detail,             — 底噪淹沒的微弱訊號
+  wow_and_flutter,                — 轉速不穩定的音高偏移
+  physical_degradation,           — 磨損、灰塵、刮痕
+  high_freq_rolloff               — 媒體頻率響應的高頻衰減
+}
+```
+
+**兩邊都丟東西，但丟的東西完全不同。**
+Shannon 只能說「都丟了 X bits」；Formal Information Theory 逐項列出 kernel 的內容。
+
+#### 6.7.4 關鍵發現：Analog 不只「丟」——它還「加」
+
+Homomorphism 只能保留或丟失資訊（Im(f) 和 ker(f)）。
+但類比媒體做了 homomorphism 不允許的事——**引入了原始訊號中不存在的新結構**：
+
+```
+Vinyl 引入:    harmonic distortion（偶次諧波失真）
+               RIAA EQ curve（頻率響應曲線）
+               surface noise（唱片表面噪聲）
+
+Tape 引入:     tape saturation（磁帶飽和失真）
+               hiss（嘶嘶聲）
+               head bump（低頻突起）
+
+Tube amp 引入: even-order harmonics（偶次諧波）
+               soft clipping（軟截幅）
+               sag（電壓下降造成的動態壓縮）
+```
+
+這些是 **non-homomorphic component**——它們不保持原始結構，而是變換結構。
+
+形式化：
+
+```
+f_vinyl: Original → Vinyl_playback
+
+f_vinyl = h ∘ g    其中:
+  g: Original → Original|_reduced    — homomorphic part（丟掉 ker）
+  h: Original|_reduced → Vinyl_out   — non-homomorphic part（加入失真）
+
+Vinyl_out ≠ Im(g)   — 輸出包含原始訊號中不存在的頻譜成分
+```
+
+#### 6.7.5 定理：失真偏好的統一原理
+
+> **「喜歡黑膠的溫暖」和「喜歡失真吉他的 crunch」是同一個數學現象。**
+
+| 現象 | 原始訊號 | Non-homomorphic mapping | 引入的失真 | 人的偏好 |
+|------|---------|----------------------|-----------|---------|
+| 黑膠「溫暖」 | 母帶錄音 | Vinyl playback chain | 偶次諧波、RIAA 曲線 | 「聽起來更自然」 |
+| 磁帶「飽滿」 | 母帶錄音 | Tape saturation | 軟飽和、高頻壓縮 | 「聽起來更厚實」 |
+| 真空管「甜美」 | 吉他乾聲 | Tube amplifier | 偶次諧波、軟截幅 | 「聽起來更有味道」 |
+| 失真吉他「crunch」 | 吉他乾聲 | Overdrive/distortion pedal | 諧波失真、壓縮 | 「聽起來更有力量」 |
+| 底片「質感」 | 光學影像 | Film chemistry | 顆粒、色偏、動態壓縮 | 「看起來更有感覺」 |
+| Instagram 濾鏡 | 數位照片 | Filter algorithm | 色調偏移、暈影、顆粒 | 「看起來更好看」 |
+
+**統一原理**：
+
+> 人類偏好特定的 **non-homomorphic mapping profile**——
+> 不是因為它「保留了更多資訊」（ker 可能更大），
+> 而是因為它引入的**特定失真模式**被感知為令人愉悅。
+
+這解釋了一個長久以來無法用傳統資訊理論回答的問題：
+為什麼人們偏好「客觀上更差」的轉換路徑？
+
+答案：他們偏好的不是「更少的 kernel」，而是「更令人愉悅的 non-homomorphic component」。
+傳統框架只能看到 ker（丟了什麼），看不到 non-homomorphic part（加了什麼）。
+Formal Information Theory 區分了三件事：
+
+```
+任何轉換 f 的完整分解:
+
+  Im(f)                    — 保留了什麼
+  ker(f)                   — 丟了什麼
+  f(x) - h(x)             — 加了什麼（non-homomorphic residual）
+
+其中 h 是最接近 f 的 homomorphism。
+```
+
+#### 6.7.6 為什麼「偶次諧波」被偏好
+
+黑膠、磁帶、真空管共同的物理特性：它們的非線性特性主要產生**偶次諧波**（2nd, 4th, 6th...）。
+
+```
+輸入:  sin(ωt)                          — 純音 (fundamental)
+輸出:  sin(ωt) + a₂·sin(2ωt) + a₄·sin(4ωt) + ...   — 加入偶次諧波
+
+偶次諧波 = 高八度、高兩個八度... = 和聲上「協和」的音程
+```
+
+電晶體和數位截幅主要產生**奇次諧波**（3rd, 5th, 7th...），聽起來「刺耳」。
+
+用 Formal Information Theory 的語言：
+
+```
+f_tube(x)   = h(x) + Σ aₙ·harmonics_even(x)     ← 偶次諧波，被感知為「溫暖」
+f_digital(x) = h(x) + Σ bₙ·harmonics_odd(x)      ← 奇次諧波，被感知為「刺耳」
+```
+
+兩者都是 non-homomorphic，但 **non-homomorphic residual 的頻譜結構不同**，
+導致截然不同的主觀感受。
+
 ---
 
 ## 7. 對轉換架構的影響
