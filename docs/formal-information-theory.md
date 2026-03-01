@@ -3,7 +3,11 @@
 用 model theory 的框架定義**結構化資訊**——不同於 Shannon 的量化資訊理論，
 本框架刻畫資訊的**結構**（什麼種類的資訊被保留或丟失），而非僅僅資訊的**量**（多少 bits）。
 
-應用於文件格式轉換：定義格式之間的資訊包含關係，以及為什麼 macdoc 選擇兩兩直接轉換。
+適用於**所有結構化資料的轉換**：文件格式（Word、Markdown、HTML）、資料庫遷移（PostgreSQL → MySQL）、
+圖片轉檔（PNG → JPG）、音訊轉碼（WAV → MP3）、序列化格式（JSON → CSV）——
+任何有 signature 的資料之間的轉換，都服從同一套定理。
+
+macdoc 是本理論的第一個應用場景：定義格式之間的資訊包含關係，以及為什麼選擇兩兩直接轉換。
 
 ---
 
@@ -17,7 +21,7 @@
 
 ```
 抽象代數                     Model Theory                 本文的應用
-(固定結構)                   (任意 signature)              (文件格式)
+(固定結構)                   (任意 signature)              (資料轉換)
 ────────────                ─────────────                ──────────
 
 Group (G, ·)                Structure (M, σ)             Word Document (M, σ_Word)
@@ -35,31 +39,31 @@ Isomorphism                 Isomorphism                  Format equivalence
 Quotient G/N                A / ker(f) ≅ Im(f)           Lossy conversion 的 kernel
 ```
 
-### 0.2 為什麼這個框架適合文件格式
+### 0.2 為什麼這個框架適合所有結構化資料
 
-文件格式天然具有代數結構：
-- **Sorts** = 元素類型（Text, Heading, Image, ...）
-- **Relations** = 布林屬性（bold, italic, ...）
-- **Functions** = 值屬性（color, fontSize, ...）
+任何有結構的資料都天然具有代數結構：
+- **Sorts** = 元素類型（文件的 Text/Heading/Image、資料庫的 Table、圖片的 Pixel/Layer）
+- **Relations** = 布林屬性（bold、NOT NULL、hasAlpha）
+- **Functions** = 值屬性（color、column value、amplitude）
 
-把格式定義為 model theory 的 structure 後，所有代數定理自動適用：
+把資料格式定義為 model theory 的 structure 後，所有代數定理自動適用：
 
-| 代數定理 | 在文件格式中的意義 |
+| 代數定理 | 在資料轉換中的意義 |
 |---------|-------------------|
-| **第一同構定理** A/ker(f) ≅ Im(f) | 格式轉換的 collapse（如顏色丟失）可以用 kernel 精確描述 |
+| **第一同構定理** A/ker(f) ≅ Im(f) | 轉換的 collapse 可以用 kernel **逐項命名**（不是「丟了 47 bits」，而是「丟了顏色、字體、批註」） |
 | **Embedding 構成偏序** | 格式之間的 ⊆ᵢ 關係是偏序（自反、反對稱、遞移） |
-| **子結構保持性質** | 經 hub 轉換 = 先投影到子結構再嵌入，資訊 ≤ 直接映射 |
+| **子結構保持性質** | 經中間格式轉換 = 先投影到子結構再嵌入，資訊 ≤ 直接轉換 |
 
-本文不是發明新理論，而是把成熟的數學工具應用到文件格式這個 domain。
-理論本身是現成的，有趣的是**應用的結論**——hub 損失定理（§6）和 AI 讓 O(n²) 變可行（§7）。
+本文不是發明新理論，而是把成熟的數學工具應用到資料轉換這個 domain。
+公理只有三條：資料 = structure，轉換 = homomorphism，損失 = kernel。所有定理由此推出。
 
 ---
 
-## 1. 格式即結構 (Format as Structure)
+## 1. 資料格式即結構 (Data Format as Structure)
 
 ### 1.1 Signature：格式能表達什麼
 
-每個文件格式定義一個 **signature**（簽名）σ，包含：
+每個資料格式定義一個 **signature**（簽名）σ，包含：
 
 - **Sorts**（類型）：格式支援的元素類型
 - **Relations**（關係）：元素上的布林屬性
@@ -93,6 +97,60 @@ Quotient G/N                A / ker(f) ≅ Im(f)           Lossy conversion 的 
   functions: { }
 }
 ```
+
+**同樣的框架適用於所有結構化資料**：
+
+```
+σ_PostgreSQL = {
+  sorts:     { Row, Table, View, Index, Trigger, Sequence, ... }
+  relations: { NOT_NULL ⊆ Column, UNIQUE ⊆ Column, PRIMARY_KEY ⊆ Column, ... }
+  functions: { datatype: Column → Type, default: Column → Expr,
+               foreign_key: Column → (Table, Column), ... }
+}
+
+σ_CSV = {
+  sorts:     { Row, Column }
+  relations: { }
+  functions: { value: (Row, Column) → String }
+}
+
+σ_PNG = {
+  sorts:     { Pixel, Layer, Metadata }
+  relations: { hasAlpha ⊆ Pixel }
+  functions: { color: Pixel → RGBA, position: Pixel → (x, y),
+               bitDepth: Layer → {8,16}, ... }
+}
+
+σ_JPG = {
+  sorts:     { Pixel, Metadata }
+  relations: { }                               — 沒有 alpha！
+  functions: { color: Pixel → RGB, position: Pixel → (x, y),
+               quality: Image → {1..100} }
+}
+
+σ_WAV = {
+  sorts:     { Sample, Channel, Metadata }
+  relations: { }
+  functions: { amplitude: Sample → Float, time: Sample → Sec,
+               sampleRate: Metadata → Hz, bitDepth: Metadata → Int }
+}
+
+σ_JSON = {
+  sorts:     { Object, Array, String, Number, Boolean, Null }
+  relations: { }
+  functions: { key: (Object, String) → Value, index: (Array, Int) → Value }
+}
+```
+
+**ker(f) 在每個領域都有具體語意**：
+
+| 轉換 | ker(f) | 日常說法 |
+|------|--------|---------|
+| Word → MD | {color, fontSize, underline, comment, ...} | 「格式丟了」 |
+| PostgreSQL → CSV | {foreign_key, index, trigger, view, datatype, ...} | 「schema 沒了」 |
+| PNG → JPG | {hasAlpha, bitDepth=16, lossless} | 「透明背景沒了」 |
+| WAV → MP3 | {high_freq_samples, phase_precision} | 「音質變差了」 |
+| JSON → CSV | {Object_nesting, Array, mixed_types, Null} | 「巢狀結構攤平了」 |
 
 ### 1.2 Structure：一份具體的文件
 
@@ -445,7 +503,32 @@ Formal Information Theory 精確刻畫了「什麼被區分、什麼被 collapse
 
 ---
 
-## 9. 與其他文檔的關係
+## 9. 理論的適用範圍
+
+本理論的三條公理（資料 = structure，轉換 = homomorphism，損失 = kernel）
+適用於所有結構化資料的轉換。不同領域長久以來各自發明的詞彙，在這個框架下統一：
+
+| 領域 | 他們的說法 | 統一的說法 |
+|------|----------|-----------|
+| 文件轉換 | "fidelity loss" | ker(f) |
+| 資料庫遷移 | "schema incompatibility" | σ_A ∖ σ_B |
+| 音訊轉碼 | "lossy compression" | ker(f) ≠ ∅ |
+| 圖片轉檔 | "alpha channel lost" | hasAlpha ∈ ker(f) |
+| 序列化 | "data doesn't round-trip" | ¬∃g: g∘f = id |
+| 型別系統 | "narrowing conversion" | non-injective homomorphism |
+| ETL pipeline | "data cleaning drops fields" | explicit kernel choice |
+
+### 相關學術框架
+
+| 框架 | 作者 | 與本理論的關係 |
+|------|------|-------------|
+| Channel Theory | Barwise & Seligman (1997) | 用 classification + infomorphism 描述資訊流——概念最接近，但不使用 signature |
+| Functorial Data Migration | Spivak (2010s) | 用 category theory 處理 database schema 遷移——是本框架在 database 領域的 special case |
+| Institution Theory | Goguen & Burstall (1992) | 泛化邏輯系統之間的翻譯——本框架的 interpretation 是其特例 |
+
+---
+
+## 10. 與 macdoc 文檔的關係
 
 | 文檔 | 關聯 |
 |------|------|
