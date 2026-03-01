@@ -128,6 +128,22 @@ Quotient G/N                A / ker(f) ≅ Im(f)           Lossy conversion 的 
                quality: Image → {1..100} }
 }
 
+σ_MIDI = {
+  sorts:     { Note, Track, Instrument, ControlChange, Tempo, TimeSignature }
+  relations: { }
+  functions: { pitch: Note → {0..127}, velocity: Note → {0..127},
+               duration: Note → Ticks, channel: Note → {0..15},
+               instrument: Track → GM_Program, tempo: Tempo → BPM }
+}
+
+σ_MP3 = {
+  sorts:     { Sample, Frame, Channel, Metadata }
+  relations: { }
+  functions: { amplitude: Sample → Float, time: Sample → Sec,
+               spectral: Frame → Coefficients,
+               sampleRate: Metadata → Hz, bitRate: Metadata → kbps }
+}
+
 σ_WAV = {
   sorts:     { Sample, Channel, Metadata }
   relations: { }
@@ -150,6 +166,8 @@ Quotient G/N                A / ker(f) ≅ Im(f)           Lossy conversion 的 
 | PostgreSQL → CSV | {foreign_key, index, trigger, view, datatype, ...} | 「schema 沒了」 |
 | PNG → JPG | {hasAlpha, bitDepth=16, lossless} | 「透明背景沒了」 |
 | WAV → MP3 | {high_freq_samples, phase_precision} | 「音質變差了」 |
+| MIDI → MP3 | ∅（固定 synthesizer 下，見 §6） | 「embedding，無損失」 |
+| MP3 → MIDI | {timbre, room_acoustics, phase, non-musical_sound, ...} | 「只能 AI 猜音符」 |
 | JSON → CSV | {Object_nesting, Array, mixed_types, Null} | 「巢狀結構攤平了」 |
 
 ### 1.2 Structure：一份具體的文件
@@ -292,6 +310,8 @@ interpret σ_Word in σ_MD:
 
 ## 5. 已知格式的 Embedding 關係
 
+### 5.1 同層格式（同一抽象層級）
+
 | 關係 | 成立？ | 理由（interpretation 視角） |
 |------|:------:|------|
 | MD ⊆ᵢ Word | ✅ | σ_MD 的每個符號在 σ_Word 中都有直接對應 |
@@ -300,14 +320,40 @@ interpret σ_Word in σ_MD:
 | HTML ⊆ᵢ Word | ❌ | SemanticTag、Form、Audio/Video 在 σ_Word 中不可定義 |
 | Word ⊆ᵢ MD | ❌ | color、underline、Comment 在 σ_MD 中不可定義 |
 | HTML ⊆ᵢ MD | ❌ | 同上更嚴重 |
+| JSON ≅ᵢ YAML | ✅ | 互相 embed（signature 幾乎相同） |
+| PNG → JPG | 單向 | hasAlpha ∈ ker(f)，JPG 的 signature 沒有 alpha |
 
-偏序圖：
+同層偏序圖：
 
 ```
-             HTML
-           ↗     （Word ≈⊆ᵢ HTML，大部分成立）
-PlainText ⊆ᵢ MD ⊆ᵢ Word
-                     （Word 和 HTML 互不完全包含，交集很大）
+文件:      PlainText ⊆ᵢ MD ⊆ᵢ Word ≈⊆ᵢ HTML
+序列化:    CSV ⊆ᵢ JSON ≅ᵢ YAML ⊆ᵢ XML
+圖片:      JPG ⊆ᵢ PNG ⊆ᵢ TIFF
+資料庫:    CSV ⊆ᵢ SQLite ⊆ᵢ PostgreSQL
+```
+
+### 5.2 跨層格式（不同抽象層級，見 §6 定理）
+
+| 關係 | 成立？ | 提供 interpretation 的理論 |
+|------|:------:|------|
+| MIDI ⊆ᵢ Audio (MP3/WAV) | ✅ | 聲學：pitch≜基頻, velocity≜amplitude, 疊加原理 |
+| Audio ⊆ᵢ MIDI | ❌ | timbre, room acoustics, non-musical sound 不可定義 |
+| SVG ⊆ᵢ PNG | ✅ | 幾何學 + 光柵化 |
+| PNG ⊆ᵢ SVG | ❌ | sub-pixel detail, anti-aliasing 不可定義 |
+| LaTeX ⊆ᵢ PDF | ✅ | 排版理論（TeX engine） |
+| PDF ⊆ᵢ LaTeX | ❌ | glyph outline, exact positioning 不可定義 |
+
+跨層偏序圖：
+
+```
+符號層 (symbolic)              信號層 (signal)
+────────────                  ────────────
+MIDI ──────[acoustics]─────→  Audio (WAV/MP3)
+SVG ───────[rasterize]─────→  Bitmap (PNG/JPG)
+LaTeX ─────[typeset]───────→  PDF
+Source ─────[compile]──────→  Binary
+
+方向永遠是 symbolic → signal（§6 Abstraction Embedding Theorem）
 ```
 
 ---
@@ -377,6 +423,153 @@ Audio:  wave₁(t)  + wave₂(t)  + wave₃(t) = wave_total(t)
 
 不同的 MIDI 音符對應不同的頻譜成分，疊加後仍可分離（Fourier 分析）。
 這不是 base64 式的任意編碼——而是物理上有意義的結構保持映射。
+
+### 6.6 Case Study：MIDI ↔ MP3 的完整分析
+
+MIDI 和 MP3 是展示 Abstraction Embedding Theorem 的最佳案例，
+因為它們描述同一個現象（音樂）但在完全不同的抽象層級。
+
+#### 6.6.1 兩個 Signature 的對比
+
+```
+σ_MIDI（符號層）                     σ_MP3（信號層）
+────────────────                    ────────────────
+sorts:                              sorts:
+  Note        — 一個音符               Sample    — 一個取樣點
+  Track       — 一個音軌               Frame     — 一個壓縮幀
+  Instrument  — 一個樂器設定            Channel   — 一個聲道
+  Tempo       — 速度標記               Metadata  — 檔案資訊
+
+functions:                           functions:
+  pitch: Note → {0..127}              amplitude: Sample → Float
+  velocity: Note → {0..127}           time: Sample → Sec
+  duration: Note → Ticks              spectral: Frame → Coefficients
+  channel: Note → {0..15}             sampleRate: Metadata → Hz
+  instrument: Track → GM_Program      bitRate: Metadata → kbps
+  tempo: Tempo → BPM
+```
+
+**原始符號完全不同**——MIDI 的世界沒有 Sample，MP3 的世界沒有 Note。
+但這不代表不能 embed（見下）。
+
+#### 6.6.2 聲學提供 Interpretation
+
+聲學物理為 σ_MIDI 的每個符號提供了 σ_Audio 中的定義：
+
+```
+interpret σ_MIDI in σ_Audio（由聲學提供）:
+
+  Note(x)                 ≜  x 是波形中一個可辨識的獨立頻譜成分
+  pitch(x) = 60 (C4)     ≜  x 的基頻（fundamental frequency）= 261.63 Hz
+  velocity(x) = 80       ≜  x 的 onset peak amplitude ∝ 80/127
+  duration(x) = 480 ticks ≜  x 的 onset 到 offset 時間（取決於 tempo）
+  instrument(x) = Piano   ≜  x 的頻譜包絡（spectral envelope）符合鋼琴特徵
+  tempo = 120 BPM        ≜  每個 tick = 1/960 sec
+```
+
+每個定義都是物理上有意義的——pitch 就是頻率，velocity 就是振幅，instrument 就是音色。
+Interpretation 完備 ⟹ MIDI ⊆ᵢ Audio。
+
+#### 6.6.3 疊加原理保證 Injectivity
+
+MIDI 的多個同時發聲的音符如何 embed 到單一波形？波的疊加：
+
+```
+MIDI:   Note₁(C4, Piano, v=80) + Note₂(E4, Piano, v=70) + Note₃(G4, Piano, v=75)
+         ↓ synthesize            ↓ synthesize            ↓ synthesize
+Audio:  wave₁(t)               + wave₂(t)               + wave₃(t)
+         ↓ superposition（線性疊加）
+        wave_total(t) = wave₁(t) + wave₂(t) + wave₃(t)
+```
+
+關鍵性質：
+- **可分離性**：不同頻率的波可以用 Fourier 分析分離 → 不同音符仍可辨識
+- **Injectivity**：不同 MIDI → 不同波形（固定 synthesizer 下）→ ker = ∅
+- **結構保持**：同時發聲 = 波的疊加，音量 = 振幅，音高 = 頻率
+
+這是物理上有意義的 embedding，不是 base64 式的任意編碼。
+
+#### 6.6.4 DAW 的角色：Interpretation Machine
+
+DAW（Digital Audio Workstation）在這個框架中的精確身份：
+
+```
+σ_DAW ⊇ σ_MIDI ∪ σ_Audio ∪ σ_bridge
+
+σ_bridge = {
+  synthesize: (Note, Instrument) → Waveform,    — 合成
+  mix: [Waveform] → Waveform,                   — 混音
+  apply_reverb: (Waveform, Room) → Waveform,    — 殘響
+  master: Waveform → CompressedAudio             — 母帶處理
+}
+```
+
+DAW 是 σ_MIDI 和 σ_Audio 的 **join**（上界），加上連接兩個層級的 bridge functions。
+不同的 DAW / soundfont 提供不同的 bridge functions → 不同的 interpretation。
+
+**日常語言的精確對應**：
+
+| 音樂用語 | Model Theory 對應 |
+|---------|------------------|
+| 「詮釋一首曲子」 | interpretation of a theory |
+| 「不同指揮有不同詮釋」 | 同一 theory 的多個 model |
+| 「忠於原譜」 | interpretation 保持了所有符號 |
+| 「過度詮釋」 | interpretation 引入了 source 沒有的結構 |
+
+「Interpret」同時是音樂術語和 model theory 術語——因為它們描述的是同一個數學結構。
+
+#### 6.6.5 Model-Theory Duality：MIDI 檔案的雙重身份
+
+一份 MIDI 檔案在不同的 signature 世界中扮演不同角色：
+
+```
+在 σ_MIDI 的世界:
+  MIDI Spec (axioms):  pitch ∈ {0..127}, velocity ∈ {0..127}, ...
+  song.mid:            model（完全確定——每個音符的 pitch、velocity、timing 都有具體值）
+
+在 σ_Audio 的世界:
+  song.mid 誘導出一組 axioms over σ_Audio:
+    「t=0.5s 處必須有基頻 261.63Hz 的音」
+    「onset amplitude ∝ 80/127」
+    ...
+  song.mid:            theory（不完備——只約束部分性質，不指定波形細節）
+  DAW rendering:       該 theory 的一個 model
+```
+
+**同一份檔案，在自己的 signature 裡是 model，在低層的 signature 裡是 theory。**
+
+這就是 **abstraction level 的精確定義**：
+
+> **高抽象層的一個 model = 低抽象層的一個 theory**
+
+| 高層 model | 低層 theory | 低層 model（需要選擇） |
+|-----------|-----------|-------------------|
+| song.mid | 「必須有這些音」 | DAW rendering.mp3 |
+| diagram.svg | 「必須有這些形狀」 | render.png（選擇解析度） |
+| paper.tex | 「必須有這些段落」 | output.pdf（選擇字體渲染） |
+| main.c | 「必須實現這些函數」 | a.out（選擇最佳化策略） |
+
+#### 6.6.6 反向轉換的不對稱性
+
+| 方向 | 誰提供 interpretation | 品質 | 數學性質 |
+|------|---------------------|------|---------|
+| MIDI → MP3 | DAW（synthesizer + soundfont） | 確定性、高品質 | injective homomorphism |
+| MP3 → MIDI | AI（音訊轉錄模型） | 機率性、有損 | 非唯一的近似逆映射 |
+
+反向轉換困難的原因：
+
+```
+MP3 → MIDI 需要解決：
+  一段波形 → 分離出各個音符        （polyphonic transcription，NP-hard 近似）
+  頻譜包絡 → 辨識樂器              （timbre classification）
+  連續振幅 → 離散 velocity          （quantization，多對一）
+  實際演奏 → 理想化音符             （expression → discrete events）
+
+同一個 MP3 可能對應多個合法的 MIDI 轉錄（逆映射不唯一）
+```
+
+理論的預測：σ_Audio 比 σ_MIDI 更大（更多 sorts 和 functions），
+所以 Audio → MIDI 是 non-injective homomorphism（多對一），ker 很大。
 
 ---
 
