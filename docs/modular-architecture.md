@@ -23,38 +23,43 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 | `markdown-swift` | 生成 Markdown | 寫 |
 | `marker-swift` | 圖片分類 + Marker 格式輸出 | 寫 |
 | `surya-swift` | OCR 文字辨識 | 讀 |
+| `pdf-to-latex-swift` | PDF block 偵測 + AI 轉寫 LaTeX | 讀→寫 |
+| `biblatex-apa-swift` | 解析 .bib 檔 + APA 7 驗證 | 讀（外部 repo） |
 
 格式 package 的規則：
 - **只處理一種格式**
 - **不依賴其他格式 package**（`ooxml-swift` 不知道 Markdown 的存在）
 - **可獨立發布、獨立使用**
 
-### Layer 2: Protocol Package（協議層）
+### Layer 2: Protocol / Model Packages（協議層）
 
-定義轉換器的共用介面，不包含實作。
+定義轉換器的共用介面和語意模型，不包含最終輸出實作。
 
 | Package | 內容 |
 |---------|------|
 | `doc-converter-swift` | `DocumentConverter` protocol, `StreamingOutput` protocol, `ConversionOptions`, `ConversionError` |
+| `apa-bib-swift` | `APAReference` 語意模型, `APAStyler` (BibEntry → APAReference), `APAReferenceRenderer` protocol |
 
 協議 package 的規則：
-- **零外部依賴**
-- **只有 protocols、structs、enums**
-- **所有轉換器都依賴它，但它不依賴任何轉換器**
+- **只依賴 Layer 1 format packages**（`apa-bib-swift` 依賴 `biblatex-apa-swift`）
+- **只有 protocols、structs、enums + 語意轉換邏輯**
+- **所有 renderer 都依賴它，但它不依賴任何 renderer**
 
-### Layer 3: Converter Packages（轉換層）
+### Layer 3: Converter / Renderer Packages（轉換層）
 
-橋接 Layer 1 的格式 package，實現特定的 source → target 轉換。
+橋接 Layer 1-2 的 package，實現特定的 source → target 轉換或渲染。
 
 | Package | 依賴 | 轉換 |
 |---------|------|------|
 | `word-to-md-swift` | `doc-converter-swift` + `ooxml-swift` + `markdown-swift` | Word → Markdown |
+| `apa-bib-to-md-swift` | `apa-bib-swift` | APAReference → Markdown |
+| `apa-bib-to-html-swift` | `apa-bib-swift` | APAReference → HTML |
 | *(未來)* `pdf-to-md-swift` | `doc-converter-swift` + PDFKit/surya-swift | PDF → Markdown |
 | *(未來)* `html-to-md-swift` | `doc-converter-swift` + SwiftSoup | HTML → Markdown |
 
 轉換 package 的規則：
-- **依賴一個 source format package + 一個 target format package + 協議 package**
-- **實作 `DocumentConverter` protocol**
+- **依賴 Layer 2 協議 package +（可選）Layer 1 format packages**
+- **實作對應 protocol**（`DocumentConverter` 或 `APAReferenceRenderer`）
 - **遵循 streaming 模式**（見 `philosophy.md`）
 - **遵循 target-aware extraction**（見 `functional-correspondence.md`）
 
@@ -64,7 +69,7 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 
 | Consumer | 組合方式 | 介面 |
 |----------|---------|------|
-| `macdoc` CLI | `word-to-md-swift` + `marker-swift` + ArgumentParser | 命令列 |
+| `macdoc` CLI | `word-to-md-swift` + `marker-swift` + `pdf-to-latex-swift` + ArgumentParser | 命令列 |
 | `che-word-mcp` | `ooxml-swift`（讀寫）+ `macdoc` CLI（轉換） | MCP (Claude) |
 | *(未來)* `che-pdf-mcp` | PDFKit + `pdf-to-md-swift` | MCP (Claude) |
 
@@ -84,8 +89,9 @@ Layer 4 (Consumers)          Layer 3 (Converters)       Layer 2 (Protocols)     
 ─────────────────           ──────────────────         ─────────────────       ────────────────
 
 macdoc CLI ──────────────→ word-to-md-swift ──┬──→ doc-converter-swift    ooxml-swift
-  └──→ marker-swift                          ├──→ ooxml-swift            markdown-swift
-                                             └──→ markdown-swift         marker-swift
+  ├──→ marker-swift                          ├──→ ooxml-swift            markdown-swift
+  └──→ pdf-to-latex-swift (PDFToLaTeXCore)   └──→ markdown-swift         marker-swift
+       └──→ PDFKit + Vision + AI CLI tools                               pdf-to-latex-swift
 
 che-word-mcp
   ├──→ ooxml-swift (直接讀寫 Word, 145 tools)
@@ -93,6 +99,8 @@ che-word-mcp
 
 che-pdf-mcp ─────────────→ pdf-to-md-swift ──┬──→ doc-converter-swift
                                              └──→ surya-swift / PDFKit
+
+che-biblatex-mcp ────────→ apa-bib-to-md-swift ──→ apa-bib-swift ──→ biblatex-apa-swift
 ```
 
 依賴永遠是 **Layer 4 → 3 → 2 → 1**，不會反向，不會跨層。
@@ -237,6 +245,28 @@ che-word-mcp
 
 詳見 [adr-mcp-delegates-to-cli.md](adr-mcp-delegates-to-cli.md)。
 
+### `pdf-to-latex-swift` 為什麼用 CLI 工具而非 API？
+
+`pdf-to-latex-swift` 的 AI 轉寫步驟透過呼叫外部 **CLI 工具**（如 `codex`、`claude`、`gemini`）來執行，
+而非直接呼叫 LLM API。
+
+這個設計選擇的原因：
+
+1. **認證管理由 CLI 負責**：每個 CLI 工具自行管理 API key、OAuth token 等，macdoc 不需要處理認證細節
+2. **模型切換零成本**：透過 `--model` 參數選擇模型，不需要改程式碼或重新編譯
+3. **與 ADR 一致**：與 [adr-mcp-delegates-to-cli.md](adr-mcp-delegates-to-cli.md) 中 MCP 委託 CLI 的原則相同——CLI 是功能的唯一入口
+4. **離線開發友善**：核心 pipeline（PDF 掃描、block 偵測、LaTeX 組裝）完全離線，只有轉寫步驟需要 AI CLI
+
+**使用前提**：使用者必須先安裝並設定好對應的 AI CLI 工具：
+
+| CLI 工具 | 設定方式 |
+|----------|---------|
+| `codex` | OpenAI Codex CLI，需 `OPENAI_API_KEY` |
+| `claude` | Anthropic Claude CLI，需已登入 |
+| `gemini` | Google Gemini CLI，需已登入 |
+
+詳見 [pdf-to-latex-swift README](../packages/pdf-to-latex-swift/README.md)。
+
 ### 為什麼不把 `MarkerWordConverter` 也放進 `word-to-md-swift`？
 
 `MarkerWordConverter` 額外依賴 `marker-swift`（圖片分類），如果放進去會讓 `word-to-md-swift` 變重。
@@ -245,3 +275,36 @@ MCP 做 `export_markdown` 不需要圖片分類。
 兩個選擇都合理：
 - **作為 optional target**：`word-to-md-swift` 裡有 `WordToMDMarker` target，只在需要時引入
 - **留在 `macdoc`**：CLI 專屬功能，不對外暴露
+
+### Style × Format 正交分離
+
+`bib-to-apa-swift` 的 `BibToAPAFormatter` 將「APA 7 引用風格邏輯」和「Markdown 輸出格式」混在一起。
+重構為 `apa-bib-swift`（語意模型 + styler）+ `apa-bib-to-{output}-swift`（renderer）：
+
+```
+biblatex-apa-swift          (Layer 1: .bib 解析 + APA 驗證)
+        ↓
+apa-bib-swift               (Layer 2: APAStyler + APAReference 語意模型 + Renderer 協議)
+        ↓
+apa-bib-to-md-swift         (Layer 3: Markdown renderer)
+apa-bib-to-html-swift       (Layer 3: HTML renderer + APA CSS)
+```
+
+**設計原則**：
+- `APAReference` 是格式無關的語意模型，只描述「什麼內容、什麼語意樣式」（斜體、粗體、連結）
+- 已知固定樣式的欄位（journal 一定斜體）存為 `String`，renderer 套用樣式
+- 只有混合樣式欄位用 `StyledText`（`[TextSegment]`）
+- 每個 renderer 實作 `APAReferenceRenderer` protocol，產生不同輸出格式
+
+---
+
+## 命名原則
+
+### Package 命名
+
+- **Package（內部程式）用副檔名**：`.bib` → `bib`、`.md` → `md`、`.html` → `html`、`.docx` → `ooxml`
+- **MCP / 公開工具可用俗稱**：`che-word-mcp`、`che-bib-mcp`
+- **文件轉換**：`{input}-to-{output}-swift`（如 `word-to-md-swift`）
+- **風格轉換**：`{style}-{input}-to-{output}-swift`（如 `apa-bib-to-md-swift`）
+  - style 是 invariant 放最前面，因為 APA 規則不變，只有輸出格式不同
+- **協議層不含 output**：`apa-bib-swift`（類似 `doc-converter-swift`）

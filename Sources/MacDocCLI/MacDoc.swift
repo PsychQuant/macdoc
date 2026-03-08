@@ -3,14 +3,15 @@ import Foundation
 import DocConverterSwift
 import WordToMDSwift
 import MarkerWordConverter
+import PDFToLaTeXCore
 
 @main
 struct MacDoc: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "macdoc",
-        abstract: "原生 macOS 文件轉 Markdown 工具",
-        version: "0.2.0",
-        subcommands: [Word.self]
+        abstract: "原生 macOS 文件處理工具",
+        version: "0.3.0",
+        subcommands: [Word.self, PDF.self, Config.self]
     )
 }
 

@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "macdoc",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
         .executable(name: "macdoc", targets: ["MacDocCLI"]),
     ],
@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.5.0"),
         .package(url: "https://github.com/kiki830621/markdown-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/kiki830621/marker-swift.git", from: "0.1.0"),
+        .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
     ],
     targets: [
         .target(
@@ -31,6 +32,7 @@ let package = Package(
                 .product(name: "DocConverterSwift", package: "doc-converter-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
                 "MarkerWordConverter",
+                .product(name: "PDFToLaTeXCore", package: "pdf-to-latex-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
