@@ -13,16 +13,21 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Package.swift              # CLI 的 Swift Package 定義
 ├── Sources/
 │   ├── MacDocCLI/             # CLI 入口點
+│   │   ├── MacDoc.swift       # 主命令 + Word 子命令
+│   │   ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline + Phase 2 consolidation）
+│   │   └── MacDoc+Config.swift# Config 子命令群（AI 設定管理）
 │   └── MarkerWordConverter/   # Marker 模式轉換器（依賴 MarkerSwift）
 ├── Tests/
 ├── docs/                      # 開發文檔和對話記錄
-├── packages/                  # 本地套件（各自獨立 git repo，.gitignore 忽略）
+│   └── plans/                 # 實作計畫
+├── packages/                  # 本地套件（.gitignore 忽略）
 │   ├── doc-converter-swift/   # Layer 2: 轉換器協議（DocumentConverter, StreamingOutput）
 │   ├── word-to-md-swift/      # Layer 3: Word → Markdown 轉換器
 │   ├── ooxml-swift/           # Layer 1: OOXML (Word/Excel) 解析
 │   ├── markdown-swift/        # Layer 1: Markdown 生成
 │   ├── marker-swift/          # Layer 1: 圖片分類 + Marker 輸出
-│   └── surya-swift/           # Layer 1: OCR 文字辨識
+│   ├── surya-swift/           # Layer 1: OCR 文字辨識
+│   └── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
 │   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
@@ -39,6 +44,8 @@ macdoc CLI ──────────┐
 che-word-mcp ────────┘                       ├──→ ooxml-swift            markdown-swift
   └──→ ooxml-swift (直接讀寫)                 └──→ markdown-swift         marker-swift
                                                                         surya-swift
+macdoc CLI ──→ pdf-to-latex-swift (PDFToLaTeXCore)                      pdf-to-latex-swift
+
 che-pdf-mcp
 └──→ Vision.framework / surya-swift
 ```
@@ -53,11 +60,22 @@ che-pdf-mcp
 # 建構主專案（在 repo 根目錄）
 swift build
 
-# 執行 CLI
+# 執行 CLI — Word
 swift run macdoc word input.docx -o output.md
 
 # 使用 Marker 模式（輸出 metadata + images）
 swift run macdoc word input.docx --marker -o output/
+
+# 執行 CLI — PDF to LaTeX（Phase 2 consolidation）
+swift run macdoc pdf normalize --project /path/to/project
+swift run macdoc pdf fix-envs --project /path/to/project [--fix]
+swift run macdoc pdf compile-check --project /path/to/project
+swift run macdoc pdf consolidate --project /path/to/project [--dry-run] [--agent codex|claude|gemini]
+
+# AI 設定管理
+swift run macdoc config ai detect
+swift run macdoc config ai list
+swift run macdoc config ai set agent claude
 
 # 建構個別套件
 cd packages/ooxml-swift && swift build
@@ -128,10 +146,24 @@ swift package clean && swift build
 
 ### Layer 4: Consumers
 
+#### pdf-to-latex-swift
+- **用途**：PDF → LaTeX 轉換 pipeline
+- **Phase 1**：PDF 掃描、頁面渲染、block 偵測、AI 轉寫、章節偵測、TeX 組裝
+- **Phase 2（consolidation）**：
+  - `AIConfig` — AI CLI 工具設定（codex/claude/gemini 自動偵測，`~/.config/macdoc/config.json`）
+  - `LaTeXNormalizer` — document class 修正、符號正規化、跨頁去重
+  - `LaTeXEnvChecker` — `\begin`/`\end` 配對檢查與修復
+  - `TexCompileChecker` — pdflatex log 解析（支援 `!` 和 file-line-error 格式）
+  - `Consolidator` — 機械步驟 + agent 迭代修復 orchestrator
+- **依賴**：swift-argument-parser
+- **平台**：macOS 14+
+
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
-- **輸出模式**：標準模式（`.md`）、Marker 模式（`.md` + `_meta.json` + `images/`）
-- **依賴**：word-to-md-swift + marker-swift + ArgumentParser
+- **Word**：標準模式（`.md`）、Marker 模式（`.md` + `_meta.json` + `images/`）
+- **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
+- **Config**：AI 後端設定管理
+- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + ArgumentParser
 
 #### che-word-mcp（145 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -228,6 +260,7 @@ swift build
 | `packages/markdown-swift` | https://github.com/kiki830621/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | https://github.com/kiki830621/marker-swift.git | 圖片分類 |
 | `packages/surya-swift` | (local only) | OCR 文字辨識 |
+| `packages/pdf-to-latex-swift` | (local, in macdoc repo) | PDF → LaTeX pipeline |
 | `mcp/che-word-mcp` | https://github.com/kiki830621/che-word-mcp.git | Word MCP |
 | `mcp/che-pdf-mcp` | https://github.com/kiki830621/che-pdf-mcp.git | PDF MCP |
 | `reference/pandoc` | https://github.com/jgm/pandoc.git | 參考用 |
@@ -235,8 +268,17 @@ swift build
 ## Key Files
 
 ### macdoc
-- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點
+- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Word + PDF + Config 子命令群）
+- `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（Phase 1 pipeline + Phase 2 consolidation）
+- `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
 - `Sources/MarkerWordConverter/MarkerWordConverter.swift` - Marker 模式轉換器
+
+### pdf-to-latex-swift
+- `Sources/PDFToLaTeXCore/AIConfig.swift` - AI CLI 工具設定
+- `Sources/PDFToLaTeXCore/LaTeXNormalizer.swift` - 機械式 LaTeX 清理
+- `Sources/PDFToLaTeXCore/LaTeXEnvChecker.swift` - 環境配對檢查
+- `Sources/PDFToLaTeXCore/TexCompileChecker.swift` - 編譯錯誤解析
+- `Sources/PDFToLaTeXCore/Consolidator.swift` - consolidation orchestrator
 
 ### doc-converter-swift
 - `Sources/DocConverterSwift/Protocols/DocumentConverter.swift` - 轉換器 protocol
@@ -266,6 +308,7 @@ swift run macdoc word /path/to/test.docx --marker -o /tmp/test_output/
 
 ## Platform Requirements
 
-- macOS 13+ (macdoc, ooxml-swift, markdown-swift, marker-swift)
+- macOS 14+ (macdoc, pdf-to-latex-swift)
+- macOS 13+ (ooxml-swift, markdown-swift, marker-swift)
 - macOS 14+ / iOS 17+ (surya-swift)
 - Swift 5.9+
