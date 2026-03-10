@@ -1,0 +1,3428 @@
+{
+  "blocks" : [
+    {
+      "bbox" : {
+        "height" : 176.24186082696627,
+        "width" : 252.90321858723956,
+        "x" : 176.2580677967028,
+        "y" : 346.5581392899706
+      },
+      "id" : "p0001-b0001",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0001/block-0001.png",
+      "page" : 1,
+      "status" : "segmented",
+      "textPreview" : "ECONOMETRICS\nBRUCE E. HANSEN\n©2000, 20141\nUniversity of Wisconsin\nDepartment of Economics",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 41.445736186713646,
+        "width" : 178.20300292968753,
+        "x" : 216.32331190254345,
+        "y" : 292.3333333636968
+      },
+      "id" : "p0001-b0002",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0001/block-0002.png",
+      "page" : 1,
+      "status" : "segmented",
+      "textPreview" : "This Revision: January 3, 2014\nComments Welcome",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 40.213627164938586,
+        "width" : 485.39481608401417,
+        "x" : 63.3233112218622,
+        "y" : 40.33333321944856
+      },
+      "id" : "p0001-b0003",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0001/block-0003.png",
+      "page" : 1,
+      "status" : "segmented",
+      "textPreview" : "1 This manuscript may be printed and reproduced for individual or instructional use, but may not be\nprinted for commercial purposes.",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 37.16789372762048,
+        "width" : 124.22021484374999,
+        "x" : 65.5816209589887,
+        "y" : 647.9393091612513
+      },
+      "id" : "p0002-b0001",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0001.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Contents",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.850623448689703,
+        "width" : 51.82209523518881,
+        "x" : 80.49872679656309,
+        "y" : 596.0398047078428
+      },
+      "id" : "p0002-b0002",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0002.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Preface",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438726,
+        "width" : 42.45864613850915,
+        "x" : 505.0676696324372,
+        "y" : 595.2093024127108
+      },
+      "id" : "p0002-b0003",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0003.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : ". viii",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 44.779069534279984,
+        "width" : 86.1729278564453,
+        "x" : 80.57895077516078,
+        "y" : 571.0348837505015
+      },
+      "id" : "p0002-b0004",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0004.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "• • •\nIntroduction",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 24.058139165242437,
+        "width" : 21.751879374186203,
+        "x" : 64.47368443057607,
+        "y" : 571.0348837714486
+      },
+      "id" : "p0002-b0005",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0005.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 36.720929977594096,
+        "width" : 22.90225537618005,
+        "x" : 524.624060224316,
+        "y" : 558.3720933423787
+      },
+      "id" : "p0002-b0006",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0006.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1\n1",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 51.74031007633107,
+        "width" : 249.75502522786462,
+        "x" : 79.2980732666618,
+        "y" : 529.5930234336378
+      },
+      "id" : "p0002-b0007",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0007.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1.1 What is Econometrics. ......\n1.2 The Probability Approach to Econometrics\nEconometric Terms and Notation .. ...",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 52.837209033014915,
+        "width" : 203.6071315993498,
+        "x" : 79.42857176355548,
+        "y" : 501.9651165763672
+      },
+      "id" : "p0002-b0008",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0008.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1.3\n1.4 Observational Data ........\nStandard Data Structures",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 40.32558088537729,
+        "width" : 172.45112642907236,
+        "x" : 79.42857129938653,
+        "y" : 488.0000001882523
+      },
+      "id" : "p0002-b0009",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0009.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1.5\nSources for Economic Data",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 53.98837195801502,
+        "width" : 157.49623696652216,
+        "x" : 79.42857183066076,
+        "y" : 460.5232559769486
+      },
+      "id" : "p0002-b0010",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0010.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1.6\n1.7 Econometric Software\nReading the Manuscript",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 40.217054021449826,
+        "width" : 128.7368395553662,
+        "x" : 79.42857183066076,
+        "y" : 446.6666669655486
+      },
+      "id" : "p0002-b0011",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0011.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "1.8\n1.9 Common Symbols",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 24.05813916524255,
+        "width" : 21.751879374186274,
+        "x" : 525.7744361952376,
+        "y" : 450.1627909630764
+      },
+      "id" : "p0002-b0012",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0012.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "8",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 52.83720892852489,
+        "width" : 252.9774373372396,
+        "x" : 63.32331377634259,
+        "y" : 397.20930239057304
+      },
+      "id" : "p0002-b0013",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0013.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2 Conditional Expectation and Projection\n2.1 Introduction .\n2.2",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265568,
+        "width" : 144.84210205078125,
+        "x" : 104.7368449998725,
+        "y" : 394.90697714508815
+      },
+      "id" : "p0002-b0014",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0014.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "The Distribution of Wages",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 24.05813916524255,
+        "width" : 21.751879374186274,
+        "x" : 525.7744361952376,
+        "y" : 398.36046538168097
+      },
+      "id" : "p0002-b0015",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0015.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "9",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265568,
+        "width" : 135.63909912109378,
+        "x" : 104.73684291238541,
+        "y" : 382.24418643014627
+      },
+      "id" : "p0002-b0016",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0016.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Conditional Expectation",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 30.95488739013672,
+        "x" : 79.42857128500684,
+        "y" : 383.395348902201
+      },
+      "id" : "p0002-b0017",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0017.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.3",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643884,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 383.3953488207341
+      },
+      "id" : "p0002-b0018",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0018.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "11",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 28.455787658691463,
+        "width" : 95.63031005859376,
+        "x" : 104.6535186060908,
+        "y" : 369.2070743924407
+      },
+      "id" : "p0002-b0019",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0019.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Log Differences*",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 32.105262756347656,
+        "x" : 79.42857145678859,
+        "y" : 369.5813956705565
+      },
+      "id" : "p0002-b0020",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0020.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.4",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 28.65413538614905,
+        "x" : 518.8721804416059,
+        "y" : 369.5813956705565
+      },
+      "id" : "p0002-b0021",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0021.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "13",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643884,
+        "width" : 30.95488739013672,
+        "x" : 79.42857144934625,
+        "y" : 356.91860473006966
+      },
+      "id" : "p0002-b0022",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0022.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.5",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265568,
+        "width" : 180.50375366210935,
+        "x" : 104.73684634432121,
+        "y" : 354.61627948218114
+      },
+      "id" : "p0002-b0023",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0023.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Conditional Expectation Function",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643884,
+        "width" : 28.654135386149164,
+        "x" : 518.8721804387299,
+        "y" : 356.91860477282705
+      },
+      "id" : "p0002-b0024",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0024.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "14",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 32.105262756347656,
+        "x" : 79.42857183066076,
+        "y" : 343.104651221141
+      },
+      "id" : "p0002-b0025",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0025.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.6",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.333333333333314,
+        "width" : 118.38345336914062,
+        "x" : 105.88722239024165,
+        "y" : 343.00000009751466
+      },
+      "id" : "p0002-b0026",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0026.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Continuous Variables",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 343.10465113480393
+      },
+      "id" : "p0002-b0027",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0027.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "15",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.37596893310547,
+        "width" : 157.49623616536456,
+        "x" : 105.88722262145295,
+        "y" : 329.290697885818
+      },
+      "id" : "p0002-b0028",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0028.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Law of Iterated Expectations",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 30.95488739013672,
+        "x" : 79.428571235705,
+        "y" : 329.29069765465437
+      },
+      "id" : "p0002-b0029",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0029.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.7",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 329.2906976579434
+      },
+      "id" : "p0002-b0030",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0030.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "16",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 30.95488739013672,
+        "x" : 79.42857118434893,
+        "y" : 315.47674450776583
+      },
+      "id" : "p0002-b0031",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0031.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.8",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.855499267578182,
+        "width" : 75.88486226399742,
+        "x" : 104.70418615708668,
+        "y" : 314.1536457193489
+      },
+      "id" : "p0002-b0032",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0032.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "CEF Error .",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 315.47674416957125
+      },
+      "id" : "p0002-b0033",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0033.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "18",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 30.95488739013672,
+        "x" : 79.42857118434893,
+        "y" : 301.6627910193937
+      },
+      "id" : "p0002-b0034",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0034.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.9",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265568,
+        "width" : 121.83458455403645,
+        "x" : 103.58646787743935,
+        "y" : 300.51162832761304
+      },
+      "id" : "p0002-b0035",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0035.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "Intercept-Only Model",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 28.65413538614905,
+        "x" : 518.8721802978089,
+        "y" : 301.6627910193937
+      },
+      "id" : "p0002-b0036",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0036.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "19",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265682,
+        "width" : 137.93984985351562,
+        "x" : 80.57894840406921,
+        "y" : 287.8488377560184
+      },
+      "id" : "p0002-b0037",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0037.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.10 Regression Variance",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 288.9999999720132
+      },
+      "id" : "p0002-b0038",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0038.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "20",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 24.062015215555846,
+        "width" : 110.33082071940107,
+        "x" : 80.57895148586339,
+        "y" : 276.3333334713678
+      },
+      "id" : "p0002-b0039",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0039.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.11 Best Predictor",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643884,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 275.186046483641
+      },
+      "id" : "p0002-b0040",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0040.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "20",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.399224599202512,
+        "width" : 144.84210205078125,
+        "x" : 78.27819548438383,
+        "y" : 261.3333333049504
+      },
+      "id" : "p0002-b0041",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0041.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.12 Conditional Variance",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 261.3720929952689
+      },
+      "id" : "p0002-b0042",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0042.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "21",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.66666666666663,
+        "width" : 244.9248046875,
+        "x" : 78.2782014492575,
+        "y" : 246.33333311978623
+      },
+      "id" : "p0002-b0043",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0043.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.13 Homoskedasticity and Heteroskedasticity.",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 28.65413538614905,
+        "x" : 518.8721805176128,
+        "y" : 247.55813978465534
+      },
+      "id" : "p0002-b0044",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0044.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "23",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.437984148661343,
+        "width" : 202.3609008789062,
+        "x" : 80.5789511628024,
+        "y" : 233.6666668027299
+      },
+      "id" : "p0002-b0045",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0045.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.14 Regression Derivative . . . . ..",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438897,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 234.8953488092224
+      },
+      "id" : "p0002-b0046",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0046.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "23",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.403100649515807,
+        "width" : 98.82706705729169,
+        "x" : 79.4285712168429,
+        "y" : 219.93023269998957
+      },
+      "id" : "p0002-b0047",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0047.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.15 Linear CEF",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643887,
+        "width" : 29.804510752360102,
+        "x" : 518.8721808520908,
+        "y" : 221.08139542445494
+      },
+      "id" : "p0002-b0048",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0048.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "24",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.399224599202427,
+        "width" : 209.26316324869788,
+        "x" : 79.428570132042,
+        "y" : 207.26744209379152
+      },
+      "id" : "p0002-b0049",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0049.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.16 Linear CEF with Nonlinear Effects",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.36046473185226,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803368395,
+        "y" : 207.26744199512038
+      },
+      "id" : "p0002-b0050",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0050.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "25",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265682,
+        "width" : 218.46616617838544,
+        "x" : 79.42857357697265,
+        "y" : 192.3023259362509
+      },
+      "id" : "p0002-b0051",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0051.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.17 Linear CEF with Dummy Variables.",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.36046473185226,
+        "width" : 28.65413538614905,
+        "x" : 518.8721802978089,
+        "y" : 193.4534886938122
+      },
+      "id" : "p0002-b0052",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0052.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "26",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.333333333333343,
+        "width" : 147.14285278320312,
+        "x" : 80.5789517339623,
+        "y" : 180.66666667546747
+      },
+      "id" : "p0002-b0053",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0053.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.18 Best Linear Predictor",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643887,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 180.7906976464317
+      },
+      "id" : "p0002-b0054",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0054.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "28",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.356588999430357,
+        "width" : 202.3609008789062,
+        "x" : 80.5789511628024,
+        "y" : 166.97674421561783
+      },
+      "id" : "p0002-b0055",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0055.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.19 Linear Predictor Error Variance .",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643887,
+        "width" : 29.804510752360102,
+        "x" : 518.8721808866019,
+        "y" : 166.97674424439685
+      },
+      "id" : "p0002-b0056",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0056.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "34",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.666666666666657,
+        "width" : 154.04510498046875,
+        "x" : 79.42857705487837,
+        "y" : 151.99999982178
+      },
+      "id" : "p0002-b0057",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0057.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.20 Regression Coefficients",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 153.16279066968767
+      },
+      "id" : "p0002-b0058",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0058.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "35",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265682,
+        "width" : 154.04511515299478,
+        "x" : 79.4285713934274,
+        "y" : 138.19767483101833
+      },
+      "id" : "p0002-b0059",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0059.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.21 Regression Sub-Vectors",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 28.65413538614905,
+        "x" : 518.8721805566436,
+        "y" : 139.34883727200997
+      },
+      "id" : "p0002-b0060",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0060.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "35",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 19.45348803202313,
+        "width" : 55.11277770996094,
+        "x" : 226.67669580742535,
+        "y" : 140.500000227593
+      },
+      "id" : "p0002-b0061",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0061.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "...",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.666666666666742,
+        "width" : 170.1503702799479,
+        "x" : 79.42857618540191,
+        "y" : 124.33333361346843
+      },
+      "id" : "p0002-b0062",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0062.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.22 Coefficient Decomposition",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.209302266438783,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 126.68604647212945
+      },
+      "id" : "p0002-b0063",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0063.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "36",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.414728482564314,
+        "width" : 150.59398396809897,
+        "x" : 79.42857360814972,
+        "y" : 111.66666671722813
+      },
+      "id" : "p0002-b0064",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0064.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.23 Omitted Variable Bias",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643877,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 112.87209298375733
+      },
+      "id" : "p0002-b0065",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0065.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "37",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 27.511627197265668,
+        "width" : 202.36090087890622,
+        "x" : 80.57894498911841,
+        "y" : 97.9069772909021
+      },
+      "id" : "p0002-b0066",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0066.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.24 Best Linear Approximation ...",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643887,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 99.05813951840852
+      },
+      "id" : "p0002-b0067",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0067.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "38",
+      "type" : "text"
+    },
+    {
+      "bbox" : {
+        "height" : 26.422480583190875,
+        "width" : 203.51127115885413,
+        "x" : 80.5789540119262,
+        "y" : 85.2441862195389
+      },
+      "id" : "p0002-b0068",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0068.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.25 Normal Regression . . . .. ...",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 26.36046473185219,
+        "width" : 28.65413538614905,
+        "x" : 518.8721802978089,
+        "y" : 85.24418636823096
+      },
+      "id" : "p0002-b0069",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0069.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "38",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 26.457364082336426,
+        "width" : 159.79698689778647,
+        "x" : 80.57895255674578,
+        "y" : 71.3333334190547
+      },
+      "id" : "p0002-b0070",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0070.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.26 Regression to the Mean/",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 26.360464731852176,
+        "width" : 28.65413538614905,
+        "x" : 518.8721802978089,
+        "y" : 71.43023287985883
+      },
+      "id" : "p0002-b0071",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0071.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "39",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 26.383720715840624,
+        "width" : 134.4887186686198,
+        "x" : 80.57895091117877,
+        "y" : 57.616279281166825
+      },
+      "id" : "p0002-b0072",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0072.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.27 Reverse Regression",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643887,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803006848,
+        "y" : 58.76744184398994
+      },
+      "id" : "p0002-b0073",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0073.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "40",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 25.333333333333343,
+        "width" : 234.57143147786456,
+        "x" : 80.57894864734583,
+        "y" : 46.00000008792179
+      },
+      "id" : "p0002-b0074",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0074.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "2.28 Limitations of the Best Linear Predictor",
+      "type" : "footnote"
+    },
+    {
+      "bbox" : {
+        "height" : 25.20930226643877,
+        "width" : 28.65413538614905,
+        "x" : 518.8721803217751,
+        "y" : 44.95348834410625
+      },
+      "id" : "p0002-b0075",
+      "imagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/blocks/page-0002/block-0075.png",
+      "page" : 2,
+      "status" : "segmented",
+      "textPreview" : "41",
+      "type" : "footnote"
+    }
+  ],
+  "createdAt" : "2026-03-06T18:20:23Z",
+  "pages" : [
+    {
+      "height" : 792,
+      "number" : 1,
+      "renderedImagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/pages/page-0001.png",
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 2,
+      "renderedImagePath" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2/pages/page-0002.png",
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 3,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 4,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 5,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 6,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 7,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 8,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 9,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 10,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 11,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 12,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 13,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 14,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 15,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 16,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 17,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 18,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 19,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 20,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 21,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 22,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 23,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 24,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 25,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 26,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 27,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 28,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 29,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 30,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 31,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 32,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 33,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 34,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 35,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 36,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 37,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 38,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 39,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 40,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 41,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 42,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 43,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 44,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 45,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 46,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 47,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 48,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 49,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 50,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 51,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 52,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 53,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 54,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 55,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 56,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 57,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 58,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 59,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 60,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 61,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 62,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 63,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 64,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 65,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 66,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 67,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 68,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 69,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 70,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 71,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 72,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 73,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 74,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 75,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 76,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 77,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 78,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 79,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 80,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 81,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 82,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 83,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 84,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 85,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 86,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 87,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 88,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 89,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 90,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 91,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 92,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 93,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 94,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 95,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 96,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 97,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 98,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 99,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 100,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 101,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 102,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 103,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 104,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 105,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 106,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 107,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 108,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 109,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 110,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 111,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 112,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 113,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 114,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 115,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 116,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 117,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 118,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 119,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 120,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 121,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 122,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 123,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 124,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 125,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 126,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 127,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 128,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 129,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 130,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 131,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 132,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 133,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 134,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 135,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 136,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 137,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 138,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 139,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 140,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 141,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 142,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 143,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 144,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 145,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 146,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 147,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 148,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 149,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 150,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 151,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 152,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 153,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 154,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 155,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 156,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 157,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 158,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 159,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 160,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 161,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 162,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 163,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 164,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 165,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 166,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 167,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 168,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 169,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 170,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 171,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 172,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 173,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 174,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 175,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 176,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 177,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 178,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 179,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 180,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 181,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 182,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 183,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 184,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 185,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 186,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 187,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 188,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 189,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 190,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 191,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 192,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 193,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 194,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 195,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 196,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 197,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 198,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 199,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 200,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 201,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 202,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 203,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 204,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 205,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 206,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 207,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 208,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 209,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 210,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 211,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 212,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 213,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 214,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 215,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 216,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 217,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 218,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 219,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 220,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 221,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 222,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 223,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 224,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 225,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 226,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 227,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 228,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 229,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 230,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 231,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 232,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 233,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 234,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 235,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 236,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 237,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 238,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 239,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 240,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 241,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 242,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 243,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 244,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 245,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 246,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 247,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 248,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 249,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 250,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 251,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 252,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 253,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 254,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 255,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 256,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 257,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 258,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 259,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 260,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 261,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 262,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 263,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 264,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 265,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 266,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 267,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 268,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 269,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 270,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 271,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 272,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 273,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 274,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 275,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 276,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 277,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 278,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 279,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 280,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 281,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 282,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 283,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 284,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 285,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 286,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 287,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 288,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 289,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 290,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 291,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 292,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 293,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 294,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 295,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 296,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 297,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 298,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 299,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 300,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 301,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 302,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 303,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 304,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 305,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 306,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 307,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 308,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 309,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 310,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 311,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 312,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 313,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 314,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 315,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 316,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 317,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 318,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 319,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 320,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 321,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 322,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 323,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 324,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 325,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 326,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 327,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 328,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 329,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 330,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 331,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 332,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 333,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 334,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 335,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 336,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 337,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 338,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 339,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 340,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 341,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 342,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 343,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 344,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 345,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 346,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 347,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 348,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 349,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 350,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 351,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 352,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 353,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 354,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 355,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 356,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 357,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 358,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 359,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 360,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 361,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 362,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 363,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 364,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 365,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 366,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 367,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 368,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 369,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 370,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 371,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 372,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 373,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 374,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 375,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 376,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 377,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 378,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 379,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 380,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 381,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 382,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 383,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 384,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 385,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 386,
+      "rotation" : 0,
+      "width" : 612
+    },
+    {
+      "height" : 792,
+      "number" : 387,
+      "rotation" : 0,
+      "width" : 612
+    }
+  ],
+  "projectName" : "smoke-book-2",
+  "projectRoot" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-2",
+  "schemaVersion" : 1,
+  "sourcePDF" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/econometrics/references/hansen-2014/hansen-econometrics.pdf",
+  "updatedAt" : "2026-03-06T18:20:27Z"
+}
