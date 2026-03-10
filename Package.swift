@@ -16,6 +16,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
         .package(name: "APABibToHTML", path: "packages/apa-bib-to-html-swift"),
+        .package(name: "APABibToJSON", path: "packages/apa-bib-to-json-swift"),
         .package(name: "APABibToMD", path: "packages/apa-bib-to-md-swift"),
     ],
     targets: [
@@ -36,6 +37,7 @@ let package = Package(
                 "MarkerWordConverter",
                 .product(name: "PDFToLaTeXCore", package: "pdf-to-latex-swift"),
                 .product(name: "APABibToHTML", package: "APABibToHTML"),
+                .product(name: "APABibToJSON", package: "APABibToJSON"),
                 .product(name: "APABibToMD", package: "APABibToMD"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
