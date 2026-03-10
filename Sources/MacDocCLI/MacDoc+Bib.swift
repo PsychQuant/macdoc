@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import APABibToHTML
+import APABibToJSON
 import APABibToMD
 import BiblatexAPA
 
@@ -10,7 +11,7 @@ extension MacDoc {
         static let configuration = CommandConfiguration(
             commandName: "bib",
             abstract: "BibLaTeX (.bib) → APA 7 格式轉換",
-            subcommands: [ToHTML.self, ToMarkdown.self, List.self]
+            subcommands: [ToHTML.self, ToJSON.self, ToMarkdown.self, List.self]
         )
     }
 }
@@ -73,6 +74,34 @@ extension MacDoc.Bib {
             </body>
             </html>
             """
+        }
+    }
+}
+
+// MARK: - bib to-json
+extension MacDoc.Bib {
+    struct ToJSON: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "to-json",
+            abstract: "將 .bib 轉換為 APA 7 JSON（含 pre-rendered HTML）"
+        )
+
+        @Argument(help: "輸入 .bib 檔案路徑")
+        var input: String
+
+        @Option(name: [.short, .long], help: "輸出 .json 檔案路徑（預設為 stdout）")
+        var output: String?
+
+        @Option(name: .long, help: "只輸出指定 entry key（可多次使用）")
+        var key: [String] = []
+
+        @Flag(name: .long, help: "壓縮輸出（不換行）")
+        var compact: Bool = false
+
+        mutating func run() throws {
+            let entries = try loadEntries(from: input, filterKeys: key)
+            let json = try BibToAPAJSONFormatter.formatJSON(entries, prettyPrint: !compact)
+            try writeOutput(json, to: output)
         }
     }
 }
