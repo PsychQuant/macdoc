@@ -1,0 +1,34 @@
+\documentclass{article}
+\usepackage[paperwidth=612.00bp,paperheight=792.00bp,margin=0bp]{geometry}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage[absolute,overlay]{textpos}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\TPHorizModule}{1bp}
+\setlength{\TPVertModule}{1bp}
+\textblockorigin{0bp}{0bp}
+
+\newcommand{\PageImage}[1]{%
+  \begin{textblock*}{\paperwidth}(0bp,0bp)%
+  \includegraphics[width=\paperwidth,height=\paperheight]{\detokenize{#1}}%
+  \end{textblock*}%
+}
+
+\newcommand{\SnippetBlock}[5]{%
+  \begin{textblock*}{#4bp}(#2bp,#3bp)%
+  {%
+    \setlength{\fboxsep}{0pt}%
+    \colorbox{white}{%
+      \parbox[t][#5bp][t]{#4bp}{%
+        \vspace{0pt}%
+        \input{\detokenize{#1}}%
+      }%
+    }%
+  }%
+  \end{textblock*}%
+}
+
+\begin{document}
+\input{\detokenize{/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/pdf-to-latex/tmp/smoke-book-3/semantic/chapters/chapter-all.tex}}
+\end{document}

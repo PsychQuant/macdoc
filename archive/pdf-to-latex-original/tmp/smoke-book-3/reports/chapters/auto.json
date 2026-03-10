@@ -1,0 +1,13 @@
+{
+  "chapters" : [
+    {
+      "endPage" : 1,
+      "id" : "chapter-all",
+      "startPage" : 1,
+      "title" : "Document"
+    }
+  ],
+  "generatedAt" : "2026-03-06T19:32:44Z",
+  "sourcePDF" : "/Users/che/Library/CloudStorage/Dropbox/che_workspace/teaching/2026_Winston/econometrics/references/hansen-2014/hansen-econometrics.pdf",
+  "strategy" : "auto"
+}
