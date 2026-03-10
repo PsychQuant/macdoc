@@ -9,11 +9,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-        .package(url: "https://github.com/kiki830621/doc-converter-swift.git", from: "0.1.0"),
-        .package(url: "https://github.com/kiki830621/word-to-md-swift.git", from: "0.1.0"),
-        .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.5.0"),
-        .package(url: "https://github.com/kiki830621/markdown-swift.git", from: "0.1.0"),
-        .package(url: "https://github.com/kiki830621/marker-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.0"),
+        .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
     ],
     targets: [

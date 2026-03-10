@@ -253,16 +253,16 @@ swift build
 
 | 目錄 | Git Remote | 說明 |
 |------|-----------|------|
-| `.` (root) | https://github.com/kiki830621/macdoc.git | 主專案 CLI |
-| `packages/doc-converter-swift` | https://github.com/kiki830621/doc-converter-swift.git | 轉換器協議 |
-| `packages/word-to-md-swift` | https://github.com/kiki830621/word-to-md-swift.git | Word → MD 轉換 |
-| `packages/ooxml-swift` | https://github.com/kiki830621/ooxml-swift.git | OOXML 解析 |
-| `packages/markdown-swift` | https://github.com/kiki830621/markdown-swift.git | Markdown 生成 |
-| `packages/marker-swift` | https://github.com/kiki830621/marker-swift.git | 圖片分類 |
+| `.` (root) | https://github.com/PsychQuant/macdoc.git | 主專案 CLI |
+| `packages/doc-converter-swift` | https://github.com/PsychQuant/doc-converter-swift.git | 轉換器協議 |
+| `packages/word-to-md-swift` | https://github.com/PsychQuant/word-to-md-swift.git | Word → MD 轉換 |
+| `packages/ooxml-swift` | https://github.com/PsychQuant/ooxml-swift.git | OOXML 解析 |
+| `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
+| `packages/marker-swift` | https://github.com/PsychQuant/marker-swift.git | 圖片分類 |
 | `packages/surya-swift` | (local only) | OCR 文字辨識 |
 | `packages/pdf-to-latex-swift` | (local, in macdoc repo) | PDF → LaTeX pipeline |
-| `mcp/che-word-mcp` | https://github.com/kiki830621/che-word-mcp.git | Word MCP |
-| `mcp/che-pdf-mcp` | https://github.com/kiki830621/che-pdf-mcp.git | PDF MCP |
+| `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP |
+| `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP |
 | `reference/pandoc` | https://github.com/jgm/pandoc.git | 參考用 |
 
 ## Key Files
