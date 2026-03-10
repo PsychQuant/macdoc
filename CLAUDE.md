@@ -15,6 +15,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 │   ├── MacDocCLI/             # CLI 入口點
 │   │   ├── MacDoc.swift       # 主命令 + Word 子命令
 │   │   ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline + Phase 2 consolidation）
+│   │   ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown）
 │   │   └── MacDoc+Config.swift# Config 子命令群（AI 設定管理）
 │   └── MarkerWordConverter/   # Marker 模式轉換器（依賴 MarkerSwift）
 ├── Tests/
@@ -27,7 +28,10 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 │   ├── markdown-swift/        # Layer 1: Markdown 生成
 │   ├── marker-swift/          # Layer 1: 圖片分類 + Marker 輸出
 │   ├── surya-swift/           # Layer 1: OCR 文字辨識
-│   └── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
+│   ├── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
+│   ├── apa-bib-swift/         # APA 7 styling engine（BibEntry → APAReference）
+│   ├── apa-bib-to-html-swift/ # APA 7 HTML renderer
+│   └── apa-bib-to-md-swift/   # APA 7 Markdown renderer
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
 │   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
@@ -45,6 +49,8 @@ che-word-mcp ────────┘                       ├──→ ooxm
   └──→ ooxml-swift (直接讀寫)                 └──→ markdown-swift         marker-swift
                                                                         surya-swift
 macdoc CLI ──→ pdf-to-latex-swift (PDFToLaTeXCore)                      pdf-to-latex-swift
+macdoc CLI ──→ apa-bib-to-html-swift ──→ apa-bib-swift ──→ biblatex-apa-swift
+macdoc CLI ──→ apa-bib-to-md-swift  ──→ apa-bib-swift ──→ biblatex-apa-swift
 
 che-pdf-mcp
 └──→ Vision.framework / surya-swift
@@ -71,6 +77,12 @@ swift run macdoc pdf normalize --project /path/to/project
 swift run macdoc pdf fix-envs --project /path/to/project [--fix]
 swift run macdoc pdf compile-check --project /path/to/project
 swift run macdoc pdf consolidate --project /path/to/project [--dry-run] [--agent codex|claude|gemini]
+
+# 執行 CLI — Bib（APA 7 格式轉換）
+swift run macdoc bib list paper.bib [--show-type]
+swift run macdoc bib to-html paper.bib -o refs.html [--full] [--css minimal|web]
+swift run macdoc bib to-md paper.bib -o refs.md [--heading]
+swift run macdoc bib to-html paper.bib --key cheng2025 --key yang2024
 
 # AI 設定管理
 swift run macdoc config ai detect
@@ -162,8 +174,9 @@ swift package clean && swift build
 - **用途**：CLI 工具，整合各套件功能
 - **Word**：標準模式（`.md`）、Marker 模式（`.md` + `_meta.json` + `images/`）
 - **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
+- **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list）
 - **Config**：AI 後端設定管理
-- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + ArgumentParser
+- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + apa-bib-to-html-swift + apa-bib-to-md-swift + ArgumentParser
 
 #### che-word-mcp（145 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -268,8 +281,9 @@ swift build
 ## Key Files
 
 ### macdoc
-- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Word + PDF + Config 子命令群）
+- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Word + PDF + Bib + Config 子命令群）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（Phase 1 pipeline + Phase 2 consolidation）
+- `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
 - `Sources/MarkerWordConverter/MarkerWordConverter.swift` - Marker 模式轉換器
 
