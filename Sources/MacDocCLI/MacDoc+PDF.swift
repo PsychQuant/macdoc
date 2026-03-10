@@ -24,6 +24,8 @@ extension MacDoc {
                 FixEnvs.self,
                 CompileCheck.self,
                 Consolidate.self,
+                Compare.self,
+                DetectSource.self,
                 Status.self,
             ],
             defaultSubcommand: Status.self
@@ -395,6 +397,9 @@ extension MacDoc {
             @Option(name: .long, help: "單次請求超時秒數。")
             var timeoutSeconds: Double = 600
 
+            @Option(name: .long, help: "PDF 來源格式覆蓋 (latex|word|typst|scanned|designer)。未指定時自動偵測。")
+            var source: String?
+
             mutating func run() async throws {
                 let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 let resolver = ProjectResolver()
@@ -424,6 +429,8 @@ extension MacDoc {
                 let resolvedModel = model ?? resolvedBackend.defaultModel
                 let resolvedEffort = ReasoningEffort(rawValue: reasoningEffort) ?? .medium
 
+                let resolvedSource = source.flatMap { PDFSourceFormat(rawValue: $0) }
+
                 let transcriber = PageTranscriber()
                 let results = try transcriber.transcribe(
                     project: &resolvedProject,
@@ -432,7 +439,8 @@ extension MacDoc {
                     backend: resolvedBackend,
                     model: resolvedModel,
                     reasoningEffort: resolvedEffort,
-                    timeoutSeconds: timeoutSeconds
+                    timeoutSeconds: timeoutSeconds,
+                    sourceFormat: resolvedSource
                 )
 
                 let figureCount = results.reduce(0) { $0 + $1.figures.count }
@@ -630,6 +638,107 @@ extension MacDoc {
             }
         }
 
+        // MARK: macdoc pdf compare
+        struct Compare: AsyncParsableCommand {
+            static let configuration = CommandConfiguration(
+                commandName: "compare",
+                abstract: "比較原始 PDF 和重製 PDF 的相似度（章節對齊、詞彙覆蓋、序列相似度）。"
+            )
+
+            @Option(name: .long, help: "原始 PDF 路徑。")
+            var original: String
+
+            @Option(name: .long, help: "重製 PDF 路徑。")
+            var reproduced: String
+
+            @Option(name: .shortAndLong, help: "輸出目錄（存放 JSON 報告）。")
+            var output: String?
+
+            mutating func run() throws {
+                let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                let origURL = Support.absoluteURL(from: original, relativeTo: cwd)
+                let reprURL = Support.absoluteURL(from: reproduced, relativeTo: cwd)
+
+                guard FileManager.default.fileExists(atPath: origURL.path) else {
+                    throw ValidationError("找不到原始 PDF: \(origURL.path)")
+                }
+                guard FileManager.default.fileExists(atPath: reprURL.path) else {
+                    throw ValidationError("找不到重製 PDF: \(reprURL.path)")
+                }
+
+                let outDir: URL?
+                if let outPath = output {
+                    outDir = Support.absoluteURL(from: outPath, relativeTo: cwd)
+                } else {
+                    outDir = nil
+                }
+
+                print("Original:   \(origURL.path)")
+                print("Reproduced: \(reprURL.path)")
+                print(String(repeating: "=", count: 80))
+
+                let comparator = PDFComparator()
+                _ = try comparator.compare(
+                    originalURL: origURL,
+                    reproducedURL: reprURL,
+                    outputDir: outDir
+                )
+
+                print("\n" + String(repeating: "=", count: 80))
+            }
+        }
+
+        // MARK: macdoc pdf detect-source
+        struct DetectSource: ParsableCommand {
+            static let configuration = CommandConfiguration(
+                commandName: "detect-source",
+                abstract: "偵測 PDF 的來源格式（LaTeX、Word、掃描件等）。"
+            )
+
+            @Argument(help: "PDF 檔案路徑。")
+            var pdf: String
+
+            @Flag(name: .long, help: "以 JSON 格式輸出。")
+            var json: Bool = false
+
+            func run() throws {
+                let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                let url = Support.absoluteURL(from: pdf, relativeTo: cwd)
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw ValidationError("找不到 PDF: \(url.path)")
+                }
+
+                let detector = PDFSourceDetector()
+                let result = detector.detect(from: url)
+
+                if json {
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                    let data = try encoder.encode(result)
+                    print(String(data: data, encoding: .utf8)!)
+                } else {
+                    print("detect-source: \(url.lastPathComponent)")
+                    print("─────────────────────────────────────")
+                    print("  Format:     \(result.format.rawValue)")
+                    if let engine = result.engine {
+                        print("  Engine:     \(engine.rawValue)")
+                    }
+                    print("  Confidence: \(String(format: "%.0f%%", result.confidence * 100))")
+                    if let c = result.creator {
+                        print("  Creator:    \(c)")
+                    }
+                    if let p = result.producer {
+                        print("  Producer:   \(p)")
+                    }
+                    print("")
+                    print("  Evidence:")
+                    for e in result.evidence {
+                        print("    - \(e)")
+                    }
+                }
+            }
+        }
+
         // MARK: macdoc pdf status
         struct Status: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
@@ -673,7 +782,7 @@ extension MacDoc {
         struct Normalize: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "normalize",
-                abstract: "機械式清理 accumulated.tex（document class、符號、跨頁去重）。"
+                abstract: "機械式清理 accumulated.tex（document class、符號、跨頁去重、數學運算子、貨幣符號、紙張/字型校正）。"
             )
 
             @Option(name: .long, help: "專案資料夾。")
@@ -682,27 +791,75 @@ extension MacDoc {
             @Flag(name: .long, help: "移除頁面標記 (%% === Page N ===)。")
             var stripMarkers: Bool = false
 
+            @Option(name: .long, help: "原始 PDF 路徑（用於提取紙張大小和字型 metadata）。")
+            var sourcePdf: String?
+
             mutating func run() throws {
-                let root = Support.absoluteURL(from: project, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+                let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                let root = Support.absoluteURL(from: project, relativeTo: cwd)
                 let texURL = root.appendingPathComponent("accumulated.tex")
                 guard FileManager.default.fileExists(atPath: texURL.path) else {
                     throw ValidationError("找不到 accumulated.tex: \(texURL.path)")
                 }
 
-                let source = try String(contentsOf: texURL, encoding: .utf8)
+                // 解析原始 PDF 路徑
+                let pdfURL: URL?
+                if let pdfPath = sourcePdf {
+                    let url = Support.absoluteURL(from: pdfPath, relativeTo: cwd)
+                    guard FileManager.default.fileExists(atPath: url.path) else {
+                        throw ValidationError("找不到原始 PDF: \(url.path)")
+                    }
+                    pdfURL = url
+                } else {
+                    pdfURL = nil
+                }
+
+                // Backup（不覆蓋既有的 .bak）
+                let backupURL = texURL.appendingPathExtension("bak")
+                if !FileManager.default.fileExists(atPath: backupURL.path) {
+                    let source = try String(contentsOf: texURL, encoding: .utf8)
+                    try source.write(to: backupURL, atomically: true, encoding: .utf8)
+                    print("backup: \(backupURL.path)")
+                }
+
                 let normalizer = LaTeXNormalizer(
                     symbolRules: ["\\bm{": "\\boldsymbol{"],
                     stripPageMarkers: stripMarkers
                 )
 
-                // Backup
-                let backupURL = texURL.appendingPathExtension("bak")
-                try source.write(to: backupURL, atomically: true, encoding: .utf8)
+                let report = try normalizer.normalizeProject(
+                    mainTexURL: texURL,
+                    sourcePDFURL: pdfURL
+                )
 
-                let result = normalizer.normalize(source)
-                try result.write(to: texURL, atomically: true, encoding: .utf8)
                 print("normalize 完成: \(texURL.path)")
-                print("backup: \(backupURL.path)")
+                if report.documentClassFixed {
+                    print("  document class: article → book")
+                }
+                if report.paperSizeFixed {
+                    print("  paper size: fixed from PDF metadata")
+                }
+                if report.fontPackageFixed {
+                    print("  font package: fixed from PDF metadata")
+                }
+                if report.fontSizeFixed {
+                    print("  font size: fixed from PDF metadata")
+                }
+                if report.marginsFixed {
+                    print("  margins: fixed from PDF metadata")
+                }
+                if !report.mathOperatorsAdded.isEmpty {
+                    print("  math operators: \(report.mathOperatorsAdded.joined(separator: ", "))")
+                }
+                if report.currencyDollarsEscaped > 0 {
+                    print("  currency $: \(report.currencyDollarsEscaped) escaped")
+                }
+                if let preambleURL = report.preambleURL, report.preambleFileChanged {
+                    print("  preamble: \(preambleURL.lastPathComponent) (modified)")
+                }
+                if !report.mainFileChanged && !report.preambleFileChanged {
+                    print("  (no changes needed)")
+                }
             }
         }
 
@@ -801,11 +958,29 @@ extension MacDoc {
             @Flag(name: .long, help: "只跑機械步驟，不呼叫 agent。")
             var dryRun: Bool = false
 
+            @Option(name: .long, help: "PDF 來源格式覆蓋 (latex|word|typst|scanned|designer)。影響正規化策略。")
+            var source: String?
+
             mutating func run() throws {
                 let root = Support.absoluteURL(from: project, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
                 let texURL = root.appendingPathComponent("accumulated.tex")
                 guard FileManager.default.fileExists(atPath: texURL.path) else {
                     throw ValidationError("找不到 accumulated.tex: \(texURL.path)")
+                }
+
+                let resolvedSource = source.flatMap { PDFSourceFormat(rawValue: $0) }
+
+                // 如果沒手動指定，嘗試從 structure.json 讀取
+                let effectiveSource: PDFSourceFormat
+                if let s = resolvedSource {
+                    effectiveSource = s
+                } else {
+                    let structureStore = StructureStore(projectRoot: root)
+                    effectiveSource = (try? structureStore.loadStructure())?.sourceDetection?.format ?? .unknown
+                }
+
+                if effectiveSource != .unknown {
+                    print("來源格式: \(effectiveSource.rawValue)")
                 }
 
                 let resolvedAgent: TranscriptionBackend
@@ -820,7 +995,8 @@ extension MacDoc {
                 let result = try consolidator.consolidate(
                     texFileURL: texURL,
                     agent: resolvedAgent,
-                    dryRun: dryRun
+                    dryRun: dryRun,
+                    sourceFormat: effectiveSource
                 )
 
                 print("normalize: \(result.mechanicalResult.normalizeApplied)")
