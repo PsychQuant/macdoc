@@ -61,10 +61,15 @@ public struct SRTConverter: DocumentConverter {
     }
 
     private func loadSource(from input: URL) throws -> String {
-        if let utf8 = try? String(contentsOf: input, encoding: .utf8) { return utf8 }
-        if let utf16 = try? String(contentsOf: input, encoding: .utf16) { return utf16 }
-        if let latin1 = try? String(contentsOf: input, encoding: .isoLatin1) { return latin1 }
-        return try String(contentsOf: input, encoding: .utf8)
+        do {
+            return try String(contentsOf: input, encoding: .utf8)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileReadNoPermission || error.code == .fileNoSuchFile {
+            throw error
+        } catch {
+            if let utf16 = try? String(contentsOf: input, encoding: .utf16) { return utf16 }
+            if let latin1 = try? String(contentsOf: input, encoding: .isoLatin1) { return latin1 }
+            return try String(contentsOf: input, encoding: .utf8)
+        }
     }
 
     private func parseSRT(_ source: String) -> [Subtitle] {
@@ -116,12 +121,18 @@ public struct SRTConverter: DocumentConverter {
         )
     }
 
+    private static let speakerPattern: NSRegularExpression = {
+        // Safe to force-try: pattern is a compile-time constant
+        try! NSRegularExpression(pattern: #"^[A-Za-z0-9 _\-]+$"#)
+    }()
+
     private func detectSpeaker(in line: String?) -> String? {
         guard let line else { return nil }
         guard let colon = line.firstIndex(of: ":") else { return nil }
         let prefix = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
         guard !prefix.isEmpty, prefix.count <= 40 else { return nil }
-        guard prefix.range(of: #"^[A-Za-z0-9 _\-]+$"#, options: .regularExpression) != nil else { return nil }
+        let range = NSRange(prefix.startIndex..., in: prefix)
+        guard Self.speakerPattern.firstMatch(in: prefix, range: range) != nil else { return nil }
         return prefix
     }
 

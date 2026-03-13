@@ -13,9 +13,9 @@ final class SRTConverterTests: XCTestCase {
         let html = try SRTConverter().convertToString(input: url)
 
         XCTAssertTrue(html.contains("<!DOCTYPE html>"))
-        XCTAssertTrue(html.contains("<div class=\"subtitle\" data-index=\"1\">"))
-        XCTAssertTrue(html.contains("<div class=\"timestamp\">00:00:00,000 --> 00:00:02,500</div>") || html.contains("<div class=\"timestamp\">00:00:00,000 --&gt; 00:00:02,500</div>"))
-        XCTAssertTrue(html.contains("<div class=\"text\">Hello world</div>"))
+        XCTAssertTrue(html.contains("<div class=\"subtitle\" data-index=\"1\" data-start=\"00:00:00,000\" data-end=\"00:00:02,500\">"))
+        XCTAssertTrue(html.contains("<span class=\"timestamp\">00:00:00,000 --&gt; 00:00:02,500</span>"))
+        XCTAssertTrue(html.contains("<span class=\"text\">Hello world</span>"))
     }
 
     func testMultipleSubtitles() throws {
