@@ -5,7 +5,7 @@ import HTMLToMDSwift
 
 // MARK: - HTML 子命令群
 extension MacDoc {
-    struct HTML: ParsableCommand {
+    struct HTML: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "html",
             abstract: "轉換 HTML 到 Markdown"
@@ -26,7 +26,7 @@ extension MacDoc {
         @Flag(name: .long, help: "保留 <u>/<sup>/<sub>/<mark> 為 raw HTML extension")
         var htmlExtensions: Bool = false
 
-        mutating func run() throws {
+        mutating func run() async throws {
             let inputURL = URL(fileURLWithPath: input)
             guard FileManager.default.fileExists(atPath: inputURL.path) else {
                 throw ValidationError("找不到輸入檔案: \(input)")

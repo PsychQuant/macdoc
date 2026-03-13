@@ -13,8 +13,15 @@ public struct HTMLConverter: DocumentConverter {
         output: inout W,
         options: ConversionOptions
     ) throws {
-        let html = try String(contentsOf: input, encoding: .utf8)
-        let document = try SwiftSoup.parse(html, input.deletingLastPathComponent().absoluteString)
+        let html: String
+        if let utf8 = try? String(contentsOf: input, encoding: .utf8) {
+            html = utf8
+        } else if let latin1 = try? String(contentsOf: input, encoding: .isoLatin1) {
+            html = latin1
+        } else {
+            html = try String(contentsOf: input, encoding: .utf8)
+        }
+        let document = try SwiftSoup.parse(html, "")
 
         if options.includeFrontmatter {
             try emitFrontmatter(document: document, source: input, output: &output)
@@ -92,7 +99,9 @@ public struct HTMLConverter: DocumentConverter {
             try output.writeBlankLine()
 
         case "ol":
-            try emitList(element, ordered: true, depth: 0, options: options, output: &output)
+            let startAttr = try? element.attr("start")
+            let startIndex = startAttr.flatMap(Int.init) ?? 1
+            try emitList(element, ordered: true, depth: 0, startIndex: startIndex, options: options, output: &output)
             try output.writeBlankLine()
 
         case "blockquote":
@@ -102,14 +111,18 @@ public struct HTMLConverter: DocumentConverter {
             try emitCodeBlock(element, output: &output)
 
         case "hr":
-            try output.writeLine("---")
+            try output.writeLine("* * *")
             try output.writeBlankLine()
 
         case "table":
             try emitTable(element, options: options, output: &output)
 
         case "br":
-            try output.writeLine("")
+            if options.hardLineBreaks {
+                try output.writeLine("  ")
+            } else {
+                try output.writeLine("")
+            }
 
         default:
             if containerTags.contains(tag) {
@@ -135,12 +148,13 @@ public struct HTMLConverter: DocumentConverter {
         _ list: Element,
         ordered: Bool,
         depth: Int,
+        startIndex: Int = 1,
         options: ConversionOptions,
         output: inout W
     ) throws {
         let items = list.children().array().filter { $0.tagName().lowercased() == "li" }
         for (index, item) in items.enumerated() {
-            let prefix = ordered ? "\(index + 1). " : "- "
+            let prefix = ordered ? "\(startIndex + index). " : "- "
             let indent = String(repeating: "  ", count: depth)
             let text = trimMarkdownText(try renderListItemInline(item, options: options))
             if !text.isEmpty {
@@ -152,7 +166,8 @@ public struct HTMLConverter: DocumentConverter {
                 if childTag == "ul" {
                     try emitList(child, ordered: false, depth: depth + 1, options: options, output: &output)
                 } else if childTag == "ol" {
-                    try emitList(child, ordered: true, depth: depth + 1, options: options, output: &output)
+                    let nestedStart = (try? child.attr("start")).flatMap(Int.init) ?? 1
+                    try emitList(child, ordered: true, depth: depth + 1, startIndex: nestedStart, options: options, output: &output)
                 }
             }
         }
@@ -386,11 +401,7 @@ public struct HTMLConverter: DocumentConverter {
     }
 
     private func trimTrailingNewlines(_ text: String) -> String {
-        var result = text
-        while result.hasSuffix("\n") || result.hasSuffix("\r") {
-            result.removeLast()
-        }
-        return result
+        String(text.reversed().drop(while: { $0 == "\n" || $0 == "\r" }).reversed())
     }
 
     private func escapeYAML(_ text: String) -> String {
