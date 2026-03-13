@@ -19,6 +19,30 @@ xcuserdata/
 
 # Local packages & MCP (separate git repos)
 packages/
+!packages/srt-to-html-swift/
+!packages/srt-to-html-swift/Package.swift
+!packages/srt-to-html-swift/Sources/
+!packages/srt-to-html-swift/Sources/SRTToHTMLSwift/
+!packages/srt-to-html-swift/Sources/SRTToHTMLSwift/SRTConverter.swift
+!packages/srt-to-html-swift/Tests/
+!packages/srt-to-html-swift/Tests/SRTToHTMLSwiftTests/
+!packages/srt-to-html-swift/Tests/SRTToHTMLSwiftTests/SRTConverterTests.swift
+!packages/md-to-html-swift/
+!packages/md-to-html-swift/Package.swift
+!packages/md-to-html-swift/Sources/
+!packages/md-to-html-swift/Sources/MDToHTMLSwift/
+!packages/md-to-html-swift/Sources/MDToHTMLSwift/MarkdownConverter.swift
+!packages/md-to-html-swift/Tests/
+!packages/md-to-html-swift/Tests/MDToHTMLSwiftTests/
+!packages/md-to-html-swift/Tests/MDToHTMLSwiftTests/MarkdownConverterTests.swift
+!packages/html-to-md-swift/
+!packages/html-to-md-swift/Package.swift
+!packages/html-to-md-swift/Sources/
+!packages/html-to-md-swift/Sources/HTMLToMDSwift/
+!packages/html-to-md-swift/Sources/HTMLToMDSwift/HTMLConverter.swift
+!packages/html-to-md-swift/Tests/
+!packages/html-to-md-swift/Tests/HTMLToMDSwiftTests/
+!packages/html-to-md-swift/Tests/HTMLToMDSwiftTests/HTMLConverterTests.swift
 mcp/
 
 # Temp files
