@@ -15,6 +15,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
+        .package(name: "HTMLToMDSwift", path: "packages/html-to-md-swift"),
         .package(name: "APABibToHTML", path: "packages/apa-bib-to-html-swift"),
         .package(name: "APABibToJSON", path: "packages/apa-bib-to-json-swift"),
         .package(name: "APABibToMD", path: "packages/apa-bib-to-md-swift"),
@@ -34,6 +35,7 @@ let package = Package(
             dependencies: [
                 .product(name: "DocConverterSwift", package: "doc-converter-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
+                .product(name: "HTMLToMDSwift", package: "HTMLToMDSwift"),
                 "MarkerWordConverter",
                 .product(name: "PDFToLaTeXCore", package: "pdf-to-latex-swift"),
                 .product(name: "APABibToHTML", package: "APABibToHTML"),
