@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HTMLToMDSwift",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v13)],
     products: [
         .library(name: "HTMLToMDSwift", targets: ["HTMLToMDSwift"]),
     ],
@@ -21,13 +21,12 @@ let package = Package(
                 .product(name: "SwiftSoup", package: "SwiftSoup"),
             ]
         ),
-        .executableTarget(
-            name: "HTMLToMDSwiftSelfTest",
+        .testTarget(
+            name: "HTMLToMDSwiftTests",
             dependencies: [
                 "HTMLToMDSwift",
                 .product(name: "DocConverterSwift", package: "doc-converter-swift"),
-            ],
-            path: "Tests/HTMLToMDSwiftSelfTest"
+            ]
         ),
     ]
 )
