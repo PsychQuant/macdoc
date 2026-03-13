@@ -17,7 +17,8 @@ Status legend:
 | BibLaTeX (.bib) | APA Markdown | `apa-bib-to-md-swift` | implemented | style-aware renderer |
 | BibLaTeX (.bib) | APA JSON | `apa-bib-to-json-swift` | implemented | pre-rendered HTML + anchors |
 | PDF | Markdown | `pdf-to-md-swift` | planned | direct path, avoid hub loss through LaTeX |
-| Markdown | HTML | `md-to-html-swift` | planned | reverse pair promoted after `html-to-md-swift` |
+| Markdown | HTML | `md-to-html-swift` | implemented | swift-markdown AST renderer + HTML streaming output |
+| SRT | HTML | `srt-to-html-swift` | implemented | subtitle blocks emit as structured HTML with timestamp + text |
 | Word (.docx) | HTML | `word-to-html-swift` | planned | direct path preserves Word semantics better than hub conversion |
 | HTML | Word (.docx) | `html-to-word-swift` | planned | useful reverse path after `word-to-html-swift` |
 | Markdown | Word (.docx) | `md-to-word-swift` | research | binary target + protocol shape need design |

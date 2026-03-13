@@ -19,6 +19,14 @@ xcuserdata/
 
 # Local packages & MCP (separate git repos)
 packages/
+!packages/srt-to-html-swift/
+!packages/srt-to-html-swift/Package.swift
+!packages/srt-to-html-swift/Sources/
+!packages/srt-to-html-swift/Sources/SRTToHTMLSwift/
+!packages/srt-to-html-swift/Sources/SRTToHTMLSwift/SRTConverter.swift
+!packages/srt-to-html-swift/Tests/
+!packages/srt-to-html-swift/Tests/SRTToHTMLSwiftTests/
+!packages/srt-to-html-swift/Tests/SRTToHTMLSwiftTests/SRTConverterTests.swift
 mcp/
 
 # Temp files
