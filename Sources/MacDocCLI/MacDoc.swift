@@ -10,8 +10,8 @@ struct MacDoc: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "macdoc",
         abstract: "原生 macOS 文件處理工具",
-        version: "0.3.0",
-        subcommands: [Word.self, HTML.self, PDF.self, Bib.self, Config.self]
+        version: "0.4.0",
+        subcommands: [Word.self, HTML.self, Markdown.self, SRT.self, PDF.self, Bib.self, Config.self]
     )
 }
 
