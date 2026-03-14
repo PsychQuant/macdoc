@@ -1,5 +1,7 @@
 import ArgumentParser
 import Foundation
+import DocConverterSwift
+import PDFToMDSwift
 import PDFToLaTeXCore
 
 extension ChapterStrategy: @retroactive ExpressibleByArgument {}
@@ -9,8 +11,9 @@ extension MacDoc {
     struct PDF: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "pdf",
-            abstract: "PDF 轉 LaTeX 工具（多步驟 pipeline）",
+            abstract: "PDF 工具（直接轉 Markdown + PDF→LaTeX pipeline）",
             subcommands: [
+                ToMarkdown.self,
                 Init.self,
                 Segment.self,
                 Render.self,
@@ -30,6 +33,48 @@ extension MacDoc {
             ],
             defaultSubcommand: Status.self
         )
+
+        // MARK: macdoc pdf to-md
+        struct ToMarkdown: AsyncParsableCommand {
+            static let configuration = CommandConfiguration(
+                commandName: "to-md",
+                abstract: "將 PDF (.pdf) 直接轉換為 Markdown"
+            )
+
+            @Argument(help: "輸入 .pdf 檔案路徑")
+            var input: String
+
+            @Option(name: [.short, .long], help: "輸出 .md 檔案路徑（預設為 stdout）")
+            var output: String?
+
+            @Flag(name: .long, help: "包含來源檔名與頁數作為 YAML frontmatter")
+            var frontmatter: Bool = false
+
+            @Flag(name: .long, help: "保留 PDF 換行為 Markdown hard break")
+            var hardBreaks: Bool = false
+
+            mutating func run() async throws {
+                let inputURL = URL(fileURLWithPath: input)
+                guard FileManager.default.fileExists(atPath: inputURL.path) else {
+                    throw ValidationError("找不到輸入檔案: \(input)")
+                }
+
+                let options = ConversionOptions(
+                    includeFrontmatter: frontmatter,
+                    hardLineBreaks: hardBreaks,
+                    tableStyle: .pipe,
+                    headingStyle: .atx
+                )
+
+                let converter = PDFConverter()
+                if let outputPath = output {
+                    let outputURL = URL(fileURLWithPath: outputPath)
+                    try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+                } else {
+                    try converter.convertToStdout(input: inputURL, options: options)
+                }
+            }
+        }
 
         // MARK: macdoc pdf init
         struct Init: AsyncParsableCommand {
