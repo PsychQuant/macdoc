@@ -1,3 +1,4 @@
+#if canImport(XCTest)
 import XCTest
 import AppKit
 import PDFKit
@@ -163,3 +164,4 @@ private struct DrawBlock {
 private enum TestError: Error {
     case cannotCreatePDFContext
 }
+#endif
