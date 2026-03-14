@@ -66,6 +66,15 @@ che-pdf-mcp
 # 建構主專案（在 repo 根目錄）
 swift build
 
+# 執行 CLI — 統一轉換入口（textutil-compatible）
+swift run macdoc convert --to md file.docx
+swift run macdoc convert --to html file.md [--full]
+swift run macdoc convert --to html file.srt
+swift run macdoc convert --to html file.bib [--full] [--css minimal|web]
+swift run macdoc convert --to md file.bib
+swift run macdoc convert --to json file.bib
+swift run macdoc convert --to md file.html
+
 # 執行 CLI — Word
 swift run macdoc word input.docx -o output.md
 
@@ -172,11 +181,12 @@ swift package clean && swift build
 
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
+- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法
 - **Word**：標準模式（`.md`）、Marker 模式（`.md` + `_meta.json` + `images/`）
 - **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list）
 - **Config**：AI 後端設定管理
-- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + bib-apa-to-html-swift + bib-apa-to-md-swift + ArgumentParser
+- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
 
 #### che-word-mcp（145 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -267,7 +277,7 @@ swift build
 | 目錄 | Git Remote | 說明 |
 |------|-----------|------|
 | `.` (root) | https://github.com/PsychQuant/macdoc.git | 主專案 CLI |
-| `packages/common-converter-swift` | https://github.com/PsychQuant/common-converter-swift.git | 轉換器協議 |
+| `packages/common-converter-swift` | https://github.com/PsychQuant/doc-converter-swift.git | 轉換器協議（remote 名 doc-converter-swift） |
 | `packages/word-to-md-swift` | https://github.com/PsychQuant/word-to-md-swift.git | Word → MD 轉換 |
 | `packages/ooxml-swift` | https://github.com/PsychQuant/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
@@ -281,7 +291,8 @@ swift build
 ## Key Files
 
 ### macdoc
-- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Word + PDF + Bib + Config 子命令群）
+- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + Word + PDF + Bib + Config 子命令群）
+- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（Phase 1 pipeline + Phase 2 consolidation）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
