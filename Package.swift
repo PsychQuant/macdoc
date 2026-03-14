@@ -9,6 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.3.0"),
         .package(name: "CommonConverterSwift", path: "packages/common-converter-swift"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.0"),
@@ -17,6 +18,7 @@ let package = Package(
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
         .package(name: "HTMLToMDSwift", path: "packages/html-to-md-swift"),
         .package(name: "MDToHTMLSwift", path: "packages/md-to-html-swift"),
+        .package(name: "WordToHTMLSwift", path: "packages/word-to-html-swift"),
         .package(name: "SRTToHTMLSwift", path: "packages/srt-to-html-swift"),
         .package(name: "BibAPAToHTML", path: "packages/bib-apa-to-html-swift"),
         .package(name: "BibAPAToJSON", path: "packages/bib-apa-to-json-swift"),
@@ -36,9 +38,11 @@ let package = Package(
             name: "MacDocCLI",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
                 .product(name: "HTMLToMDSwift", package: "HTMLToMDSwift"),
                 .product(name: "MDToHTMLSwift", package: "MDToHTMLSwift"),
+                .product(name: "WordToHTMLSwift", package: "WordToHTMLSwift"),
                 .product(name: "SRTToHTMLSwift", package: "SRTToHTMLSwift"),
                 "MarkerWordConverter",
                 .product(name: "PDFToLaTeXCore", package: "pdf-to-latex-swift"),

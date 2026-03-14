@@ -16,7 +16,7 @@
 |----------:|:--------:|:----:|:------------:|:-----:|:----:|:---:|:---:|
 | **Markdown** | — | ✅ `md-to-html` | 🔬 `md-to-word` | · | · | · | · |
 | **HTML** | ✅ `html-to-md` | — | 📋 `html-to-word` | · | · | · | · |
-| **Word (.docx)** | ✅ `word-to-md` | 📋 `word-to-html` | — | · | · | · | · |
+| **Word (.docx)** | ✅ `word-to-md` | 🔄 `word-to-html` | — | · | · | · | · |
 | **PDF** | 📋 `pdf-to-md` | · | · | ✅ `pdf-to-latex` | · | — | · |
 | **BibLaTeX (.bib)** | ✅ `bib-apa-to-md` | ✅ `bib-apa-to-html` | · | · | ✅ `bib-apa-to-json` | · | · |
 | **SRT** | · | ✅ `srt-to-html` | · | · | · | · | — |
@@ -34,7 +34,7 @@
 | BibLaTeX → APA Markdown | `bib-apa-to-md-swift` | ✅ implemented | style-aware renderer |
 | BibLaTeX → APA JSON | `bib-apa-to-json-swift` | ✅ implemented | pre-rendered HTML + anchors |
 | PDF → Markdown | `pdf-to-md-swift` | 📋 planned | direct path, avoid hub loss through LaTeX |
-| Word → HTML | `word-to-html-swift` | 📋 planned | direct path preserves Word semantics |
+| Word → HTML | `word-to-html-swift` | 🔄 active | direct path preserves Word semantics |
 | HTML → Word | `html-to-word-swift` | 📋 planned | reverse path after word-to-html |
 | Markdown → Word | `md-to-word-swift` | 🔬 research | binary target + protocol shape need design |
 
@@ -43,7 +43,7 @@
 | Priority | Converter | Status | Why now |
 |---------:|-----------|--------|---------|
 | P1 | `pdf-to-md-swift` | 📋 planned | direct markdown export is a natural companion to existing PDF parsing stack |
-| P1 | `word-to-html-swift` | 📋 planned | direct conversion avoids Markdown hub loss for rich Word semantics |
+| P1 | `word-to-html-swift` | 🔄 active | direct conversion avoids Markdown hub loss for rich Word semantics |
 | P2 | `html-to-word-swift` | 📋 planned | reverse path once Word↔HTML design stabilizes |
 | P3 | `md-to-word-swift` | 🔬 research | requires target-binary converter story beyond current text-streaming protocol |
 
