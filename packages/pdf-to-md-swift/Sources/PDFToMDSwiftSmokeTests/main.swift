@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 import PDFKit
-import DocConverterSwift
+import CommonConverterSwift
 import PDFToMDSwift
 
 @main

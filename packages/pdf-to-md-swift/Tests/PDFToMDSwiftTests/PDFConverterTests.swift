@@ -2,7 +2,7 @@
 import XCTest
 import AppKit
 import PDFKit
-import DocConverterSwift
+import CommonConverterSwift
 @testable import PDFToMDSwift
 
 final class PDFConverterTests: XCTestCase {

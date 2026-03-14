@@ -9,27 +9,27 @@ let package = Package(
         .executable(name: "pdf-to-md-smoke-tests", targets: ["PDFToMDSwiftSmokeTests"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.3.0"),
+        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.4.0"),
     ],
     targets: [
         .target(
             name: "PDFToMDSwift",
             dependencies: [
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
         .executableTarget(
             name: "PDFToMDSwiftSmokeTests",
             dependencies: [
                 "PDFToMDSwift",
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
         .testTarget(
             name: "PDFToMDSwiftTests",
             dependencies: [
                 "PDFToMDSwift",
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
     ]
