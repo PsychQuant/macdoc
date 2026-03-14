@@ -1,5 +1,5 @@
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 import OOXMLSwift
 import SwiftSoup
 
@@ -8,7 +8,7 @@ public struct HTMLToWordConverter: DocumentConverter {
 
     public init() {}
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions
