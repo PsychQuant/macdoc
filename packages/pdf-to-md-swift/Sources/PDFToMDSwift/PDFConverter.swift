@@ -1,13 +1,13 @@
 import Foundation
 import PDFKit
-import DocConverterSwift
+import CommonConverterSwift
 
 public struct PDFConverter: DocumentConverter {
     public static let sourceFormat = "pdf"
 
     public init() {}
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions
@@ -59,7 +59,7 @@ public struct PDFConverter: DocumentConverter {
         }
     }
 
-    private func emitFrontmatter<W: DocConverterSwift.StreamingOutput>(
+    private func emitFrontmatter<W: StreamingOutput>(
         document: PDFDocument,
         source: URL,
         output: inout W
