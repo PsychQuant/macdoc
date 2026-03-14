@@ -1,8 +1,8 @@
 import ArgumentParser
 import Foundation
-import APABibToHTML
-import APABibToJSON
-import APABibToMD
+import BibAPAToHTML
+import BibAPAToJSON
+import BibAPAToMD
 import BiblatexAPA
 
 // MARK: - Bib 子命令群

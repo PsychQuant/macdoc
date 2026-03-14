@@ -793,7 +793,7 @@ for element in source.elements:
 ### 6.3 對 ConversionOptions 的影響
 
 ```swift
-// doc-converter-swift: ConversionOptions 擴展
+// common-converter-swift: ConversionOptions 擴展
 
 public enum FidelityTier: Sendable {
     case markdown           // Tier 1: 純 Markdown

@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "HTMLToMDSwift", targets: ["HTMLToMDSwift"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.3.0"),
+        .package(name: "CommonConverterSwift", path: "../common-converter-swift"),
         .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.4"),
     ],
@@ -16,7 +16,7 @@ let package = Package(
         .target(
             name: "HTMLToMDSwift",
             dependencies: [
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
                 .product(name: "MarkdownSwift", package: "markdown-swift"),
                 .product(name: "SwiftSoup", package: "SwiftSoup"),
             ]
@@ -25,7 +25,7 @@ let package = Package(
             name: "HTMLToMDSwiftTests",
             dependencies: [
                 "HTMLToMDSwift",
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
             ]
         ),
     ]

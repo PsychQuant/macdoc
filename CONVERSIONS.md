@@ -18,7 +18,7 @@
 | **HTML** | ✅ `html-to-md` | — | 📋 `html-to-word` | · | · | · | · |
 | **Word (.docx)** | ✅ `word-to-md` | 📋 `word-to-html` | — | · | · | · | · |
 | **PDF** | 📋 `pdf-to-md` | · | · | ✅ `pdf-to-latex` | · | — | · |
-| **BibLaTeX (.bib)** | ✅ `apa-bib-to-md` | ✅ `apa-bib-to-html` | · | · | ✅ `apa-bib-to-json` | · | · |
+| **BibLaTeX (.bib)** | ✅ `bib-apa-to-md` | ✅ `bib-apa-to-html` | · | · | ✅ `bib-apa-to-json` | · | · |
 | **SRT** | · | ✅ `srt-to-html` | · | · | · | · | — |
 
 ## Converter Details
@@ -30,9 +30,9 @@
 | Markdown → HTML | `md-to-html-swift` | ✅ implemented | swift-markdown AST renderer |
 | SRT → HTML | `srt-to-html-swift` | ✅ implemented | structured HTML with timestamp + speaker detection |
 | PDF → LaTeX | `pdf-to-latex-swift` | ✅ implemented | Phase 1 + Phase 2 pipeline |
-| BibLaTeX → APA HTML | `apa-bib-to-html-swift` | ✅ implemented | style-aware renderer |
-| BibLaTeX → APA Markdown | `apa-bib-to-md-swift` | ✅ implemented | style-aware renderer |
-| BibLaTeX → APA JSON | `apa-bib-to-json-swift` | ✅ implemented | pre-rendered HTML + anchors |
+| BibLaTeX → APA HTML | `bib-apa-to-html-swift` | ✅ implemented | style-aware renderer |
+| BibLaTeX → APA Markdown | `bib-apa-to-md-swift` | ✅ implemented | style-aware renderer |
+| BibLaTeX → APA JSON | `bib-apa-to-json-swift` | ✅ implemented | pre-rendered HTML + anchors |
 | PDF → Markdown | `pdf-to-md-swift` | 📋 planned | direct path, avoid hub loss through LaTeX |
 | Word → HTML | `word-to-html-swift` | 📋 planned | direct path preserves Word semantics |
 | HTML → Word | `html-to-word-swift` | 📋 planned | reverse path after word-to-html |
@@ -52,4 +52,4 @@
 - Open **one issue per converter** before writing code.
 - New forward converter implies the reverse path is reconsidered immediately; if the reverse path is text-targeted and architecturally straightforward, promote it to **P0**.
 - Prefer direct source→target converters over hub-based routing.
-- Keep Layer 3 packages independent: source format + target format + `doc-converter-swift`, no converter-to-converter imports.
+- Keep Layer 3 packages independent: source format + target format + `common-converter-swift`, no converter-to-converter imports.

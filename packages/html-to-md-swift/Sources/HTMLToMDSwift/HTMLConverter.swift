@@ -1,5 +1,5 @@
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 import MarkdownSwift
 import SwiftSoup
 
@@ -8,7 +8,7 @@ public struct HTMLConverter: DocumentConverter {
 
     public init() {}
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: CommonConverterSwift.StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions
@@ -34,7 +34,7 @@ public struct HTMLConverter: DocumentConverter {
         }
     }
 
-    private func emitFrontmatter<W: DocConverterSwift.StreamingOutput>(
+    private func emitFrontmatter<W: CommonConverterSwift.StreamingOutput>(
         document: Document,
         source: URL,
         output: inout W
@@ -50,7 +50,7 @@ public struct HTMLConverter: DocumentConverter {
         try output.writeBlankLine()
     }
 
-    private func emitBlockNodes<W: DocConverterSwift.StreamingOutput>(
+    private func emitBlockNodes<W: CommonConverterSwift.StreamingOutput>(
         _ nodes: [Node],
         options: ConversionOptions,
         output: inout W
@@ -60,7 +60,7 @@ public struct HTMLConverter: DocumentConverter {
         }
     }
 
-    private func emitBlock<W: DocConverterSwift.StreamingOutput>(
+    private func emitBlock<W: CommonConverterSwift.StreamingOutput>(
         _ node: Node,
         options: ConversionOptions,
         output: inout W
@@ -144,7 +144,7 @@ public struct HTMLConverter: DocumentConverter {
         }
     }
 
-    private func emitList<W: DocConverterSwift.StreamingOutput>(
+    private func emitList<W: CommonConverterSwift.StreamingOutput>(
         _ list: Element,
         ordered: Bool,
         depth: Int,
@@ -198,12 +198,12 @@ public struct HTMLConverter: DocumentConverter {
         return trimMarkdownText(chunks.joined())
     }
 
-    private func emitBlockquote<W: DocConverterSwift.StreamingOutput>(
+    private func emitBlockquote<W: CommonConverterSwift.StreamingOutput>(
         _ element: Element,
         options: ConversionOptions,
         output: inout W
     ) throws {
-        var nested = DocConverterSwift.StringOutput()
+        var nested = CommonConverterSwift.StringOutput()
         try emitBlockNodes(element.getChildNodes(), options: options, output: &nested)
         let content = nested.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
@@ -218,7 +218,7 @@ public struct HTMLConverter: DocumentConverter {
         try output.writeBlankLine()
     }
 
-    private func emitCodeBlock<W: DocConverterSwift.StreamingOutput>(
+    private func emitCodeBlock<W: CommonConverterSwift.StreamingOutput>(
         _ pre: Element,
         output: inout W
     ) throws {
@@ -237,7 +237,7 @@ public struct HTMLConverter: DocumentConverter {
         try output.writeBlankLine()
     }
 
-    private func emitTable<W: DocConverterSwift.StreamingOutput>(
+    private func emitTable<W: CommonConverterSwift.StreamingOutput>(
         _ table: Element,
         options: ConversionOptions,
         output: inout W

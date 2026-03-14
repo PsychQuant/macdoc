@@ -6,7 +6,7 @@ Streaming conversion, no Markdown AST.
 ## Architecture
 
 - **Layer 3 converter** in the macdoc ecosystem
-- Implements `DocumentConverter` from `doc-converter-swift`
+- Implements `DocumentConverter` from `common-converter-swift`
 - Uses `markdown-swift` for Markdown-safe formatting
 - Uses `SwiftSoup` for HTML parsing
 
@@ -36,7 +36,7 @@ Streaming conversion, no Markdown AST.
 
 ```swift
 import HTMLToMDSwift
-import DocConverterSwift
+import CommonConverterSwift
 
 let converter = HTMLConverter()
 let markdown = try converter.convertToString(input: htmlURL)

@@ -1,6 +1,6 @@
 import ArgumentParser
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 import SRTToHTMLSwift
 
 // MARK: - SRT 子命令群

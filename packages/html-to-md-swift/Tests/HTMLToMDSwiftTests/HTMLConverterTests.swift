@@ -1,5 +1,5 @@
 import XCTest
-import DocConverterSwift
+import CommonConverterSwift
 @testable import HTMLToMDSwift
 
 final class HTMLConverterTests: XCTestCase {

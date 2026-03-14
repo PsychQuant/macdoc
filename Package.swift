@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.1.0"),
+        .package(name: "CommonConverterSwift", path: "packages/common-converter-swift"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.0"),
         .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
@@ -18,15 +18,15 @@ let package = Package(
         .package(name: "HTMLToMDSwift", path: "packages/html-to-md-swift"),
         .package(name: "MDToHTMLSwift", path: "packages/md-to-html-swift"),
         .package(name: "SRTToHTMLSwift", path: "packages/srt-to-html-swift"),
-        .package(name: "APABibToHTML", path: "packages/apa-bib-to-html-swift"),
-        .package(name: "APABibToJSON", path: "packages/apa-bib-to-json-swift"),
-        .package(name: "APABibToMD", path: "packages/apa-bib-to-md-swift"),
+        .package(name: "BibAPAToHTML", path: "packages/bib-apa-to-html-swift"),
+        .package(name: "BibAPAToJSON", path: "packages/bib-apa-to-json-swift"),
+        .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
     ],
     targets: [
         .target(
             name: "MarkerWordConverter",
             dependencies: [
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "MarkdownSwift", package: "markdown-swift"),
                 .product(name: "MarkerSwift", package: "marker-swift"),
@@ -35,16 +35,16 @@ let package = Package(
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
-                .product(name: "DocConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
                 .product(name: "HTMLToMDSwift", package: "HTMLToMDSwift"),
                 .product(name: "MDToHTMLSwift", package: "MDToHTMLSwift"),
                 .product(name: "SRTToHTMLSwift", package: "SRTToHTMLSwift"),
                 "MarkerWordConverter",
                 .product(name: "PDFToLaTeXCore", package: "pdf-to-latex-swift"),
-                .product(name: "APABibToHTML", package: "APABibToHTML"),
-                .product(name: "APABibToJSON", package: "APABibToJSON"),
-                .product(name: "APABibToMD", package: "APABibToMD"),
+                .product(name: "BibAPAToHTML", package: "BibAPAToHTML"),
+                .product(name: "BibAPAToJSON", package: "BibAPAToJSON"),
+                .product(name: "BibAPAToMD", package: "BibAPAToMD"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),

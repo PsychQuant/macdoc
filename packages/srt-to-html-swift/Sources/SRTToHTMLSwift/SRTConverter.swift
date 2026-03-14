@@ -1,12 +1,12 @@
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 
 public struct SRTConverter: DocumentConverter {
     public static let sourceFormat = "srt"
 
     public init() {}
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: CommonConverterSwift.StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions

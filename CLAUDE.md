@@ -22,16 +22,16 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── docs/                      # 開發文檔和對話記錄
 │   └── plans/                 # 實作計畫
 ├── packages/                  # 本地套件（.gitignore 忽略）
-│   ├── doc-converter-swift/   # Layer 2: 轉換器協議（DocumentConverter, StreamingOutput）
+│   ├── common-converter-swift/   # Layer 2: 轉換器協議（DocumentConverter, StreamingOutput）
 │   ├── word-to-md-swift/      # Layer 3: Word → Markdown 轉換器
 │   ├── ooxml-swift/           # Layer 1: OOXML (Word/Excel) 解析
 │   ├── markdown-swift/        # Layer 1: Markdown 生成
 │   ├── marker-swift/          # Layer 1: 圖片分類 + Marker 輸出
 │   ├── surya-swift/           # Layer 1: OCR 文字辨識
 │   ├── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
-│   ├── apa-bib-swift/         # APA 7 styling engine（BibEntry → APAReference）
-│   ├── apa-bib-to-html-swift/ # APA 7 HTML renderer
-│   └── apa-bib-to-md-swift/   # APA 7 Markdown renderer
+│   ├── bib-apa-swift/         # APA 7 styling engine（BibEntry → APAReference）
+│   ├── bib-apa-to-html-swift/ # APA 7 HTML renderer
+│   └── bib-apa-to-md-swift/   # APA 7 Markdown renderer
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
 │   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
@@ -44,13 +44,13 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 Layer 4 (Consumers)         Layer 3 (Converters)       Layer 2 (Protocols)     Layer 1 (Formats)
 
 macdoc CLI ──────────┐
-                     ├──→ word-to-md-swift ──┬──→ doc-converter-swift    ooxml-swift
+                     ├──→ word-to-md-swift ──┬──→ common-converter-swift    ooxml-swift
 che-word-mcp ────────┘                       ├──→ ooxml-swift            markdown-swift
   └──→ ooxml-swift (直接讀寫)                 └──→ markdown-swift         marker-swift
                                                                         surya-swift
 macdoc CLI ──→ pdf-to-latex-swift (PDFToLaTeXCore)                      pdf-to-latex-swift
-macdoc CLI ──→ apa-bib-to-html-swift ──→ apa-bib-swift ──→ biblatex-apa-swift
-macdoc CLI ──→ apa-bib-to-md-swift  ──→ apa-bib-swift ──→ biblatex-apa-swift
+macdoc CLI ──→ bib-apa-to-html-swift ──→ bib-apa-swift ──→ biblatex-apa-swift
+macdoc CLI ──→ bib-apa-to-md-swift  ──→ bib-apa-swift ──→ biblatex-apa-swift
 
 che-pdf-mcp
 └──→ Vision.framework / surya-swift
@@ -143,7 +143,7 @@ swift package clean && swift build
 
 ### Layer 2: Protocol Package
 
-#### doc-converter-swift
+#### common-converter-swift
 - **用途**：轉換器共用協議和模型
 - **內容**：`DocumentConverter` protocol, `StreamingOutput` protocol, `ConversionOptions`, `ConversionError`
 - **依賴**：無
@@ -153,7 +153,7 @@ swift package clean && swift build
 #### word-to-md-swift
 - **用途**：Word → Markdown 轉換
 - **功能**：streaming 轉換、標題/清單/表格偵測、行內格式、YAML frontmatter
-- **依賴**：doc-converter-swift + ooxml-swift + markdown-swift
+- **依賴**：common-converter-swift + ooxml-swift + markdown-swift
 - **API**：`WordConverter.convert(input:)` / `WordConverter.convert(document:)` / `convertToString()`
 
 ### Layer 4: Consumers
@@ -176,7 +176,7 @@ swift package clean && swift build
 - **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list）
 - **Config**：AI 後端設定管理
-- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + apa-bib-to-html-swift + apa-bib-to-md-swift + ArgumentParser
+- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + bib-apa-to-html-swift + bib-apa-to-md-swift + ArgumentParser
 
 #### che-word-mcp（145 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -267,7 +267,7 @@ swift build
 | 目錄 | Git Remote | 說明 |
 |------|-----------|------|
 | `.` (root) | https://github.com/PsychQuant/macdoc.git | 主專案 CLI |
-| `packages/doc-converter-swift` | https://github.com/PsychQuant/doc-converter-swift.git | 轉換器協議 |
+| `packages/common-converter-swift` | https://github.com/PsychQuant/common-converter-swift.git | 轉換器協議 |
 | `packages/word-to-md-swift` | https://github.com/PsychQuant/word-to-md-swift.git | Word → MD 轉換 |
 | `packages/ooxml-swift` | https://github.com/PsychQuant/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
@@ -294,9 +294,9 @@ swift build
 - `Sources/PDFToLaTeXCore/TexCompileChecker.swift` - 編譯錯誤解析
 - `Sources/PDFToLaTeXCore/Consolidator.swift` - consolidation orchestrator
 
-### doc-converter-swift
-- `Sources/DocConverterSwift/Protocols/DocumentConverter.swift` - 轉換器 protocol
-- `Sources/DocConverterSwift/Protocols/StreamingOutput.swift` - 串流輸出 protocol
+### common-converter-swift
+- `Sources/CommonConverterSwift/Protocols/DocumentConverter.swift` - 轉換器 protocol
+- `Sources/CommonConverterSwift/Protocols/StreamingOutput.swift` - 串流輸出 protocol
 
 ### word-to-md-swift
 - `Sources/WordToMDSwift/WordConverter.swift` - Word → Markdown 轉換器

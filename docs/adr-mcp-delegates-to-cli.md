@@ -13,7 +13,7 @@ che-word-mcp 的 `export_markdown` tool 需要 Word → Markdown 轉換功能。
 
 1. **API 維護成本高**：`word-to-md-swift` 的 API 每次改動（新增參數、改簽章），che-word-mcp 都要跟著改
 2. **重複消費者**：macdoc CLI 和 che-word-mcp 都是 `word-to-md-swift` 的消費者，兩邊都要維護相同的參數對應邏輯
-3. **依賴鏈深**：che-word-mcp → word-to-md-swift → doc-converter-swift + ooxml-swift + markdown-swift，發布一個版本要先發布整條鏈
+3. **依賴鏈深**：che-word-mcp → word-to-md-swift → common-converter-swift + ooxml-swift + markdown-swift，發布一個版本要先發布整條鏈
 4. **Tier 升級困難**：要支援 Tier 2/3（圖片提取、metadata sidecar），MCP 側要跟著加 `FidelityTier`、`figuresDirectory`、`metadataOutput` 等參數，等於把 `ConversionOptions` 的每個欄位都鏡像一次
 
 ## Decision
@@ -90,7 +90,7 @@ macdoc word input.docx --marker -o output_dir/
 che-word-mcp
 ├── ooxml-swift          ← Word 讀寫（145 tools）
 └── word-to-md-swift     ← export_markdown（library 嵌入）
-    ├── doc-converter-swift
+    ├── common-converter-swift
     ├── ooxml-swift
     └── markdown-swift
 ```
@@ -125,7 +125,7 @@ che-word-mcp 的 Swift 依賴從 3 個降為 1 個（僅 `ooxml-swift`）。
 | **發布獨立** | 升級 macdoc 不需要重新編譯 che-word-mcp |
 | **依賴鏈簡化** | che-word-mcp 只依賴 ooxml-swift，不再拉整條轉換鏈 |
 | **功能自動跟進** | macdoc 新增的所有轉換選項，MCP 只要傳 CLI 參數即可 |
-| **Binary 瘦身** | che-word-mcp binary 更小（少了 markdown-swift、doc-converter-swift） |
+| **Binary 瘦身** | che-word-mcp binary 更小（少了 markdown-swift、common-converter-swift） |
 | **效能上限更高** | CLI 可用 streaming 架構（O(1) 記憶體），MCP 做不到（見下方說明） |
 
 ### 效能：MCP 記憶體常駐 vs CLI Streaming

@@ -1,6 +1,6 @@
 import Foundation
 import Markdown
-import DocConverterSwift
+import CommonConverterSwift
 
 /// Converts Markdown files to HTML using Apple's swift-markdown parser.
 public struct MarkdownConverter {

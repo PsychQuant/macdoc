@@ -37,11 +37,11 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 
 | Package | 內容 |
 |---------|------|
-| `doc-converter-swift` | `DocumentConverter` protocol, `StreamingOutput` protocol, `ConversionOptions`, `ConversionError` |
-| `apa-bib-swift` | `APAReference` 語意模型, `APAStyler` (BibEntry → APAReference), `APAReferenceRenderer` protocol |
+| `common-converter-swift` | `DocumentConverter` protocol, `StreamingOutput` protocol, `ConversionOptions`, `ConversionError` |
+| `bib-apa-swift` | `APAReference` 語意模型, `APAStyler` (BibEntry → APAReference), `APAReferenceRenderer` protocol |
 
 協議 package 的規則：
-- **只依賴 Layer 1 format packages**（`apa-bib-swift` 依賴 `biblatex-apa-swift`）
+- **只依賴 Layer 1 format packages**（`bib-apa-swift` 依賴 `biblatex-apa-swift`）
 - **只有 protocols、structs、enums + 語意轉換邏輯**
 - **所有 renderer 都依賴它，但它不依賴任何 renderer**
 
@@ -51,11 +51,11 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 
 | Package | 依賴 | 轉換 |
 |---------|------|------|
-| `word-to-md-swift` | `doc-converter-swift` + `ooxml-swift` + `markdown-swift` | Word → Markdown |
-| `apa-bib-to-md-swift` | `apa-bib-swift` | APAReference → Markdown |
-| `apa-bib-to-html-swift` | `apa-bib-swift` | APAReference → HTML |
-| *(未來)* `pdf-to-md-swift` | `doc-converter-swift` + PDFKit/surya-swift | PDF → Markdown |
-| *(未來)* `html-to-md-swift` | `doc-converter-swift` + SwiftSoup | HTML → Markdown |
+| `word-to-md-swift` | `common-converter-swift` + `ooxml-swift` + `markdown-swift` | Word → Markdown |
+| `bib-apa-to-md-swift` | `bib-apa-swift` | APAReference → Markdown |
+| `bib-apa-to-html-swift` | `bib-apa-swift` | APAReference → HTML |
+| *(未來)* `pdf-to-md-swift` | `common-converter-swift` + PDFKit/surya-swift | PDF → Markdown |
+| *(未來)* `html-to-md-swift` | `common-converter-swift` + SwiftSoup | HTML → Markdown |
 
 轉換 package 的規則：
 - **依賴 Layer 2 協議 package +（可選）Layer 1 format packages**
@@ -88,7 +88,7 @@ Package 不屬於任何特定的消費者（CLI、MCP、App）。
 Layer 4 (Consumers)          Layer 3 (Converters)       Layer 2 (Protocols)     Layer 1 (Formats)
 ─────────────────           ──────────────────         ─────────────────       ────────────────
 
-macdoc CLI ──────────────→ word-to-md-swift ──┬──→ doc-converter-swift    ooxml-swift
+macdoc CLI ──────────────→ word-to-md-swift ──┬──→ common-converter-swift    ooxml-swift
   ├──→ marker-swift                          ├──→ ooxml-swift            markdown-swift
   └──→ pdf-to-latex-swift (PDFToLaTeXCore)   └──→ markdown-swift         marker-swift
        └──→ PDFKit + Vision + AI CLI tools                               pdf-to-latex-swift
@@ -97,10 +97,10 @@ che-word-mcp
   ├──→ ooxml-swift (直接讀寫 Word, 145 tools)
   └──→ macdoc CLI (轉換委託, exec binary)
 
-che-pdf-mcp ─────────────→ pdf-to-md-swift ──┬──→ doc-converter-swift
+che-pdf-mcp ─────────────→ pdf-to-md-swift ──┬──→ common-converter-swift
                                              └──→ surya-swift / PDFKit
 
-che-biblatex-mcp ────────→ apa-bib-to-md-swift ──→ apa-bib-swift ──→ biblatex-apa-swift
+che-biblatex-mcp ────────→ bib-apa-to-md-swift ──→ bib-apa-swift ──→ biblatex-apa-swift
 ```
 
 依賴永遠是 **Layer 4 → 3 → 2 → 1**，不會反向，不會跨層。
@@ -176,7 +176,7 @@ che-word-mcp
 ### 目標
 
 ```
-doc-converter-swift   (獨立 package, Layer 2)
+common-converter-swift   (獨立 package, Layer 2)
 word-to-md-swift      (獨立 package, Layer 3)
 
 macdoc CLI            (consumer, Layer 4)
@@ -190,18 +190,18 @@ che-word-mcp          (consumer, Layer 4)
 
 ### 遷移步驟
 
-1. **抽出 `doc-converter-swift`**
+1. **抽出 `common-converter-swift`**
    - 從 `MacDocCore/` 搬出 protocols 和 models
    - 建立獨立 git repo
    - ~194 行，零依賴
 
 2. **抽出 `word-to-md-swift`**
    - 從 `WordToMD/` 搬出 `WordConverter`
-   - 依賴 `doc-converter-swift` + `ooxml-swift` + `markdown-swift`
+   - 依賴 `common-converter-swift` + `ooxml-swift` + `markdown-swift`
    - `MarkerWordConverter` 可留在 `macdoc` 或作為 optional target
 
 3. **更新 `macdoc` CLI**
-   - `MacDocCore` → 改為依賴 `doc-converter-swift`
+   - `MacDocCore` → 改為依賴 `common-converter-swift`
    - `WordToMD` → 改為依賴 `word-to-md-swift`
 
 4. **更新 `che-word-mcp`**
@@ -217,7 +217,7 @@ che-word-mcp          (consumer, Layer 4)
 
 ## 設計決策記錄
 
-### 為什麼 `doc-converter-swift` 要獨立？
+### 為什麼 `common-converter-swift` 要獨立？
 
 如果只有 `word-to-md-swift` 一個轉換器，把 protocols 內嵌在裡面就好。
 但規劃中有 `pdf-to-md-swift`、`html-to-md-swift`，它們都需要：
@@ -279,15 +279,15 @@ MCP 做 `export_markdown` 不需要圖片分類。
 ### Style × Format 正交分離
 
 `bib-to-apa-swift` 的 `BibToAPAFormatter` 將「APA 7 引用風格邏輯」和「Markdown 輸出格式」混在一起。
-重構為 `apa-bib-swift`（語意模型 + styler）+ `apa-bib-to-{output}-swift`（renderer）：
+重構為 `bib-apa-swift`（語意模型 + styler）+ `bib-apa-to-{output}-swift`（renderer）：
 
 ```
 biblatex-apa-swift          (Layer 1: .bib 解析 + APA 驗證)
         ↓
-apa-bib-swift               (Layer 2: APAStyler + APAReference 語意模型 + Renderer 協議)
+bib-apa-swift               (Layer 2: APAStyler + APAReference 語意模型 + Renderer 協議)
         ↓
-apa-bib-to-md-swift         (Layer 3: Markdown renderer)
-apa-bib-to-html-swift       (Layer 3: HTML renderer + APA CSS)
+bib-apa-to-md-swift         (Layer 3: Markdown renderer)
+bib-apa-to-html-swift       (Layer 3: HTML renderer + APA CSS)
 ```
 
 **設計原則**：
@@ -305,6 +305,6 @@ apa-bib-to-html-swift       (Layer 3: HTML renderer + APA CSS)
 - **Package（內部程式）用副檔名**：`.bib` → `bib`、`.md` → `md`、`.html` → `html`、`.docx` → `ooxml`
 - **MCP / 公開工具可用俗稱**：`che-word-mcp`、`che-bib-mcp`
 - **文件轉換**：`{input}-to-{output}-swift`（如 `word-to-md-swift`）
-- **風格轉換**：`{style}-{input}-to-{output}-swift`（如 `apa-bib-to-md-swift`）
-  - style 是 invariant 放最前面，因為 APA 規則不變，只有輸出格式不同
-- **協議層不含 output**：`apa-bib-swift`（類似 `doc-converter-swift`）
+- **風格轉換**：`{input}[-{style}]-to-{output}-swift`（如 `bib-apa-to-md-swift`）
+  - input 放最前面（bib），style 作為修飾（apa），output 在 to 後面
+- **協議層不含 output**：`bib-apa-swift`（類似 `common-converter-swift`）
