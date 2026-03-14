@@ -9,8 +9,9 @@ extension MacDoc {
     struct PDF: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "pdf",
-            abstract: "PDF 轉 LaTeX 工具（多步驟 pipeline）",
+            abstract: "PDF 工具（直接轉 DOCX + PDF→LaTeX pipeline）",
             subcommands: [
+                ToDOCX.self,
                 Init.self,
                 Segment.self,
                 Render.self,
