@@ -12,7 +12,7 @@ import BiblatexAPA
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
-    struct Convert: AsyncParsableCommand {
+    struct Convert: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "convert",
             abstract: "Convert documents between formats (textutil-compatible)"
@@ -27,11 +27,8 @@ extension MacDoc {
         @Flag(name: .long, help: "Force output to stdout")
         var stdout: Bool = false
 
-        @Option(name: .long, help: "Citation style (e.g. apa)")
-        var style: String?
-
-        @Option(name: .long, help: "Model for token counting (gpt-4o, claude-sonnet)")
-        var model: String?
+        @Option(name: .long, help: "CSS style for bib→html: minimal (academic) or web (modern)")
+        var css: CSSStyle = .web
 
         @Flag(name: .long, help: "Treat soft breaks as hard line breaks")
         var hardBreaks: Bool = false
@@ -42,7 +39,7 @@ extension MacDoc {
         @Argument(help: "Input file")
         var input: String
 
-        mutating func run() async throws {
+        mutating func run() throws {
             let inputURL = URL(fileURLWithPath: input)
             guard FileManager.default.fileExists(atPath: inputURL.path) else {
                 throw ValidationError("File not found: \(input)")
@@ -154,10 +151,10 @@ extension MacDoc {
 
         private func convertBibToHTML(inputURL: URL) throws {
             let entries = try loadBibEntries(from: inputURL)
+            let cssString = css == .minimal ? APACSS.minimal : APACSS.web
 
             let html: String
             if full {
-                let cssString = APACSS.web
                 let body = BibToAPAHTMLFormatter.formatReferenceList(entries)
                 html = """
                 <!DOCTYPE html>
@@ -178,7 +175,6 @@ extension MacDoc {
                 </html>
                 """
             } else {
-                let cssString = APACSS.web
                 html = BibToAPAHTMLFormatter.formatReferenceListWithCSS(entries, css: cssString)
             }
 
@@ -203,7 +199,7 @@ extension MacDoc {
 
         // MARK: - Helpers
 
-        /// Resolve the output path: explicit --output wins, --stdout forces nil (stdout).
+        /// Resolve the output path: --stdout forces nil (stdout), overriding --output.
         /// If neither is specified, defaults to stdout.
         private func resolveOutputPath() -> String? {
             if stdout { return nil }
