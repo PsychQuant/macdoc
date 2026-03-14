@@ -1,5 +1,5 @@
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 import OOXMLSwift
 
 public struct WordHTMLConverter: DocumentConverter {
@@ -7,7 +7,7 @@ public struct WordHTMLConverter: DocumentConverter {
 
     public init() {}
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions
@@ -16,7 +16,7 @@ public struct WordHTMLConverter: DocumentConverter {
         try convert(document: document, source: input, output: &output, options: options)
     }
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: StreamingOutput>(
         document: WordDocument,
         output: inout W,
         options: ConversionOptions = .default
@@ -28,12 +28,12 @@ public struct WordHTMLConverter: DocumentConverter {
         document: WordDocument,
         options: ConversionOptions = .default
     ) throws -> String {
-        var writer = DocConverterSwift.StringOutput()
+        var writer = StringOutput()
         try convert(document: document, output: &writer, options: options)
         return writer.content
     }
 
-    private func convert<W: DocConverterSwift.StreamingOutput>(
+    private func convert<W: StreamingOutput>(
         document: WordDocument,
         source: URL?,
         output: inout W,
@@ -73,7 +73,7 @@ public struct WordHTMLConverter: DocumentConverter {
 
     // MARK: - Document Shell
 
-    private func emitFrontmatter<W: DocConverterSwift.StreamingOutput>(
+    private func emitFrontmatter<W: StreamingOutput>(
         document: WordDocument,
         source: URL?,
         title: String,
@@ -91,7 +91,7 @@ public struct WordHTMLConverter: DocumentConverter {
         try output.writeLine("-->")
     }
 
-    private func emitDocumentStart<W: DocConverterSwift.StreamingOutput>(
+    private func emitDocumentStart<W: StreamingOutput>(
         title: String,
         output: inout W
     ) throws {
@@ -112,7 +112,7 @@ public struct WordHTMLConverter: DocumentConverter {
         try output.writeLine("  <main class=\"document\">")
     }
 
-    private func emitDocumentEnd<W: DocConverterSwift.StreamingOutput>(output: inout W) throws {
+    private func emitDocumentEnd<W: StreamingOutput>(output: inout W) throws {
         try output.writeLine("  </main>")
         try output.writeLine("</body>")
         try output.writeLine("</html>")
@@ -120,7 +120,7 @@ public struct WordHTMLConverter: DocumentConverter {
 
     // MARK: - Blocks
 
-    private func emitParagraph<W: DocConverterSwift.StreamingOutput>(
+    private func emitParagraph<W: StreamingOutput>(
         _ paragraph: Paragraph,
         context: inout ConversionContext,
         output: inout W
@@ -159,7 +159,7 @@ public struct WordHTMLConverter: DocumentConverter {
         try output.writeLine("    <p>\(html)</p>")
     }
 
-    private func emitTable<W: DocConverterSwift.StreamingOutput>(
+    private func emitTable<W: StreamingOutput>(
         _ table: Table,
         context: inout ConversionContext,
         output: inout W
@@ -249,7 +249,7 @@ public struct WordHTMLConverter: DocumentConverter {
         }
     }
 
-    private func emitListBlock<W: DocConverterSwift.StreamingOutput>(
+    private func emitListBlock<W: StreamingOutput>(
         _ items: [FlatListItem],
         output: inout W
     ) throws {
@@ -260,7 +260,7 @@ public struct WordHTMLConverter: DocumentConverter {
         }
     }
 
-    private func renderList<W: DocConverterSwift.StreamingOutput>(
+    private func renderList<W: StreamingOutput>(
         items: [FlatListItem],
         index: inout Int,
         level: Int,
@@ -423,7 +423,7 @@ public struct WordHTMLConverter: DocumentConverter {
 
     // MARK: - Footnotes
 
-    private func emitFootnotes<W: DocConverterSwift.StreamingOutput>(
+    private func emitFootnotes<W: StreamingOutput>(
         context: ConversionContext,
         output: inout W
     ) throws {

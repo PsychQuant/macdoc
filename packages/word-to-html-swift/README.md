@@ -13,7 +13,7 @@ Direct Word (.docx) → HTML converter for macdoc.
 ## Usage
 
 ```swift
-import DocConverterSwift
+import CommonConverterSwift
 import WordToHTMLSwift
 
 let converter = WordHTMLConverter()

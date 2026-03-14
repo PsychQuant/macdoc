@@ -1,6 +1,6 @@
 import ArgumentParser
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 import WordToHTMLSwift
 
 // MARK: - word-to-html

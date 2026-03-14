@@ -1,5 +1,5 @@
 import Foundation
-import DocConverterSwift
+import CommonConverterSwift
 import OOXMLSwift
 @testable import WordToHTMLSwift
 
