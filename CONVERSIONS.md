@@ -1,38 +1,51 @@
 # macdoc Conversion Matrix
 
-Status legend:
-- **implemented** — merged / available in repo
-- **active** — issue open and implementation in flight
-- **planned** — queue item, no open issue yet
-- **research** — needs protocol / package design before implementation
+## Status Legend
 
-## Current matrix
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | **implemented** — merged and available |
+| 🔄 | **active** — issue open, implementation in flight |
+| 📋 | **planned** — queue item, no open issue yet |
+| 🔬 | **research** — needs protocol/package design first |
+| · | not planned |
 
-| Source | Target | Package | Status | Notes |
-|--------|--------|---------|--------|-------|
-| Word (.docx) | Markdown | `word-to-md-swift` | implemented | Layer 3 converter |
-| HTML | Markdown | `html-to-md-swift` | active | Issue #13, SwiftSoup-based streaming emitter |
-| PDF | LaTeX | `pdf-to-latex-swift` | implemented | Phase 1 + Phase 2 pipeline |
-| BibLaTeX (.bib) | APA HTML | `apa-bib-to-html-swift` | implemented | style-aware renderer |
-| BibLaTeX (.bib) | APA Markdown | `apa-bib-to-md-swift` | implemented | style-aware renderer |
-| BibLaTeX (.bib) | APA JSON | `apa-bib-to-json-swift` | implemented | pre-rendered HTML + anchors |
-| PDF | Markdown | `pdf-to-md-swift` | planned | direct path, avoid hub loss through LaTeX |
-| Markdown | HTML | `md-to-html-swift` | implemented | swift-markdown AST renderer + HTML streaming output |
-| SRT | HTML | `srt-to-html-swift` | implemented | subtitle blocks emit as structured HTML with timestamp + text |
-| Word (.docx) | HTML | `word-to-html-swift` | planned | direct path preserves Word semantics better than hub conversion |
-| HTML | Word (.docx) | `html-to-word-swift` | planned | useful reverse path after `word-to-html-swift` |
-| Markdown | Word (.docx) | `md-to-word-swift` | research | binary target + protocol shape need design |
+## Cross Matrix (Source → Target)
+
+|  → Target | Markdown | HTML | Word (.docx) | LaTeX | JSON | PDF | SRT |
+|----------:|:--------:|:----:|:------------:|:-----:|:----:|:---:|:---:|
+| **Markdown** | — | ✅ `md-to-html` | 🔬 `md-to-word` | · | · | · | · |
+| **HTML** | ✅ `html-to-md` | — | 📋 `html-to-word` | · | · | · | · |
+| **Word (.docx)** | ✅ `word-to-md` | 📋 `word-to-html` | — | · | · | · | · |
+| **PDF** | 📋 `pdf-to-md` | · | · | ✅ `pdf-to-latex` | · | — | · |
+| **BibLaTeX (.bib)** | ✅ `apa-bib-to-md` | ✅ `apa-bib-to-html` | · | · | ✅ `apa-bib-to-json` | · | · |
+| **SRT** | · | ✅ `srt-to-html` | · | · | · | · | — |
+
+## Converter Details
+
+| Source → Target | Package | Status | Notes |
+|-----------------|---------|--------|-------|
+| Word → Markdown | `word-to-md-swift` | ✅ implemented | Layer 3 converter |
+| HTML → Markdown | `html-to-md-swift` | ✅ implemented | SwiftSoup-based streaming emitter |
+| Markdown → HTML | `md-to-html-swift` | ✅ implemented | swift-markdown AST renderer |
+| SRT → HTML | `srt-to-html-swift` | ✅ implemented | structured HTML with timestamp + speaker detection |
+| PDF → LaTeX | `pdf-to-latex-swift` | ✅ implemented | Phase 1 + Phase 2 pipeline |
+| BibLaTeX → APA HTML | `apa-bib-to-html-swift` | ✅ implemented | style-aware renderer |
+| BibLaTeX → APA Markdown | `apa-bib-to-md-swift` | ✅ implemented | style-aware renderer |
+| BibLaTeX → APA JSON | `apa-bib-to-json-swift` | ✅ implemented | pre-rendered HTML + anchors |
+| PDF → Markdown | `pdf-to-md-swift` | 📋 planned | direct path, avoid hub loss through LaTeX |
+| Word → HTML | `word-to-html-swift` | 📋 planned | direct path preserves Word semantics |
+| HTML → Word | `html-to-word-swift` | 📋 planned | reverse path after word-to-html |
+| Markdown → Word | `md-to-word-swift` | 🔬 research | binary target + protocol shape need design |
 
 ## Priority Queue
 
 | Priority | Converter | Status | Why now |
 |---------:|-----------|--------|---------|
-| P0 | `html-to-md-swift` | active (#13) | explicit future converter in `docs/modular-architecture.md`; fits existing `DocumentConverter` + `StreamingOutput` shape cleanly |
-| P0 | `md-to-html-swift` | planned | reverse path auto-promoted after `html-to-md-swift` |
-| P1 | `pdf-to-md-swift` | planned | direct markdown export is a natural companion to existing PDF parsing stack |
-| P1 | `word-to-html-swift` | planned | direct conversion avoids Markdown hub loss for rich Word semantics |
-| P2 | `html-to-word-swift` | planned | reverse path once Word↔HTML design stabilizes |
-| P3 | `md-to-word-swift` | research | requires target-binary converter story beyond current text-streaming protocol |
+| P1 | `pdf-to-md-swift` | 📋 planned | direct markdown export is a natural companion to existing PDF parsing stack |
+| P1 | `word-to-html-swift` | 📋 planned | direct conversion avoids Markdown hub loss for rich Word semantics |
+| P2 | `html-to-word-swift` | 📋 planned | reverse path once Word↔HTML design stabilizes |
+| P3 | `md-to-word-swift` | 🔬 research | requires target-binary converter story beyond current text-streaming protocol |
 
 ## Rules
 
