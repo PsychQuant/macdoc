@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/doc-converter-swift.git",
       "state" : {
-        "revision" : "f25d82dec62e3484720b500aae64290639366ba8",
-        "version" : "0.3.0"
+        "revision" : "53400b2032389962dc5a10d135644b21d3cf1e06",
+        "version" : "0.4.0"
       }
     },
     {
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/marker-swift.git",
       "state" : {
-        "revision" : "9396a51be02b61c242507bc3481049ac73cd6329",
-        "version" : "0.1.0"
+        "revision" : "2a894243a0f5db1b4c7e60c6da3f645e39f0171c",
+        "version" : "0.2.1"
       }
     },
     {
@@ -39,7 +39,7 @@
     {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
       "state" : {
         "revision" : "c5d11a805e765f52ba34ec7284bd4fcd6ba68615",
         "version" : "1.7.0"
@@ -77,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/word-to-md-swift.git",
       "state" : {
-        "revision" : "4826e8540368194237c07a3ffc891f1e872362d2",
-        "version" : "0.3.1"
+        "revision" : "e363ca5e92fa0717c902b234dc3c3b3464944e65",
+        "version" : "0.5.1"
       }
     },
     {

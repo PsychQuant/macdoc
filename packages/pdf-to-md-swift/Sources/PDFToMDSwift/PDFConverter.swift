@@ -36,8 +36,9 @@ public struct PDFConverter: DocumentConverter {
 
             for block in pageBlocks {
                 switch block {
-                case .heading(let text):
-                    try output.writeLine("# \(text)")
+                case .heading(let text, let level):
+                    let prefix = String(repeating: "#", count: level)
+                    try output.writeLine("\(prefix) \(text)")
                     try output.writeBlankLine()
                 case .paragraph(let text):
                     try output.writeLine(text)
@@ -164,7 +165,8 @@ public struct PDFConverter: DocumentConverter {
             && looksLikeHeading(merged)
 
         if isHeading {
-            return .heading(merged)
+            let level = headingLevel(height: block[0].height, bodyLineHeight: bodyLineHeight)
+            return .heading(merged, level: level)
         }
 
         return .paragraph(merged)
@@ -245,6 +247,15 @@ public struct PDFConverter: DocumentConverter {
         return true
     }
 
+    /// Map font size ratio to heading level (1-3).
+    /// Ratio = heading height / body line height.
+    private func headingLevel(height: Double, bodyLineHeight: Double) -> Int {
+        let ratio = height / max(bodyLineHeight, 1)
+        if ratio > 1.8 { return 1 }
+        if ratio > 1.4 { return 2 }
+        return 3
+    }
+
     private func startsWithLowercaseWord(_ text: String) -> Bool {
         guard let scalar = text.unicodeScalars.first else { return false }
         return CharacterSet.lowercaseLetters.contains(scalar)
@@ -312,7 +323,7 @@ private struct LineFragment {
 }
 
 private enum MarkdownBlock {
-    case heading(String)
+    case heading(String, level: Int)
     case paragraph(String)
     case unorderedList([String])
     case orderedList([String])
