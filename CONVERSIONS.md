@@ -14,12 +14,16 @@
 
 |  → Target | Markdown | HTML | Word (.docx) | LaTeX | JSON | PDF | SRT |
 |----------:|:--------:|:----:|:------------:|:-----:|:----:|:---:|:---:|
+<<<<<<< HEAD
+| **Markdown** | — | ✅ `md-to-html` | 🔄 `md-to-word` | · | · | · | · |
+=======
 | **Markdown** | — | ✅ `md-to-html` | 🔬 `md-to-word` | · | · | · | · |
 <<<<<<< HEAD
 | **HTML** | ✅ `html-to-md` | — | 🔄 `html-to-word` | · | · | · | · |
 | **Word (.docx)** | ✅ `word-to-md` | 🔄 `word-to-html` | — | · | · | · | · |
 | **PDF** | 🔄 `pdf-to-md` | · | · | ✅ `pdf-to-latex` | · | — | · |
 =======
+>>>>>>> main
 | **HTML** | ✅ `html-to-md` | — | 📋 `html-to-word` | · | · | · | · |
 <<<<<<< HEAD
 | **Word (.docx)** | ✅ `word-to-md` | 🔄 `word-to-html` | — | · | · | · | · |
@@ -57,8 +61,12 @@
 | Word → HTML | `word-to-html-swift` | 📋 planned | direct path preserves Word semantics |
 >>>>>>> main
 | HTML → Word | `html-to-word-swift` | 📋 planned | reverse path after word-to-html |
+<<<<<<< HEAD
+| Markdown → Word | `md-to-word-swift` | 🔄 active | direct Markdown AST → OOXML writer using `swift-markdown` + `ooxml-swift` |
+=======
 >>>>>>> main
 | Markdown → Word | `md-to-word-swift` | 🔬 research | binary target + protocol shape need design |
+>>>>>>> main
 
 ## Priority Queue
 
@@ -77,8 +85,12 @@
 | P1 | `word-to-html-swift` | 📋 planned | direct conversion avoids Markdown hub loss for rich Word semantics |
 >>>>>>> main
 | P2 | `html-to-word-swift` | 📋 planned | reverse path once Word↔HTML design stabilizes |
+<<<<<<< HEAD
+| P0 | `md-to-word-swift` | 🔄 active | reverse path for the existing Word ↔ Markdown pair, now direct via OOXML writer |
+=======
 >>>>>>> main
 | P3 | `md-to-word-swift` | 🔬 research | requires target-binary converter story beyond current text-streaming protocol |
+>>>>>>> main
 
 ## Rules
 
