@@ -24,6 +24,7 @@ let package = Package(
         .package(name: "BibAPAToHTML", path: "packages/bib-apa-to-html-swift"),
         .package(name: "BibAPAToJSON", path: "packages/bib-apa-to-json-swift"),
         .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
+        .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
     ],
     targets: [
         .executableTarget(
@@ -44,6 +45,7 @@ let package = Package(
                 .product(name: "BibAPAToHTML", package: "BibAPAToHTML"),
                 .product(name: "BibAPAToJSON", package: "BibAPAToJSON"),
                 .product(name: "BibAPAToMD", package: "BibAPAToMD"),
+                .product(name: "TeXToDOCX", package: "TeXToDOCX"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
