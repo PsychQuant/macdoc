@@ -27,10 +27,7 @@ extension MacDoc {
         var htmlExtensions: Bool = false
 
         mutating func run() async throws {
-            let inputURL = URL(fileURLWithPath: input)
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("找不到輸入檔案: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             let options = ConversionOptions(
                 includeFrontmatter: frontmatter,
