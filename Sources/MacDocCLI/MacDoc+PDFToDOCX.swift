@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 import CommonConverterSwift
-import PDFToDOCXSwift
+import PDFToDOCX
 
 // MARK: - pdf to-docx
 extension MacDoc.PDF {
