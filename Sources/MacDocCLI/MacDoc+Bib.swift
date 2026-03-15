@@ -3,7 +3,6 @@ import Foundation
 import BibAPAToHTML
 import BibAPAToJSON
 import BibAPAToMD
-import BiblatexAPA
 
 // MARK: - Bib 子命令群
 extension MacDoc {
