@@ -136,15 +136,19 @@ struct TeXPreambleParser {
                 result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
             }
         }
-        // Clean up LaTeX escapes
+        // Clean up LaTeX escapes (order matters: escaped braces before removing bare braces)
         result = result
             .replacingOccurrences(of: "\\&", with: "&")
             .replacingOccurrences(of: "\\%", with: "%")
             .replacingOccurrences(of: "\\$", with: "$")
             .replacingOccurrences(of: "\\#", with: "#")
             .replacingOccurrences(of: "\\_", with: "_")
-            .replacingOccurrences(of: "\\{", with: "{")
-            .replacingOccurrences(of: "\\}", with: "}")
+            .replacingOccurrences(of: "\\{", with: "\u{FFFC}")  // temp placeholder
+            .replacingOccurrences(of: "\\}", with: "\u{FFFD}")  // temp placeholder
+            .replacingOccurrences(of: "{", with: "")  // remove grouping braces
+            .replacingOccurrences(of: "}", with: "")  // remove grouping braces
+            .replacingOccurrences(of: "\u{FFFC}", with: "{")  // restore escaped braces
+            .replacingOccurrences(of: "\u{FFFD}", with: "}")  // restore escaped braces
             .replacingOccurrences(of: "~", with: " ")
             .replacingOccurrences(of: "--", with: "–")  // en-dash
             .trimmingCharacters(in: .whitespaces)
