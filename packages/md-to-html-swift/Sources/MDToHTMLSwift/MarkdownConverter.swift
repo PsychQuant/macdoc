@@ -3,8 +3,27 @@ import Markdown
 import CommonConverterSwift
 
 /// Converts Markdown files to HTML using Apple's swift-markdown parser.
-public struct MarkdownConverter {
+public struct MarkdownConverter: DocumentConverter {
+    public static let sourceFormat = "md"
+
     public init() {}
+
+    // MARK: - DocumentConverter conformance
+
+    public func convert<W: StreamingOutput>(
+        input: URL,
+        output: inout W,
+        options: ConversionOptions
+    ) throws {
+        let htmlOptions = HTMLOptions(fullDocument: false)
+        let source = try loadSource(from: input)
+        let document = Document(parsing: source, options: .parseBlockDirectives)
+        var renderer = HTMLRenderer(options: htmlOptions)
+        let html = renderer.render(document)
+        try output.write(html)
+    }
+
+    // MARK: - HTMLOptions API (preserved for direct callers)
 
     /// Convert a Markdown file to an HTML string.
     public func convert(input: URL, options: HTMLOptions = .default) throws -> String {

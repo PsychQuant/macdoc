@@ -8,7 +8,7 @@ extension MacDoc {
     struct SRT: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "srt",
-            abstract: "轉換 SRT 到 HTML",
+            abstract: "轉換 SRT 到 HTML（建議改用 macdoc convert --to html）",
             subcommands: [ToHTML.self],
             defaultSubcommand: ToHTML.self
         )
@@ -33,10 +33,7 @@ extension MacDoc.SRT {
         var frontmatter: Bool = false
 
         mutating func run() async throws {
-            let inputURL = URL(fileURLWithPath: input)
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("找不到輸入檔案: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             var options = ConversionOptions.default
             options.includeFrontmatter = frontmatter
