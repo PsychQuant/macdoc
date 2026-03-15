@@ -8,7 +8,7 @@ extension MacDoc {
     struct HTML: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "html",
-            abstract: "轉換 HTML 到 Markdown"
+            abstract: "轉換 HTML 到 Markdown（建議改用 macdoc convert --to md）"
         )
 
         @Argument(help: "輸入 .html / .htm 檔案路徑")
