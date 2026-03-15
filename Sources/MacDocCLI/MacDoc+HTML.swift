@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 import CommonConverterSwift
-import HTMLToMDSwift
+import HTMLToMD
 
 // MARK: - HTML 子命令群
 extension MacDoc {
