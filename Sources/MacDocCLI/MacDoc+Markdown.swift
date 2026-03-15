@@ -1,6 +1,6 @@
 import ArgumentParser
 import Foundation
-import MDToHTMLSwift
+import MDToHTML
 import MDToWord
 import CommonConverterSwift
 
