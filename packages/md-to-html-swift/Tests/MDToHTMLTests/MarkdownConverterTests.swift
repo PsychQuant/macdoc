@@ -1,5 +1,5 @@
 import XCTest
-@testable import MDToHTMLSwift
+@testable import MDToHTML
 
 final class MarkdownConverterTests: XCTestCase {
     private let converter = MarkdownConverter()

@@ -2,30 +2,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "MDToWord",
+    name: "MarkerWordConverter",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "MDToWord", targets: ["MDToWord"]),
+        .library(name: "MarkerWordConverter", targets: ["MarkerWordConverter"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.1"),
-        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
+        .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
     ],
     targets: [
         .target(
-            name: "MDToWord",
+            name: "MarkerWordConverter",
             dependencies: [
-                .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
-                .product(name: "Yams", package: "Yams"),
+                .product(name: "MarkdownSwift", package: "markdown-swift"),
+                .product(name: "MarkerSwift", package: "marker-swift"),
             ]
-        ),
-        .testTarget(
-            name: "MDToWordTests",
-            dependencies: ["MDToWord"]
         ),
     ]
 )

@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 import MDToHTMLSwift
-import MDToWordSwift
+import MDToWord
 import CommonConverterSwift
 
 // MARK: - Markdown 子命令群
