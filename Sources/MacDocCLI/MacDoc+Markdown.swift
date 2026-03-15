@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import MDToHTMLSwift
 import MDToWordSwift
-import DocConverterSwift
+import CommonConverterSwift
 
 // MARK: - Markdown 子命令群
 extension MacDoc {

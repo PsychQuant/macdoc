@@ -8,20 +8,20 @@ let package = Package(
         .library(name: "SRTToHTMLSwift", targets: ["SRTToHTMLSwift"]),
     ],
     dependencies: [
-        .package(name: "CommonConverterSwift", path: "../common-converter-swift"),
+        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.4.0"),
     ],
     targets: [
         .target(
             name: "SRTToHTMLSwift",
             dependencies: [
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
         .testTarget(
             name: "SRTToHTMLSwiftTests",
             dependencies: [
                 "SRTToHTMLSwift",
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
     ]

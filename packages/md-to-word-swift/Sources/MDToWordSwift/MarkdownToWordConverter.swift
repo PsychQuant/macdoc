@@ -1,6 +1,6 @@
 import Foundation
 import Markdown
-import DocConverterSwift
+import CommonConverterSwift
 import OOXMLSwift
 
 private typealias WordParagraph = OOXMLSwift.Paragraph
@@ -15,7 +15,7 @@ public struct MarkdownToWordConverter: DocumentConverter {
 
     public init() {}
 
-    public func convert<W: DocConverterSwift.StreamingOutput>(
+    public func convert<W: CommonConverterSwift.StreamingOutput>(
         input: URL,
         output: inout W,
         options: ConversionOptions
