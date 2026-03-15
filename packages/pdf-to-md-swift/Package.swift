@@ -16,21 +16,24 @@ let package = Package(
             name: "PDFToMD",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ]
+            ],
+            path: "Sources/PDFToMDSwift"
         ),
         .executableTarget(
             name: "PDFToMDSmokeTests",
             dependencies: [
                 "PDFToMD",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ]
+            ],
+            path: "Sources/PDFToMDSwiftSmokeTests"
         ),
         .testTarget(
             name: "PDFToMDTests",
             dependencies: [
                 "PDFToMD",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ]
+            ],
+            path: "Tests/PDFToMDTests"
         ),
     ]
 )
