@@ -230,15 +230,45 @@ struct TeXWordBuilder {
 
     // MARK: - Command matchers
 
-    private func matchPianMing(_ line: String) -> (String, String)? {
+    /// Match \篇名{line1}{line2} — may span current + next line
+    private mutating func matchPianMing(_ line: String) -> (String, String)? {
+        // Try single-line match first
         let pattern = #"\\篇名\{([^}]*)\}\{([^}]*)\}"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+           let r1 = Range(match.range(at: 1), in: line),
+           let r2 = Range(match.range(at: 2), in: line) {
+            return (String(line[r1]), String(line[r2]))
+        }
+
+        // Try multi-line: \篇名{line1} on this line, {line2} on next
+        let partialPattern = #"\\篇名\{([^}]*)\}"#
+        guard line.hasPrefix("\\篇名"),
+              let regex = try? NSRegularExpression(pattern: partialPattern),
               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-              let r1 = Range(match.range(at: 1), in: line),
-              let r2 = Range(match.range(at: 2), in: line) else {
+              let r1 = Range(match.range(at: 1), in: line) else {
             return nil
         }
-        return (String(line[r1]), String(line[r2]))
+
+        // Check if there's a second {line2} remaining on same line or next line
+        let line1 = String(line[r1])
+        let afterFirst = String(line[Range(match.range, in: line)!.upperBound...]).trimmingCharacters(in: .whitespaces)
+
+        if let secondBrace = extractBraceContentRaw(from: afterFirst) {
+            return (line1, secondBrace.0)
+        }
+
+        // Look ahead to next line
+        if cursor + 1 < lines.count {
+            let nextLine = lines[cursor + 1].trimmingCharacters(in: .whitespaces)
+            if nextLine.hasPrefix("{"),
+               let secondBrace = extractBraceContentRaw(from: nextLine) {
+                cursor += 1  // consume the next line
+                return (line1, secondBrace.0)
+            }
+        }
+
+        return nil
     }
 
     private func matchZhaiYao(_ line: String) -> String? {
@@ -246,7 +276,8 @@ struct TeXWordBuilder {
     }
 
     private func matchCommand(_ name: String, in line: String) -> String? {
-        let pattern = "\\\\\(NSRegularExpression.escapedPattern(for: name))\\{([^}]*)\\}"
+        // Match both \command{} and \command*{} (starred variant)
+        let pattern = "\\\\\(NSRegularExpression.escapedPattern(for: name))\\*?\\{([^}]*)\\}"
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
               let r = Range(match.range(at: 1), in: line) else {
