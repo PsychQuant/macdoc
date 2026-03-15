@@ -11,7 +11,7 @@ struct MacDoc: AsyncParsableCommand {
         commandName: "macdoc",
         abstract: "原生 macOS 文件處理工具",
         version: "0.4.0",
-        subcommands: [Convert.self, Word.self, HTML.self, SRT.self, PDF.self, Bib.self, Config.self]
+        subcommands: [Convert.self, Word.self, WordToHTML.self, HTML.self, SRT.self, PDF.self, Bib.self, Config.self]
     )
 }
 
