@@ -2,27 +2,29 @@
 import PackageDescription
 
 let package = Package(
-    name: "SRTToHTMLSwift",
+    name: "SRTToHTML",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "SRTToHTMLSwift", targets: ["SRTToHTMLSwift"]),
+        .library(name: "SRTToHTML", targets: ["SRTToHTML"]),
     ],
     dependencies: [
-        .package(name: "CommonConverterSwift", path: "../common-converter-swift"),
+        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
     ],
     targets: [
         .target(
-            name: "SRTToHTMLSwift",
+            name: "SRTToHTML",
             dependencies: [
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
-            ]
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
+            ],
+            path: "Sources/SRTToHTML"
         ),
         .testTarget(
-            name: "SRTToHTMLSwiftTests",
+            name: "SRTToHTMLTests",
             dependencies: [
-                "SRTToHTMLSwift",
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
-            ]
+                "SRTToHTML",
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
+            ],
+            path: "Tests/SRTToHTMLTests"
         ),
     ]
 )

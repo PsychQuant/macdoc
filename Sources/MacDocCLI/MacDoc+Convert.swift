@@ -2,13 +2,12 @@ import ArgumentParser
 import Foundation
 import CommonConverterSwift
 import WordToMDSwift
-import HTMLToMDSwift
-import MDToHTMLSwift
-import SRTToHTMLSwift
+import HTMLToMD
+import MDToHTML
+import SRTToHTML
 import BibAPAToHTML
 import BibAPAToJSON
 import BibAPAToMD
-import BiblatexAPA
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
