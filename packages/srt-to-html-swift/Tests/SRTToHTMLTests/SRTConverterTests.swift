@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SRTToHTMLSwift
+@testable import SRTToHTML
 
 final class SRTConverterTests: XCTestCase {
     func testBasicConversion() throws {

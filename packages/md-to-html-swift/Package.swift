@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "MDToHTMLSwift",
+    name: "MDToHTML",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "MDToHTMLSwift", targets: ["MDToHTMLSwift"]),
+        .library(name: "MDToHTML", targets: ["MDToHTML"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
@@ -13,18 +13,20 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "MDToHTMLSwift",
+            name: "MDToHTML",
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ]
+            ],
+            path: "Sources/MDToHTML"
         ),
         .testTarget(
-            name: "MDToHTMLSwiftTests",
+            name: "MDToHTMLTests",
             dependencies: [
-                "MDToHTMLSwift",
+                "MDToHTML",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ]
+            ],
+            path: "Tests/MDToHTMLTests"
         ),
     ]
 )
