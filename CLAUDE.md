@@ -12,26 +12,38 @@ This file provides guidance to Claude Code when working with code in this reposi
 macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Package.swift              # CLI 的 Swift Package 定義
 ├── Sources/
-│   ├── MacDocCLI/             # CLI 入口點
-│   │   ├── MacDoc.swift       # 主命令 + Word 子命令
-│   │   ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline + Phase 2 consolidation）
-│   │   ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown）
-│   │   └── MacDoc+Config.swift# Config 子命令群（AI 設定管理）
-│   └── MarkerWordConverter/   # Marker 模式轉換器（依賴 MarkerSwift）
+│   └── MacDocCLI/             # CLI 入口點
+│       ├── MacDoc.swift       # 主命令 + Word 子命令
+│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（textutil-compatible）
+│       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
+│       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
+│       ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown/JSON）
+│       ├── MacDoc+Config.swift# Config 子命令群（AI 設定管理）
+│       └── CLIHelpers.swift   # 共用 helpers（validatedInputURL, writeStringOutput 等）
 ├── Tests/
 ├── docs/                      # 開發文檔和對話記錄
 │   └── plans/                 # 實作計畫
 ├── packages/                  # 本地套件（.gitignore 忽略）
 │   ├── common-converter-swift/   # Layer 2: 轉換器協議（DocumentConverter, StreamingOutput）
-│   ├── word-to-md-swift/      # Layer 3: Word → Markdown 轉換器
+│   ├── word-to-md-swift/      # Layer 3: Word → Markdown
+│   ├── html-to-md-swift/      # Layer 3: HTML → Markdown
+│   ├── md-to-html-swift/      # Layer 3: Markdown → HTML
+│   ├── word-to-html-swift/    # Layer 3: Word → HTML
+│   ├── html-to-word-swift/    # Layer 3: HTML → Word
+│   ├── md-to-word-swift/      # Layer 3: Markdown → Word
+│   ├── pdf-to-md-swift/       # Layer 3: PDF → Markdown
+│   ├── pdf-to-docx-swift/     # Layer 3: PDF → DOCX
+│   ├── srt-to-html-swift/     # Layer 3: SRT → HTML
+│   ├── marker-word-converter-swift/ # Layer 3: Word → Marker 模式
+│   ├── bib-apa-to-html-swift/ # Layer 3: BibLaTeX → APA 7 HTML
+│   ├── bib-apa-to-md-swift/   # Layer 3: BibLaTeX → APA 7 Markdown
+│   ├── bib-apa-to-json-swift/ # Layer 3: BibLaTeX → APA 7 JSON
+│   ├── bib-apa-swift/         # APA 7 styling engine
 │   ├── ooxml-swift/           # Layer 1: OOXML (Word/Excel) 解析
 │   ├── markdown-swift/        # Layer 1: Markdown 生成
 │   ├── marker-swift/          # Layer 1: 圖片分類 + Marker 輸出
 │   ├── surya-swift/           # Layer 1: OCR 文字辨識
-│   ├── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
-│   ├── bib-apa-swift/         # APA 7 styling engine（BibEntry → APAReference）
-│   ├── bib-apa-to-html-swift/ # APA 7 HTML renderer
-│   └── bib-apa-to-md-swift/   # APA 7 Markdown renderer
+│   └── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
 │   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
