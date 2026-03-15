@@ -13,6 +13,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.5.1"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
+        .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
         .package(name: "HTMLToMD", path: "packages/html-to-md-swift"),
         .package(name: "MDToHTML", path: "packages/md-to-html-swift"),
         .package(name: "SRTToHTML", path: "packages/srt-to-html-swift"),
@@ -26,6 +27,7 @@ let package = Package(
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
+                .product(name: "PDFToMD", package: "PDFToMD"),
                 .product(name: "HTMLToMD", package: "HTMLToMD"),
                 .product(name: "MDToHTML", package: "MDToHTML"),
                 .product(name: "SRTToHTML", package: "SRTToHTML"),
