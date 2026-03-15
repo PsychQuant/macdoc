@@ -2,34 +2,34 @@
 import PackageDescription
 
 let package = Package(
-    name: "PDFToMDSwift",
+    name: "PDFToMD",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "PDFToMDSwift", targets: ["PDFToMDSwift"]),
-        .executable(name: "pdf-to-md-smoke-tests", targets: ["PDFToMDSwiftSmokeTests"]),
+        .library(name: "PDFToMD", targets: ["PDFToMD"]),
+        .executable(name: "pdf-to-md-smoke-tests", targets: ["PDFToMDSmokeTests"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.4.0"),
+        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
     ],
     targets: [
         .target(
-            name: "PDFToMDSwift",
+            name: "PDFToMD",
             dependencies: [
-                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
             ]
         ),
         .executableTarget(
-            name: "PDFToMDSwiftSmokeTests",
+            name: "PDFToMDSmokeTests",
             dependencies: [
-                "PDFToMDSwift",
-                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
+                "PDFToMD",
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
             ]
         ),
         .testTarget(
-            name: "PDFToMDSwiftTests",
+            name: "PDFToMDTests",
             dependencies: [
-                "PDFToMDSwift",
-                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
+                "PDFToMD",
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
             ]
         ),
     ]
