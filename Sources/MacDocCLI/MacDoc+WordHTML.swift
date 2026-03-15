@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 import CommonConverterSwift
-import WordToHTMLSwift
+import WordToHTML
 
 // MARK: - word-to-html
 extension MacDoc {

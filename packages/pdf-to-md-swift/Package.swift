@@ -2,29 +2,35 @@
 import PackageDescription
 
 let package = Package(
-    name: "SRTToHTML",
+    name: "PDFToMD",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "SRTToHTML", targets: ["SRTToHTML"]),
+        .library(name: "PDFToMD", targets: ["PDFToMD"]),
+        .executable(name: "pdf-to-md-smoke-tests", targets: ["PDFToMDSmokeTests"]),
     ],
     dependencies: [
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
     ],
     targets: [
         .target(
-            name: "SRTToHTML",
+            name: "PDFToMD",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ],
-            path: "Sources/SRTToHTML"
+            ]
+        ),
+        .executableTarget(
+            name: "PDFToMDSmokeTests",
+            dependencies: [
+                "PDFToMD",
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
+            ]
         ),
         .testTarget(
-            name: "SRTToHTMLTests",
+            name: "PDFToMDTests",
             dependencies: [
-                "SRTToHTML",
+                "PDFToMD",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ],
-            path: "Tests/SRTToHTMLTests"
+            ]
         ),
     ]
 )
