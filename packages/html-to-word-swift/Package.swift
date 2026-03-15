@@ -19,14 +19,16 @@ let package = Package(
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "SwiftSoup", package: "SwiftSoup"),
-            ]
+            ],
+            path: "Sources/HTMLToWordSwift"
         ),
         .testTarget(
             name: "HTMLToWordTests",
             dependencies: [
                 "HTMLToWord",
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
-            ]
+            ],
+            path: "Tests/HTMLToWordTests"
         ),
     ]
 )
