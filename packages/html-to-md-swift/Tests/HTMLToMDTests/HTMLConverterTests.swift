@@ -1,6 +1,6 @@
 import XCTest
 import CommonConverterSwift
-@testable import HTMLToMDSwift
+@testable import HTMLToMD
 
 final class HTMLConverterTests: XCTestCase {
     private let converter = HTMLConverter()

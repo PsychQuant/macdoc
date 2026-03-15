@@ -1,14 +1,14 @@
 import ArgumentParser
 import Foundation
 import CommonConverterSwift
-import HTMLToMDSwift
+import HTMLToMD
 
 // MARK: - HTML 子命令群
 extension MacDoc {
     struct HTML: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "html",
-            abstract: "轉換 HTML 到 Markdown"
+            abstract: "轉換 HTML 到 Markdown（建議改用 macdoc convert --to md）"
         )
 
         @Argument(help: "輸入 .html / .htm 檔案路徑")
@@ -27,10 +27,7 @@ extension MacDoc {
         var htmlExtensions: Bool = false
 
         mutating func run() async throws {
-            let inputURL = URL(fileURLWithPath: input)
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("找不到輸入檔案: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             let options = ConversionOptions(
                 includeFrontmatter: frontmatter,

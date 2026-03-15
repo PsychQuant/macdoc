@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "PDFToDOCX",
+    name: "WordToHTML",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "PDFToDOCX", targets: ["PDFToDOCX"]),
+        .library(name: "WordToHTML", targets: ["WordToHTML"]),
     ],
     dependencies: [
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
@@ -13,18 +13,15 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "PDFToDOCX",
+            name: "WordToHTML",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
             ]
         ),
         .testTarget(
-            name: "PDFToDOCXTests",
-            dependencies: [
-                "PDFToDOCX",
-                .product(name: "OOXMLSwift", package: "ooxml-swift"),
-            ]
+            name: "WordToHTMLTests",
+            dependencies: ["WordToHTML"]
         ),
     ]
 )
