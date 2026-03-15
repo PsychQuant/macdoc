@@ -1,9 +1,9 @@
 {
   "pins" : [
     {
-      "identity" : "doc-converter-swift",
+      "identity" : "common-converter-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/PsychQuant/doc-converter-swift.git",
+      "location" : "https://github.com/PsychQuant/common-converter-swift.git",
       "state" : {
         "revision" : "53400b2032389962dc5a10d135644b21d3cf1e06",
         "version" : "0.4.0"
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/marker-swift.git",
       "state" : {
-        "revision" : "2a894243a0f5db1b4c7e60c6da3f645e39f0171c",
-        "version" : "0.2.1"
+        "revision" : "4f27f844dbdfe7edde9322408428861a2b66f1ca",
+        "version" : "0.2.2"
       }
     },
     {
@@ -77,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/word-to-md-swift.git",
       "state" : {
-        "revision" : "e363ca5e92fa0717c902b234dc3c3b3464944e65",
-        "version" : "0.5.1"
+        "revision" : "903e3f4c63dcba477ee38d1fca7dfc9915c3316a",
+        "version" : "0.5.2"
       }
     },
     {

@@ -11,7 +11,7 @@ struct MacDoc: AsyncParsableCommand {
         commandName: "macdoc",
         abstract: "原生 macOS 文件處理工具",
         version: "0.4.0",
-        subcommands: [Word.self, WordToHTML.self, HTML.self, SRT.self, PDF.self, Bib.self, Config.self]
+        subcommands: [Convert.self, Word.self, WordToHTML.self, HTML.self, SRT.self, PDF.self, Bib.self, Config.self]
     )
 }
 
@@ -39,11 +39,7 @@ extension MacDoc {
         var marker: Bool = false
 
         mutating func run() async throws {
-            let inputURL = URL(fileURLWithPath: input)
-
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("找不到輸入檔案: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             let options = ConversionOptions(
                 includeFrontmatter: frontmatter,
@@ -53,10 +49,8 @@ extension MacDoc {
             )
 
             if marker {
-                // Marker mode: output to directory
                 try await runMarkerMode(inputURL: inputURL, options: options)
             } else {
-                // Standard mode: output to file or stdout
                 try runStandardMode(inputURL: inputURL, options: options)
             }
         }
@@ -73,12 +67,10 @@ extension MacDoc {
         }
 
         private func runMarkerMode(inputURL: URL, options: ConversionOptions) async throws {
-            // Determine output directory
             let outputDir: URL
             if let outputPath = output {
                 outputDir = URL(fileURLWithPath: outputPath)
             } else {
-                // Default: create directory next to input file
                 let inputDir = inputURL.deletingLastPathComponent()
                 let baseName = inputURL.deletingPathExtension().lastPathComponent
                 outputDir = inputDir.appendingPathComponent("\(baseName)_output")
@@ -91,7 +83,6 @@ extension MacDoc {
                 options: options
             )
 
-            // Print result summary
             print("✓ 轉換完成")
             print("  Markdown: \(result.markdownURL.path)")
             print("  Metadata: \(result.metadataURL.path)")
