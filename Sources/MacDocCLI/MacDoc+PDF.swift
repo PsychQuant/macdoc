@@ -14,6 +14,7 @@ extension MacDoc {
             abstract: "PDF 工具（直接轉 Markdown + PDF→LaTeX pipeline）",
             subcommands: [
                 ToMarkdown.self,
+                ToDOCX.self,
                 Init.self,
                 Segment.self,
                 Render.self,
