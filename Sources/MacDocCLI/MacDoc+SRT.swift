@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 import CommonConverterSwift
-import SRTToHTMLSwift
+import SRTToHTML
 
 // MARK: - SRT 子命令群
 extension MacDoc {

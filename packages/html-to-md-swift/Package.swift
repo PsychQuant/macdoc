@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "HTMLToMDSwift",
+    name: "HTMLToMD",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "HTMLToMDSwift", targets: ["HTMLToMDSwift"]),
+        .library(name: "HTMLToMD", targets: ["HTMLToMD"]),
     ],
     dependencies: [
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
@@ -14,19 +14,21 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "HTMLToMDSwift",
+            name: "HTMLToMD",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "MarkdownSwift", package: "markdown-swift"),
                 .product(name: "SwiftSoup", package: "SwiftSoup"),
-            ]
+            ],
+            path: "Sources/HTMLToMD"
         ),
         .testTarget(
-            name: "HTMLToMDSwiftTests",
+            name: "HTMLToMDTests",
             dependencies: [
-                "HTMLToMDSwift",
+                "HTMLToMD",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-            ]
+            ],
+            path: "Tests/HTMLToMDTests"
         ),
     ]
 )
