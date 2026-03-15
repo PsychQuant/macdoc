@@ -7,7 +7,7 @@ Direct Markdown → Word (`.docx`) converter for macdoc.
 - **Source parser:** `swift-markdown`
 - **Target model:** `OOXMLSwift.WordDocument`
 - **Archive writer:** `OOXMLSwift.DocxWriter`
-- **Protocol surface:** `DocConverterSwift.DocumentConverter`
+- **Protocol surface:** `CommonConverterSwift.DocumentConverter`
 
 This package keeps the conversion path direct: Markdown AST is mapped into native Word structures instead of routing through HTML.
 
@@ -25,7 +25,7 @@ This package keeps the conversion path direct: Markdown AST is mapped into nativ
 
 ```swift
 import Foundation
-import MDToWordSwift
+import MDToWord
 
 let converter = MarkdownToWordConverter()
 try converter.convertToFile(
