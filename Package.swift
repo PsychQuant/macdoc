@@ -9,9 +9,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-        .package(name: "CommonConverterSwift", path: "packages/common-converter-swift"),
-        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.1.0"),
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.0"),
+        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
+        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.5.1"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.1"),
         .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
@@ -26,7 +26,7 @@ let package = Package(
         .target(
             name: "MarkerWordConverter",
             dependencies: [
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "MarkdownSwift", package: "markdown-swift"),
                 .product(name: "MarkerSwift", package: "marker-swift"),
@@ -35,7 +35,7 @@ let package = Package(
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
                 .product(name: "HTMLToMDSwift", package: "HTMLToMDSwift"),
                 .product(name: "MDToHTMLSwift", package: "MDToHTMLSwift"),

@@ -40,40 +40,17 @@ extension MacDoc.Bib {
         var key: [String] = []
 
         mutating func run() throws {
-            let entries = try loadEntries(from: input, filterKeys: key)
+            let entries = try loadBibEntries(from: input, filterKeys: key)
 
             let html: String
             if full {
-                html = buildFullHTML(entries: entries)
+                html = buildAPAFullHTML(entries: entries, css: css)
             } else {
                 let cssString = css == .minimal ? APACSS.minimal : APACSS.web
                 html = BibToAPAHTMLFormatter.formatReferenceListWithCSS(entries, css: cssString)
             }
 
-            try writeOutput(html, to: output)
-        }
-
-        private func buildFullHTML(entries: [BibEntry]) -> String {
-            let cssString = css == .minimal ? APACSS.minimal : APACSS.web
-            let body = BibToAPAHTMLFormatter.formatReferenceList(entries)
-            return """
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>APA 7 References</title>
-            <style>
-            \(cssString)
-            </style>
-            </head>
-            <body>
-            <div class="apa-reference-list">
-            \(body)
-            </div>
-            </body>
-            </html>
-            """
+            try writeStringOutput(html, to: output)
         }
     }
 }
@@ -99,9 +76,9 @@ extension MacDoc.Bib {
         var compact: Bool = false
 
         mutating func run() throws {
-            let entries = try loadEntries(from: input, filterKeys: key)
+            let entries = try loadBibEntries(from: input, filterKeys: key)
             let json = try BibToAPAJSONFormatter.formatJSON(entries, prettyPrint: !compact)
-            try writeOutput(json, to: output)
+            try writeStringOutput(json, to: output)
         }
     }
 }
@@ -127,14 +104,14 @@ extension MacDoc.Bib {
         var key: [String] = []
 
         mutating func run() throws {
-            let entries = try loadEntries(from: input, filterKeys: key)
+            let entries = try loadBibEntries(from: input, filterKeys: key)
 
             var md = BibToAPAFormatter.formatReferenceList(entries)
             if heading {
                 md = "## References\n\n" + md
             }
 
-            try writeOutput(md, to: output)
+            try writeStringOutput(md, to: output)
         }
     }
 }
@@ -154,10 +131,7 @@ extension MacDoc.Bib {
         var showType: Bool = false
 
         mutating func run() throws {
-            let inputURL = URL(fileURLWithPath: input)
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("找不到輸入檔案: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             let bibFile = try BibParser.parse(filePath: inputURL.path)
             for entry in bibFile.entries {
@@ -171,45 +145,5 @@ extension MacDoc.Bib {
                 Data("\n共 \(bibFile.entries.count) 筆 entries\n".utf8)
             )
         }
-    }
-}
-
-// MARK: - CSS Style Enum
-enum CSSStyle: String, ExpressibleByArgument, CaseIterable {
-    case minimal
-    case web
-}
-
-// MARK: - Shared Helpers
-
-private func loadEntries(from path: String, filterKeys: [String]) throws -> [BibEntry] {
-    let inputURL = URL(fileURLWithPath: path)
-    guard FileManager.default.fileExists(atPath: inputURL.path) else {
-        throw ValidationError("找不到輸入檔案: \(path)")
-    }
-
-    let bibFile = try BibParser.parse(filePath: inputURL.path)
-    var entries = bibFile.entries
-
-    if !filterKeys.isEmpty {
-        let keySet = Set(filterKeys)
-        entries = entries.filter { keySet.contains($0.key) }
-        if entries.isEmpty {
-            throw ValidationError("找不到指定的 entry keys: \(filterKeys.joined(separator: ", "))")
-        }
-    }
-
-    return entries
-}
-
-private func writeOutput(_ content: String, to outputPath: String?) throws {
-    if let outputPath = outputPath {
-        let outputURL = URL(fileURLWithPath: outputPath)
-        try content.write(to: outputURL, atomically: true, encoding: .utf8)
-        FileHandle.standardError.write(
-            Data("已寫入: \(outputURL.path)\n".utf8)
-        )
-    } else {
-        print(content)
     }
 }

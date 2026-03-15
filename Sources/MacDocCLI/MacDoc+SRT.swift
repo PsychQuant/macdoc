@@ -33,10 +33,7 @@ extension MacDoc.SRT {
         var frontmatter: Bool = false
 
         mutating func run() async throws {
-            let inputURL = URL(fileURLWithPath: input)
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("找不到輸入檔案: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             var options = ConversionOptions.default
             options.includeFrontmatter = frontmatter
