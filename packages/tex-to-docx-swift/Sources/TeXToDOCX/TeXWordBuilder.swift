@@ -2,8 +2,8 @@ import Foundation
 import CommonConverterSwift
 import OOXMLSwift
 
-// MARK: - Colors (matching commands.tex definitions)
-private enum TeXColor {
+// MARK: - Fallback colors (used when preamble doesn't define them)
+private enum DefaultColor {
     static let titlePink = "CC0066"
     static let keywordBlue = "002060"
     static let timecodeGray = "808080"
@@ -23,14 +23,23 @@ struct TeXWordBuilder {
     private var lines: [String] = []
     private var cursor = 0
 
+    /// Color table parsed from preamble \definecolor commands
+    private var colors: TeXPreambleParser.ColorTable
+
     init(source: String, sourceURL: URL, options: ConversionOptions) {
         self.source = source
         self.sourceURL = sourceURL
         self.options = options
+        // Parse colors from the full source (preamble included)
+        self.colors = TeXPreambleParser.parseColors(from: source)
+    }
+
+    /// Resolve a color name via preamble definitions, falling back to defaults
+    private func color(_ name: String, fallback: String) -> String {
+        colors.resolve(name, fallback: fallback)
     }
 
     mutating func build() -> WordDocument {
-        // Strip preamble (everything before \begin{document})
         let body = extractDocumentBody(source)
         lines = body.components(separatedBy: .newlines)
         cursor = 0
@@ -38,13 +47,18 @@ struct TeXWordBuilder {
         while cursor < lines.count {
             let line = lines[cursor].trimmingCharacters(in: .whitespaces)
 
-            // Skip empty lines and comments
             if line.isEmpty || line.hasPrefix("%") {
                 cursor += 1
                 continue
             }
 
-            // Skip LaTeX commands we don't render
+            // \begin{titlepage} ... \end{titlepage} → parse as cover
+            if line.hasPrefix("\\begin{titlepage}") {
+                cursor += 1
+                emitTitlePage()
+                continue
+            }
+
             if isSkippableLine(line) {
                 cursor += 1
                 continue
@@ -64,28 +78,32 @@ struct TeXWordBuilder {
                 continue
             }
 
-            // \section{...}
             if let title = matchCommand("section", in: line) {
                 emitSection(title)
                 cursor += 1
                 continue
             }
 
-            // \subsection{...}
             if let title = matchCommand("subsection", in: line) {
                 emitSubsection(title)
                 cursor += 1
                 continue
             }
 
-            // \subsubsection{...}
             if let title = matchCommand("subsubsection", in: line) {
                 emitSubsubsection(title)
                 cursor += 1
                 continue
             }
 
-            // Regular paragraph text
+            // Lines with inline formatting (\fontsize, \color, \bfseries)
+            // that aren't recognized commands → heuristic parse
+            if line.contains("\\fontsize") || line.contains("\\color{") {
+                emitFormattedLine(line)
+                cursor += 1
+                continue
+            }
+
             emitParagraph(line)
             cursor += 1
         }
@@ -104,11 +122,110 @@ struct TeXWordBuilder {
             return source
         }
         let afterBegin = source[beginRange.upperBound...]
-
         if let endRange = afterBegin.range(of: "\\end{document}") {
             return String(afterBegin[..<endRange.lowerBound])
         }
         return String(afterBegin)
+    }
+
+    // MARK: - Titlepage parser (heuristic)
+
+    /// Parse \begin{titlepage} ... \end{titlepage} block
+    /// Each line with \fontsize + text → a centered paragraph with matching size/color
+    private mutating func emitTitlePage() {
+        var titleLines: [(text: String, sizePt: Int, colorHex: String?, bold: Bool)] = []
+
+        while cursor < lines.count {
+            let line = lines[cursor].trimmingCharacters(in: .whitespaces)
+            cursor += 1
+
+            if line.hasPrefix("\\end{titlepage}") { break }
+            if line.isEmpty || line.hasPrefix("%") || line.hasPrefix("\\centering") ||
+               line.hasPrefix("\\vspace") || line.hasPrefix("\\vfill") { continue }
+
+            // Parse formatting from the line
+            let font = TeXPreambleParser.parseFontSize(from: line)
+            let colorName = extractColorName(from: line)
+            let resolvedColor = colorName.flatMap { colors.resolve($0) }
+            let bold = TeXPreambleParser.isBold(line)
+            let text = TeXPreambleParser.extractText(from: line)
+
+            guard !text.isEmpty else { continue }
+
+            titleLines.append((
+                text: text,
+                sizePt: font?.sizePt ?? 14,
+                colorHex: resolvedColor,
+                bold: bold
+            ))
+        }
+
+        guard !titleLines.isEmpty else { return }
+
+        // Emit page break before cover
+        var breakPara = Paragraph()
+        breakPara.properties.pageBreakBefore = true
+        document.appendParagraph(breakPara)
+
+        // Emit each title line as centered paragraph
+        for (index, item) in titleLines.enumerated() {
+            var props = RunProperties()
+            props.fontSize = item.sizePt * 2  // half-points
+            props.bold = item.bold
+            if let hex = item.colorHex { props.color = hex }
+
+            let run = Run(text: item.text, properties: props)
+            var para = Paragraph(runs: [run])
+            para.properties.alignment = .center
+
+            // Spacing: more space before first, after last
+            let before = index == 0 ? 2000 : 240
+            let after = index == titleLines.count - 1 ? 2000 : 240
+            para.properties.spacing = Spacing(before: before, after: after)
+
+            document.appendParagraph(para)
+        }
+
+        // Page break after cover
+        var afterBreak = Paragraph()
+        afterBreak.properties.pageBreakBefore = true
+        document.appendParagraph(afterBreak)
+    }
+
+    // MARK: - Formatted line (heuristic)
+
+    /// Parse a line with inline \fontsize/\color/\bfseries and emit styled paragraph
+    private mutating func emitFormattedLine(_ line: String) {
+        let font = TeXPreambleParser.parseFontSize(from: line)
+        let colorName = extractColorName(from: line)
+        let resolvedColor = colorName.flatMap { colors.resolve($0) }
+        let bold = TeXPreambleParser.isBold(line)
+        let text = TeXPreambleParser.extractText(from: line)
+
+        guard !text.isEmpty else { return }
+
+        var props = RunProperties()
+        if let font = font { props.fontSize = font.sizePt * 2 }
+        if let hex = resolvedColor { props.color = hex }
+        props.bold = bold
+
+        let run = Run(text: text, properties: props)
+        var para = Paragraph(runs: [run])
+        para.properties.spacing = Spacing(before: 0, after: 60)
+        document.appendParagraph(para)
+    }
+
+    // MARK: - Helpers
+
+    /// Extract \color{name} → name (before resolving to hex)
+    private func extractColorName(from line: String) -> String? {
+        let pattern = #"\\color\{([^}]+)\}"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let r = Range(match.range(at: 1), in: line) else {
+            return nil
+        }
+        return String(line[r])
     }
 
     // MARK: - Command matchers
@@ -141,14 +258,14 @@ struct TeXWordBuilder {
     private func isSkippableLine(_ line: String) -> Bool {
         let skippable = [
             "\\maketitle", "\\tableofcontents", "\\clearpage", "\\cleardoublepage",
-            "\\newpage", "\\thispagestyle", "\\addcontentsline", "\\vspace",
-            "\\begin{titlepage}", "\\end{titlepage}", "\\begin{center}", "\\end{center}",
+            "\\newpage", "\\thispagestyle", "\\addcontentsline",
+            "\\begin{center}", "\\end{center}",
             "\\begin{flushleft}", "\\end{flushleft}",
+            "\\pagenumbering",
         ]
         for prefix in skippable {
             if line.hasPrefix(prefix) { return true }
         }
-        // Skip \vspace*, \setlength, etc.
         if line.hasPrefix("\\vspace") || line.hasPrefix("\\setlength") { return true }
         return false
     }
@@ -156,28 +273,19 @@ struct TeXWordBuilder {
     // MARK: - Emitters
 
     private mutating func emitPianMing(line1: String, line2: String) {
-        // Page break before
         var breakPara = Paragraph()
         breakPara.properties.pageBreakBefore = true
         document.appendParagraph(breakPara)
 
-        // Title line 1
-        let run1 = Run(text: line1, properties: RunProperties(
-            bold: true,
-            fontSize: 48,       // 24pt
-            color: TeXColor.titlePink
-        ))
+        let titleColor = color("titlePink", fallback: DefaultColor.titlePink)
+
+        let run1 = Run(text: line1, properties: RunProperties(bold: true, fontSize: 48, color: titleColor))
         var para1 = Paragraph(runs: [run1])
         para1.properties.alignment = .center
         para1.properties.spacing = Spacing(before: 4000, after: 240)
         document.appendParagraph(para1)
 
-        // Title line 2
-        let run2 = Run(text: line2, properties: RunProperties(
-            bold: true,
-            fontSize: 48,
-            color: TeXColor.titlePink
-        ))
+        let run2 = Run(text: line2, properties: RunProperties(bold: true, fontSize: 48, color: titleColor))
         var para2 = Paragraph(runs: [run2])
         para2.properties.alignment = .center
         para2.properties.spacing = Spacing(before: 0, after: 4000)
@@ -185,38 +293,38 @@ struct TeXWordBuilder {
     }
 
     private mutating func emitZhaiYao(_ content: String) {
+        let borderColor = color("summaryBorder", fallback: DefaultColor.summaryBorder)
+        let bgColor = color("summaryBg", fallback: DefaultColor.summaryBackground)
+
         let diamondRun = Run(text: "◆", properties: RunProperties(fontSize: 28))
         let textRun = Run(text: content, properties: RunProperties(fontSize: 28))
 
         var para = Paragraph(runs: [diamondRun, textRun])
         para.properties.border = ParagraphBorder.all(
-            ParagraphBorderStyle(type: .single, color: TeXColor.summaryBorder, size: 4)
+            ParagraphBorderStyle(type: .single, color: borderColor, size: 4)
         )
-        para.properties.shading = CellShading.solid(TeXColor.summaryBackground)
+        para.properties.shading = CellShading.solid(bgColor)
         para.properties.spacing = Spacing(before: 120, after: 120)
         para.properties.indentation = Indentation(left: 120, right: 120)
         document.appendParagraph(para)
     }
 
     private mutating func emitSection(_ title: String) {
-        let run = Run(text: title, properties: RunProperties(
-            bold: true,
-            fontSize: 32,       // 16pt
-            color: TeXColor.sectionFg
-        ))
+        let bg = color("sectionBg", fallback: DefaultColor.sectionBg)
+        let fg = color("sectionFg", fallback: DefaultColor.sectionFg)
+
+        let run = Run(text: title, properties: RunProperties(bold: true, fontSize: 32, color: fg))
         var para = Paragraph(runs: [run])
         para.properties.style = "Heading2"
-        para.properties.shading = CellShading.solid(TeXColor.sectionBg)
+        para.properties.shading = CellShading.solid(bg)
         para.properties.spacing = Spacing(before: 360, after: 120)
         document.appendParagraph(para)
     }
 
     private mutating func emitSubsection(_ title: String) {
-        let run = Run(text: title, properties: RunProperties(
-            bold: true,
-            fontSize: 32,       // 16pt
-            color: TeXColor.subsectionBrown
-        ))
+        let c = color("titleBrown", fallback: DefaultColor.subsectionBrown)
+
+        let run = Run(text: title, properties: RunProperties(bold: true, fontSize: 32, color: c))
         var para = Paragraph(runs: [run])
         para.properties.style = "Heading3"
         para.properties.spacing = Spacing(before: 240, after: 120)
@@ -224,12 +332,9 @@ struct TeXWordBuilder {
     }
 
     private mutating func emitSubsubsection(_ title: String) {
-        let displayTitle = "【\(title)】"
-        let run = Run(text: displayTitle, properties: RunProperties(
-            bold: true,
-            fontSize: 28,       // 14pt
-            color: TeXColor.subsubsectionBlue
-        ))
+        let c = color("subsubBlue", fallback: DefaultColor.subsubsectionBlue)
+
+        let run = Run(text: "【\(title)】", properties: RunProperties(bold: true, fontSize: 28, color: c))
         var para = Paragraph(runs: [run])
         para.properties.style = "Heading4"
         para.properties.spacing = Spacing(before: 240, after: 120)
@@ -246,43 +351,30 @@ struct TeXWordBuilder {
 
     // MARK: - Inline command parser
 
-    /// Parse a line and convert \kw{}, \tc{}, \textbf{} etc. into styled runs
     func parseInlineCommands(_ text: String) -> [Run] {
         var runs: [Run] = []
         var remaining = text[text.startIndex...]
 
         while !remaining.isEmpty {
-            // Find the next backslash command
             guard let backslashIndex = remaining.firstIndex(of: "\\") else {
-                // No more commands — emit rest as plain text
                 let plain = cleanLaTeX(String(remaining))
-                if !plain.isEmpty {
-                    runs.append(Run(text: plain))
-                }
+                if !plain.isEmpty { runs.append(Run(text: plain)) }
                 break
             }
 
-            // Emit text before the command
             if backslashIndex > remaining.startIndex {
                 let before = cleanLaTeX(String(remaining[remaining.startIndex..<backslashIndex]))
-                if !before.isEmpty {
-                    runs.append(Run(text: before))
-                }
+                if !before.isEmpty { runs.append(Run(text: before)) }
             }
 
-            // Try to match known inline commands
             let fromBackslash = String(remaining[backslashIndex...])
 
             if let (content, len) = extractBraceContent("\\kw", from: fromBackslash) {
-                runs.append(Run(text: content, properties: RunProperties(
-                    bold: true,
-                    color: TeXColor.keywordBlue
-                )))
+                let c = color("keywordBlue", fallback: DefaultColor.keywordBlue)
+                runs.append(Run(text: content, properties: RunProperties(bold: true, color: c)))
                 remaining = remaining[remaining.index(backslashIndex, offsetBy: len)...]
             } else if let (content, len) = extractBraceContent("\\tc", from: fromBackslash) {
-                runs.append(Run(text: "(\(content))", properties: RunProperties(
-                    color: TeXColor.timecodeGray
-                )))
+                runs.append(Run(text: "(\(content))", properties: RunProperties(color: DefaultColor.timecodeGray)))
                 remaining = remaining[remaining.index(backslashIndex, offsetBy: len)...]
             } else if let (content, len) = extractBraceContent("\\textbf", from: fromBackslash) {
                 runs.append(Run(text: content, properties: RunProperties(bold: true)))
@@ -294,27 +386,19 @@ struct TeXWordBuilder {
                 runs.append(Run(text: content, properties: RunProperties(italic: true)))
                 remaining = remaining[remaining.index(backslashIndex, offsetBy: len)...]
             } else {
-                // Unknown command — skip past the backslash + command name
                 let afterBackslash = remaining.index(after: backslashIndex)
                 if afterBackslash < remaining.endIndex {
-                    // Skip command name (letters only)
                     var end = afterBackslash
-                    while end < remaining.endIndex && remaining[end].isLetter {
-                        end = remaining.index(after: end)
-                    }
-                    // If followed by {}, skip the braces and include content
+                    while end < remaining.endIndex && remaining[end].isLetter { end = remaining.index(after: end) }
                     if end < remaining.endIndex && remaining[end] == "{" {
                         if let (content, len) = extractBraceContentRaw(from: String(remaining[backslashIndex...])) {
                             let plain = cleanLaTeX(content)
-                            if !plain.isEmpty {
-                                runs.append(Run(text: plain))
-                            }
+                            if !plain.isEmpty { runs.append(Run(text: plain)) }
                             remaining = remaining[remaining.index(backslashIndex, offsetBy: len)...]
                         } else {
                             remaining = remaining[end...]
                         }
                     } else {
-                        // Command without braces (e.g., \par, \\) — skip it
                         remaining = remaining[end...]
                     }
                 } else {
@@ -322,16 +406,13 @@ struct TeXWordBuilder {
                 }
             }
         }
-
         return runs
     }
 
-    /// Extract content from \command{content}, returns (content, total consumed length)
     private func extractBraceContent(_ command: String, from text: String) -> (String, Int)? {
         guard text.hasPrefix(command) else { return nil }
         let afterCommand = text.dropFirst(command.count)
         guard afterCommand.first == "{" else { return nil }
-
         var depth = 0
         var contentStart: String.Index?
         for i in afterCommand.indices {
@@ -350,7 +431,6 @@ struct TeXWordBuilder {
         return nil
     }
 
-    /// Extract content from any \command{content}
     private func extractBraceContentRaw(from text: String) -> (String, Int)? {
         guard let openBrace = text.firstIndex(of: "{") else { return nil }
         var depth = 0
@@ -369,7 +449,6 @@ struct TeXWordBuilder {
         return nil
     }
 
-    /// Remove leftover LaTeX artifacts
     private func cleanLaTeX(_ text: String) -> String {
         text
             .replacingOccurrences(of: "~", with: " ")
@@ -384,6 +463,7 @@ struct TeXWordBuilder {
             .replacingOccurrences(of: "\\_", with: "_")
             .replacingOccurrences(of: "\\{", with: "{")
             .replacingOccurrences(of: "\\}", with: "}")
+            .replacingOccurrences(of: "--", with: "–")
             .trimmingCharacters(in: .whitespaces)
     }
 }

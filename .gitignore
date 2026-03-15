@@ -54,6 +54,7 @@ packages/
 !packages/tex-to-docx-swift/Sources/TeXToDOCX/
 !packages/tex-to-docx-swift/Sources/TeXToDOCX/TeXToDOCXConverter.swift
 !packages/tex-to-docx-swift/Sources/TeXToDOCX/TeXWordBuilder.swift
+!packages/tex-to-docx-swift/Sources/TeXToDOCX/TeXPreambleParser.swift
 !packages/tex-to-docx-swift/Tests/
 !packages/tex-to-docx-swift/Tests/TeXToDOCXTests/
 mcp/
