@@ -43,6 +43,11 @@ packages/
 !packages/html-to-md-swift/Tests/
 !packages/html-to-md-swift/Tests/HTMLToMDTests/
 !packages/html-to-md-swift/Tests/HTMLToMDTests/HTMLConverterTests.swift
+!packages/marker-word-converter-swift/
+!packages/marker-word-converter-swift/Package.swift
+!packages/marker-word-converter-swift/Sources/
+!packages/marker-word-converter-swift/Sources/MarkerWordConverter/
+!packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
 mcp/
 
 # Temp files

@@ -11,9 +11,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.5.1"),
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.1"),
-        .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
-        .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
+        .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
         .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
         .package(name: "HTMLToMD", path: "packages/html-to-md-swift"),
         .package(name: "MDToHTML", path: "packages/md-to-html-swift"),
@@ -23,15 +21,6 @@ let package = Package(
         .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
     ],
     targets: [
-        .target(
-            name: "MarkerWordConverter",
-            dependencies: [
-                .product(name: "CommonConverterSwift", package: "common-converter-swift"),
-                .product(name: "OOXMLSwift", package: "ooxml-swift"),
-                .product(name: "MarkdownSwift", package: "markdown-swift"),
-                .product(name: "MarkerSwift", package: "marker-swift"),
-            ]
-        ),
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
@@ -40,7 +29,7 @@ let package = Package(
                 .product(name: "HTMLToMD", package: "HTMLToMD"),
                 .product(name: "MDToHTML", package: "MDToHTML"),
                 .product(name: "SRTToHTML", package: "SRTToHTML"),
-                "MarkerWordConverter",
+                .product(name: "MarkerWordConverter", package: "MarkerWordConverter"),
                 .product(name: "PDFToLaTeXCore", package: "pdf-to-latex-swift"),
                 .product(name: "BibAPAToHTML", package: "BibAPAToHTML"),
                 .product(name: "BibAPAToJSON", package: "BibAPAToJSON"),

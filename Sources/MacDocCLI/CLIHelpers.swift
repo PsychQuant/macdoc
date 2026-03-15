@@ -1,7 +1,6 @@
 import Foundation
 import ArgumentParser
 import BibAPAToHTML
-import BiblatexAPA
 
 // MARK: - File Validation
 
