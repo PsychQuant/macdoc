@@ -1,29 +1,17 @@
 import ArgumentParser
 import Foundation
 import CommonConverterSwift
-import SRTToHTML
+import WordToHTML
 
-// MARK: - SRT 子命令群
+// MARK: - word-to-html
 extension MacDoc {
-    struct SRT: AsyncParsableCommand {
+    struct WordToHTML: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            commandName: "srt",
-            abstract: "轉換 SRT 到 HTML（建議改用 macdoc convert --to html）",
-            subcommands: [ToHTML.self],
-            defaultSubcommand: ToHTML.self
-        )
-    }
-}
-
-// MARK: - srt to-html
-extension MacDoc.SRT {
-    struct ToHTML: AsyncParsableCommand {
-        static let configuration = CommandConfiguration(
-            commandName: "to-html",
-            abstract: "將 SRT (.srt) 轉換為 HTML"
+            commandName: "word-to-html",
+            abstract: "轉換 Word (.docx) 到 HTML"
         )
 
-        @Argument(help: "輸入 .srt 檔案路徑")
+        @Argument(help: "輸入 .docx 檔案路徑")
         var input: String
 
         @Option(name: [.short, .long], help: "輸出 .html 檔案路徑（預設為 stdout）")
@@ -32,13 +20,23 @@ extension MacDoc.SRT {
         @Flag(name: .long, help: "輸出前加入 HTML comment frontmatter")
         var frontmatter: Bool = false
 
+        @Option(name: .long, help: "抽取圖片到指定目錄，並在 HTML 中使用相對路徑")
+        var figuresDirectory: String?
+
         mutating func run() async throws {
-            let inputURL = try validatedInputURL(input)
+            let inputURL = URL(fileURLWithPath: input)
+            guard FileManager.default.fileExists(atPath: inputURL.path) else {
+                throw ValidationError("找不到輸入檔案: \(input)")
+            }
 
             var options = ConversionOptions.default
             options.includeFrontmatter = frontmatter
+            options.figuresDirectory = figuresDirectory.map { URL(fileURLWithPath: $0) }
+            if options.figuresDirectory != nil {
+                options.fidelity = .markdownWithFigures
+            }
 
-            let converter = SRTConverter()
+            let converter = WordHTMLConverter()
             if let outputPath = output {
                 let outputURL = URL(fileURLWithPath: outputPath)
                 try converter.convertToFile(input: inputURL, output: outputURL, options: options)

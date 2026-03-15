@@ -1,6 +1,6 @@
 import ArgumentParser
 import Foundation
-import HTMLToWordSwift
+import HTMLToWord
 
 // MARK: - html-to-word
 extension MacDoc {

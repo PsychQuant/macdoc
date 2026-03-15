@@ -2,31 +2,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "HTMLToWord",
+    name: "WordToHTML",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "HTMLToWord", targets: ["HTMLToWord"]),
+        .library(name: "WordToHTML", targets: ["WordToHTML"]),
     ],
     dependencies: [
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.3"),
-        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.4"),
     ],
     targets: [
         .target(
-            name: "HTMLToWord",
+            name: "WordToHTML",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
-                .product(name: "SwiftSoup", package: "SwiftSoup"),
             ]
         ),
         .testTarget(
-            name: "HTMLToWordTests",
-            dependencies: [
-                "HTMLToWord",
-                .product(name: "OOXMLSwift", package: "ooxml-swift"),
-            ]
+            name: "WordToHTMLTests",
+            dependencies: ["WordToHTML"]
         ),
     ]
 )
