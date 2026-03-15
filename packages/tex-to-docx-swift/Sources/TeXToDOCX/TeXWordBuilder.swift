@@ -23,20 +23,24 @@ struct TeXWordBuilder {
     private var lines: [String] = []
     private var cursor = 0
 
-    /// Color table parsed from preamble \definecolor commands
-    private var colors: TeXPreambleParser.ColorTable
+    /// Full preamble config (colors, fonts, titleformat)
+    private var config: TeXPreambleParser.PreambleConfig
 
     init(source: String, sourceURL: URL, options: ConversionOptions) {
         self.source = source
         self.sourceURL = sourceURL
         self.options = options
-        // Parse colors from the full source (preamble included)
-        self.colors = TeXPreambleParser.parseColors(from: source)
+        self.config = TeXPreambleParser.parse(from: source)
     }
 
     /// Resolve a color name via preamble definitions, falling back to defaults
     private func color(_ name: String, fallback: String) -> String {
-        colors.resolve(name, fallback: fallback)
+        config.colors.resolve(name, fallback: fallback)
+    }
+
+    /// Resolve a font command (e.g. "songti") to system font name
+    private func font(_ command: String) -> String? {
+        config.fonts.resolve(command)
     }
 
     mutating func build() -> WordDocument {
@@ -146,7 +150,7 @@ struct TeXWordBuilder {
             // Parse formatting from the line
             let font = TeXPreambleParser.parseFontSize(from: line)
             let colorName = extractColorName(from: line)
-            let resolvedColor = colorName.flatMap { colors.resolve($0) }
+            let resolvedColor = colorName.flatMap { config.colors.resolve($0) }
             let bold = TeXPreambleParser.isBold(line)
             let text = TeXPreambleParser.extractText(from: line)
 
@@ -198,7 +202,7 @@ struct TeXWordBuilder {
     private mutating func emitFormattedLine(_ line: String) {
         let font = TeXPreambleParser.parseFontSize(from: line)
         let colorName = extractColorName(from: line)
-        let resolvedColor = colorName.flatMap { colors.resolve($0) }
+        let resolvedColor = colorName.flatMap { config.colors.resolve($0) }
         let bold = TeXPreambleParser.isBold(line)
         let text = TeXPreambleParser.extractText(from: line)
 
@@ -304,19 +308,24 @@ struct TeXWordBuilder {
     // MARK: - Emitters
 
     private mutating func emitPianMing(line1: String, line2: String) {
+        // From commands.tex: \songti\fontsize{24pt}{30pt}\bfseries\color{titlePink}
         var breakPara = Paragraph()
         breakPara.properties.pageBreakBefore = true
         document.appendParagraph(breakPara)
 
         let titleColor = color("titlePink", fallback: DefaultColor.titlePink)
+        let songtiFont = font("songti")
 
-        let run1 = Run(text: line1, properties: RunProperties(bold: true, fontSize: 48, color: titleColor))
+        var runProps = RunProperties(bold: true, fontSize: 48, color: titleColor)
+        if let f = songtiFont { runProps.fontName = f }
+
+        let run1 = Run(text: line1, properties: runProps)
         var para1 = Paragraph(runs: [run1])
         para1.properties.alignment = .center
         para1.properties.spacing = Spacing(before: 4000, after: 240)
         document.appendParagraph(para1)
 
-        let run2 = Run(text: line2, properties: RunProperties(bold: true, fontSize: 48, color: titleColor))
+        let run2 = Run(text: line2, properties: runProps)
         var para2 = Paragraph(runs: [run2])
         para2.properties.alignment = .center
         para2.properties.spacing = Spacing(before: 0, after: 4000)
@@ -324,11 +333,16 @@ struct TeXWordBuilder {
     }
 
     private mutating func emitZhaiYao(_ content: String) {
-        let borderColor = color("summaryBorder", fallback: DefaultColor.summaryBorder)
-        let bgColor = color("summaryBg", fallback: DefaultColor.summaryBackground)
+        // From commands.tex: \fcolorbox{black!40}{black!5}{\songti\fontsize{14pt}{18pt} ◆#1}
+        let borderColor = color("black!40", fallback: "666666")
+        let bgColor = color("black!5", fallback: "F2F2F2")
+        let songtiFont = font("songti")
 
-        let diamondRun = Run(text: "◆", properties: RunProperties(fontSize: 28))
-        let textRun = Run(text: content, properties: RunProperties(fontSize: 28))
+        var runProps = RunProperties(fontSize: 28)  // 14pt
+        if let f = songtiFont { runProps.fontName = f }
+
+        let diamondRun = Run(text: "◆", properties: runProps)
+        let textRun = Run(text: content, properties: runProps)
 
         var para = Paragraph(runs: [diamondRun, textRun])
         para.properties.border = ParagraphBorder.all(
@@ -341,10 +355,15 @@ struct TeXWordBuilder {
     }
 
     private mutating func emitSection(_ title: String) {
+        let fmt = config.sectionFormat
         let bg = color("sectionBg", fallback: DefaultColor.sectionBg)
-        let fg = color("sectionFg", fallback: DefaultColor.sectionFg)
+        let sizePt = fmt?.fontSizePt ?? 16
+        let songtiFont = fmt?.fontFamily.flatMap { font($0) }
 
-        let run = Run(text: title, properties: RunProperties(bold: true, fontSize: 32, color: fg))
+        var runProps = RunProperties(bold: fmt?.bold ?? true, fontSize: sizePt * 2, color: "FFFFFF")
+        if let f = songtiFont { runProps.fontName = f }
+
+        let run = Run(text: title, properties: runProps)
         var para = Paragraph(runs: [run])
         para.properties.style = "Heading2"
         para.properties.shading = CellShading.solid(bg)
@@ -353,19 +372,34 @@ struct TeXWordBuilder {
     }
 
     private mutating func emitSubsection(_ title: String) {
-        let c = color("titleBrown", fallback: DefaultColor.subsectionBrown)
+        let fmt = config.subsectionFormat
+        let colorName = fmt?.colorName ?? "titleBrown"
+        let c = color(colorName, fallback: DefaultColor.subsectionBrown)
+        let sizePt = fmt?.fontSizePt ?? 16
+        let songtiFont = fmt?.fontFamily.flatMap { font($0) }
 
-        let run = Run(text: title, properties: RunProperties(bold: true, fontSize: 32, color: c))
+        var runProps = RunProperties(bold: fmt?.bold ?? true, fontSize: sizePt * 2, color: c)
+        if let f = songtiFont { runProps.fontName = f }
+
+        let run = Run(text: title, properties: runProps)
         var para = Paragraph(runs: [run])
         para.properties.style = "Heading3"
+        if fmt?.alignment == "center" { para.properties.alignment = .center }
         para.properties.spacing = Spacing(before: 240, after: 120)
         document.appendParagraph(para)
     }
 
     private mutating func emitSubsubsection(_ title: String) {
-        let c = color("subsubBlue", fallback: DefaultColor.subsubsectionBlue)
+        let fmt = config.subsubsectionFormat
+        let colorName = fmt?.colorName ?? "subsubBlue"
+        let c = color(colorName, fallback: DefaultColor.subsubsectionBlue)
+        let sizePt = fmt?.fontSizePt ?? 14
+        let songtiFont = fmt?.fontFamily.flatMap { font($0) }
 
-        let run = Run(text: "【\(title)】", properties: RunProperties(bold: true, fontSize: 28, color: c))
+        var runProps = RunProperties(bold: fmt?.bold ?? true, fontSize: sizePt * 2, color: c)
+        if let f = songtiFont { runProps.fontName = f }
+
+        let run = Run(text: "【\(title)】", properties: runProps)
         var para = Paragraph(runs: [run])
         para.properties.style = "Heading4"
         para.properties.spacing = Spacing(before: 240, after: 120)
@@ -401,8 +435,11 @@ struct TeXWordBuilder {
             let fromBackslash = String(remaining[backslashIndex...])
 
             if let (content, len) = extractBraceContent("\\kw", from: fromBackslash) {
+                // From commands.tex: \color{keywordBlue}
                 let c = color("keywordBlue", fallback: DefaultColor.keywordBlue)
-                runs.append(Run(text: content, properties: RunProperties(bold: true, color: c)))
+                var kwProps = RunProperties(bold: true, color: c)
+                // kw doesn't specify font, inherits main font
+                runs.append(Run(text: content, properties: kwProps))
                 remaining = remaining[remaining.index(backslashIndex, offsetBy: len)...]
             } else if let (content, len) = extractBraceContent("\\tc", from: fromBackslash) {
                 runs.append(Run(text: "(\(content))", properties: RunProperties(color: DefaultColor.timecodeGray)))
