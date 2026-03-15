@@ -53,10 +53,7 @@ public struct HTMLToWordConverter: DocumentConverter {
         if let utf8 = try? String(contentsOf: input, encoding: .utf8) {
             return utf8
         }
-        if let latin1 = try? String(contentsOf: input, encoding: .isoLatin1) {
-            return latin1
-        }
-        return try String(contentsOf: input, encoding: .utf8)
+        return try String(contentsOf: input, encoding: .isoLatin1)
     }
 
     private func renderDocumentXML(from document: WordDocument) throws -> String {
@@ -476,6 +473,10 @@ private struct HTMLWordBuilder {
         switch tag {
         case "h1": return "Heading1"
         case "h2": return "Heading2"
+        case "h3": return "Heading3"
+        case "h4": return "Heading4"
+        case "h5": return "Heading5"
+        case "h6": return "Heading6"
         default: return "Heading3"
         }
     }

@@ -9,21 +9,21 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
-        .package(name: "CommonConverterSwift", path: "../common-converter-swift"),
+        .package(url: "https://github.com/PsychQuant/doc-converter-swift.git", from: "0.4.0"),
     ],
     targets: [
         .target(
             name: "MDToHTMLSwift",
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown"),
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
         .testTarget(
             name: "MDToHTMLSwiftTests",
             dependencies: [
                 "MDToHTMLSwift",
-                .product(name: "CommonConverterSwift", package: "CommonConverterSwift"),
+                .product(name: "CommonConverterSwift", package: "doc-converter-swift"),
             ]
         ),
     ]
