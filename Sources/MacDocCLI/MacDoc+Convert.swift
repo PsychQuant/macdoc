@@ -2,25 +2,32 @@ import ArgumentParser
 import Foundation
 import CommonConverterSwift
 import WordToMDSwift
+import WordToHTML
 import HTMLToMD
+import HTMLToWord
 import MDToHTML
+import MDToWord
 import SRTToHTML
+import PDFToMD
+import PDFToDOCX
+import TeXToDOCX
 import BibAPAToHTML
 import BibAPAToJSON
 import BibAPAToMD
+import MarkerWordConverter
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
-    struct Convert: ParsableCommand {
+    struct Convert: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "convert",
             abstract: "Convert documents between formats (textutil-compatible)"
         )
 
-        @Option(name: .long, help: "Target format (md, html, json)")
+        @Option(name: .long, help: "Target format (md, html, docx, json, marker)")
         var to: String
 
-        @Option(name: .long, help: "Output file path")
+        @Option(name: .long, help: "Output file path (or directory for marker)")
         var output: String?
 
         @Flag(name: .long, help: "Force output to stdout")
@@ -35,10 +42,16 @@ extension MacDoc {
         @Flag(name: .long, help: "Output full HTML document instead of fragment")
         var full: Bool = false
 
+        @Flag(name: .long, help: "Include YAML frontmatter metadata")
+        var frontmatter: Bool = false
+
+        @Flag(name: .long, help: "Preserve <u>/<sup>/<sub>/<mark> as raw HTML in Markdown")
+        var htmlExtensions: Bool = false
+
         @Argument(help: "Input file")
         var input: String
 
-        mutating func run() throws {
+        mutating func run() async throws {
             let inputURL = try validatedInputURL(input)
 
             let ext = inputURL.pathExtension.lowercased()
@@ -48,11 +61,23 @@ extension MacDoc {
             case ("docx", "md"):
                 try convertWordToMD(inputURL: inputURL)
 
+            case ("docx", "html"):
+                try convertWordToHTML(inputURL: inputURL)
+
+            case ("docx", "marker"):
+                try await convertWordToMarker(inputURL: inputURL)
+
             case ("html", "md"), ("htm", "md"):
                 try convertHTMLToMD(inputURL: inputURL)
 
+            case ("html", "docx"), ("htm", "docx"):
+                try convertHTMLToWord(inputURL: inputURL)
+
             case ("md", "html"), ("markdown", "html"):
                 try convertMDToHTML(inputURL: inputURL)
+
+            case ("md", "docx"), ("markdown", "docx"):
+                try convertMDToWord(inputURL: inputURL)
 
             case ("srt", "html"):
                 try convertSRTToHTML(inputURL: inputURL)
@@ -66,9 +91,18 @@ extension MacDoc {
             case ("bib", "json"):
                 try convertBibToJSON(inputURL: inputURL)
 
+            case ("pdf", "md"):
+                try convertPDFToMD(inputURL: inputURL)
+
+            case ("pdf", "docx"):
+                try convertPDFToWord(inputURL: inputURL)
+
+            case ("tex", "docx"):
+                try convertTeXToWord(inputURL: inputURL)
+
             default:
                 throw ValidationError(
-                    "Conversion from .\(ext) to \(target) is not supported."
+                    "不支援從 .\(ext) 轉換到 \(target)"
                 )
             }
         }
@@ -77,7 +111,7 @@ extension MacDoc {
 
         private func convertWordToMD(inputURL: URL) throws {
             let options = ConversionOptions(
-                includeFrontmatter: false,
+                includeFrontmatter: frontmatter,
                 hardLineBreaks: hardBreaks,
                 tableStyle: .pipe,
                 headingStyle: .atx
@@ -85,30 +119,87 @@ extension MacDoc {
 
             let converter = WordConverter()
             if let outputPath = resolveOutputPath() {
-                let outputURL = URL(fileURLWithPath: outputPath)
-                try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+                try converter.convertToFile(input: inputURL, output: URL(fileURLWithPath: outputPath), options: options)
             } else {
                 try converter.convertToStdout(input: inputURL, options: options)
             }
+        }
+
+        // MARK: - Word → HTML
+
+        private func convertWordToHTML(inputURL: URL) throws {
+            var options = ConversionOptions.default
+            options.includeFrontmatter = frontmatter
+
+            let converter = WordHTMLConverter()
+            if let outputPath = resolveOutputPath() {
+                try converter.convertToFile(input: inputURL, output: URL(fileURLWithPath: outputPath), options: options)
+            } else {
+                try converter.convertToStdout(input: inputURL, options: options)
+            }
+        }
+
+        // MARK: - Word → Marker
+
+        private func convertWordToMarker(inputURL: URL) async throws {
+            guard !stdout else {
+                throw ValidationError("marker 是目錄結構，不支援 stdout 輸出")
+            }
+
+            let options = ConversionOptions(
+                includeFrontmatter: frontmatter,
+                hardLineBreaks: hardBreaks,
+                tableStyle: .pipe,
+                headingStyle: .atx
+            )
+
+            let outputDir: URL
+            if let outputPath = output {
+                outputDir = URL(fileURLWithPath: outputPath)
+            } else {
+                let inputDir = inputURL.deletingLastPathComponent()
+                let baseName = inputURL.deletingPathExtension().lastPathComponent
+                outputDir = inputDir.appendingPathComponent("\(baseName)_output")
+            }
+
+            let converter = MarkerWordConverter()
+            let result = try await converter.convert(
+                input: inputURL,
+                outputDirectory: outputDir,
+                options: options
+            )
+
+            FileHandle.standardError.write(Data("已寫入: \(outputDir.path)\n".utf8))
+            FileHandle.standardError.write(Data("  Markdown: \(result.markdownURL.path)\n".utf8))
+            FileHandle.standardError.write(Data("  Metadata: \(result.metadataURL.path)\n".utf8))
+            FileHandle.standardError.write(Data("  Images:   \(result.imagesDirectory.path)\n".utf8))
         }
 
         // MARK: - HTML → Markdown
 
         private func convertHTMLToMD(inputURL: URL) throws {
             let options = ConversionOptions(
-                includeFrontmatter: false,
+                includeFrontmatter: frontmatter,
                 hardLineBreaks: hardBreaks,
                 tableStyle: .pipe,
-                headingStyle: .atx
+                headingStyle: .atx,
+                useHTMLExtensions: htmlExtensions
             )
 
             let converter = HTMLConverter()
             if let outputPath = resolveOutputPath() {
-                let outputURL = URL(fileURLWithPath: outputPath)
-                try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+                try converter.convertToFile(input: inputURL, output: URL(fileURLWithPath: outputPath), options: options)
             } else {
                 try converter.convertToStdout(input: inputURL, options: options)
             }
+        }
+
+        // MARK: - HTML → Word
+
+        private func convertHTMLToWord(inputURL: URL) throws {
+            let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
+            try HTMLToWordConverter().convertToFile(input: inputURL, output: outputURL)
+            FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
         // MARK: - Markdown → HTML
@@ -117,21 +208,27 @@ extension MacDoc {
             let htmlOptions = HTMLOptions(fullDocument: full)
             let converter = MarkdownConverter()
             let result = try converter.convert(input: inputURL, options: htmlOptions)
+            try writeStringOutput(result, to: resolveOutputPath())
+        }
 
-            if let outputPath = resolveOutputPath() {
-                let outputURL = URL(fileURLWithPath: outputPath)
-                try result.write(to: outputURL, atomically: true, encoding: .utf8)
-                FileHandle.standardError.write(
-                    Data("Written to: \(outputURL.path)\n".utf8)
-                )
-            } else {
-                print(result)
-            }
+        // MARK: - Markdown → Word
+
+        private func convertMDToWord(inputURL: URL) throws {
+            var options = ConversionOptions.default
+            options.hardLineBreaks = hardBreaks
+
+            let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
+            try MarkdownToWordConverter().convertToFile(input: inputURL, output: outputURL, options: options)
+            FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
         // MARK: - SRT → HTML
 
         private func convertSRTToHTML(inputURL: URL) throws {
+            if css != .dark && css != .light {
+                throw ValidationError("SRT → HTML 的 --css 只支援 dark 或 light")
+            }
+
             let converter = SRTConverter()
 
             if full {
@@ -141,8 +238,7 @@ extension MacDoc {
             } else {
                 let options = ConversionOptions.default
                 if let outputPath = resolveOutputPath() {
-                    let outputURL = URL(fileURLWithPath: outputPath)
-                    try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+                    try converter.convertToFile(input: inputURL, output: URL(fileURLWithPath: outputPath), options: options)
                 } else {
                     try converter.convertToStdout(input: inputURL, options: options)
                 }
@@ -152,6 +248,10 @@ extension MacDoc {
         // MARK: - Bib → HTML
 
         private func convertBibToHTML(inputURL: URL) throws {
+            if css != .minimal && css != .web {
+                throw ValidationError("Bib → HTML 的 --css 只支援 minimal 或 web")
+            }
+
             let entries = try loadBibEntries(from: inputURL)
             let cssString = css == .minimal ? APACSS.minimal : APACSS.web
 
@@ -180,7 +280,7 @@ extension MacDoc {
                 html = BibToAPAHTMLFormatter.formatReferenceListWithCSS(entries, css: cssString)
             }
 
-            try writeBibOutput(html)
+            try writeStringOutput(html, to: resolveOutputPath())
         }
 
         // MARK: - Bib → Markdown
@@ -188,7 +288,7 @@ extension MacDoc {
         private func convertBibToMD(inputURL: URL) throws {
             let entries = try loadBibEntries(from: inputURL)
             let md = BibToAPAFormatter.formatReferenceList(entries)
-            try writeBibOutput(md)
+            try writeStringOutput(md, to: resolveOutputPath())
         }
 
         // MARK: - Bib → JSON
@@ -196,7 +296,44 @@ extension MacDoc {
         private func convertBibToJSON(inputURL: URL) throws {
             let entries = try loadBibEntries(from: inputURL)
             let json = try BibToAPAJSONFormatter.formatJSON(entries, prettyPrint: true)
-            try writeBibOutput(json)
+            try writeStringOutput(json, to: resolveOutputPath())
+        }
+
+        // MARK: - PDF → Markdown
+
+        private func convertPDFToMD(inputURL: URL) throws {
+            let options = ConversionOptions(
+                includeFrontmatter: frontmatter,
+                hardLineBreaks: hardBreaks,
+                tableStyle: .pipe,
+                headingStyle: .atx
+            )
+
+            let converter = PDFToMD.PDFConverter()
+            if let outputPath = resolveOutputPath() {
+                try converter.convertToFile(input: inputURL, output: URL(fileURLWithPath: outputPath), options: options)
+            } else {
+                try converter.convertToStdout(input: inputURL, options: options)
+            }
+        }
+
+        // MARK: - PDF → Word
+
+        private func convertPDFToWord(inputURL: URL) throws {
+            var options = ConversionOptions.default
+            options.hardLineBreaks = hardBreaks
+
+            let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
+            try PDFToDOCXConverter().convertToFile(input: inputURL, output: outputURL, options: options)
+            FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
+        }
+
+        // MARK: - TeX → Word
+
+        private func convertTeXToWord(inputURL: URL) throws {
+            let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
+            try TeXToDOCXConverter().convertToFile(input: inputURL, output: outputURL)
+            FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
         // MARK: - Helpers
@@ -208,21 +345,21 @@ extension MacDoc {
             return output
         }
 
+        /// Resolve the output URL for binary formats (docx).
+        /// --stdout is not supported; without --output, auto-generates same name with .docx extension.
+        private func resolveDocxOutputURL(inputURL: URL) throws -> URL {
+            if stdout {
+                throw ValidationError("docx 是二進位格式，不支援 stdout 輸出")
+            }
+            if let outputPath = output {
+                return URL(fileURLWithPath: outputPath)
+            }
+            return inputURL.deletingPathExtension().appendingPathExtension("docx")
+        }
+
         private func loadBibEntries(from inputURL: URL) throws -> [BibEntry] {
             let bibFile = try BibParser.parse(filePath: inputURL.path)
             return bibFile.entries
-        }
-
-        private func writeBibOutput(_ content: String) throws {
-            if let outputPath = resolveOutputPath() {
-                let outputURL = URL(fileURLWithPath: outputPath)
-                try content.write(to: outputURL, atomically: true, encoding: .utf8)
-                FileHandle.standardError.write(
-                    Data("Written to: \(outputURL.path)\n".utf8)
-                )
-            } else {
-                print(content)
-            }
         }
     }
 }

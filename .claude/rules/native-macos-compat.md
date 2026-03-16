@@ -36,7 +36,10 @@ macdoc 必須優先使用 macOS 原生 framework 處理文件，不引入外部 
 | `.docx` → `.html` | `convert --to html file.docx` | macdoc 多了 APA styling、SRT 等格式 |
 | `.docx` → `.txt` | `convert --to md file.docx` | macdoc 輸出結構化 Markdown |
 | `.html` → `.docx` | `convert --to docx file.html` | macdoc 透過 OOXML 直接生成 |
+| `.md` → `.docx` | `convert --to docx file.md` | macdoc 透過 OOXML 直接生成 |
 | `.pdf` → (不支援) | `convert --to md file.pdf` | macdoc 用 PDFKit 提取 |
+| `.pdf` → (不支援) | `convert --to docx file.pdf` | macdoc 用 PDFKit 提取 + OOXML 生成 |
+| `.tex` → (不支援) | `convert --to docx file.tex` | macdoc 解析 LaTeX 語法 + OOXML 生成 |
 
 ## 新增 converter 的檢查清單
 
