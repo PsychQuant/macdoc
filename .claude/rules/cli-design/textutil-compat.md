@@ -24,10 +24,11 @@ textutil -convert html -stdout      macdoc convert --to html --stdout file.md
 
 ## Format 短名
 
-| --to 值 | 全名 | 對應 package |
-|---------|------|-------------|
-| `md` | Markdown | `word-to-md`, `html-to-md`, `pdf-to-md` |
-| `html` | HTML | `md-to-html`, `srt-to-html`, `bib-apa-to-html` |
-| `docx` | Word | `md-to-word`, `html-to-word`, `pdf-to-docx` |
-| `json` | JSON | `bib-apa-to-json` |
-| `latex` | LaTeX | `pdf-to-latex` |
+| --to 值 | 全名 | 對應 package | 備註 |
+|---------|------|-------------|------|
+| `md` | Markdown | `word-to-md`, `html-to-md`, `pdf-to-md`, `bib-apa-to-md` | |
+| `html` | HTML | `word-to-html`, `md-to-html`, `srt-to-html`, `bib-apa-to-html` | |
+| `docx` | Word | `md-to-word`, `html-to-word`, `pdf-to-docx`, `tex-to-docx` | 二進位格式，不支援 stdout |
+| `json` | JSON | `bib-apa-to-json` | |
+| `tex` | LaTeX | `pdf-to-latex` | |
+| `marker` | Marker | `marker-word-converter` | 目錄輸出，不支援 stdout |

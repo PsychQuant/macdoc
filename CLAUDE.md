@@ -13,8 +13,8 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Package.swift              # CLI 的 Swift Package 定義
 ├── Sources/
 │   └── MacDocCLI/             # CLI 入口點
-│       ├── MacDoc.swift       # 主命令 + Word 子命令
-│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（textutil-compatible）
+│       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config 子命令群）
+│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（15 路由，textutil-compatible）
 │       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
 │       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
 │       ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown/JSON）
@@ -78,22 +78,25 @@ che-pdf-mcp
 # 建構主專案（在 repo 根目錄）
 swift build
 
-# 執行 CLI — 統一轉換入口（textutil-compatible）
-swift run macdoc convert --to md file.docx
-swift run macdoc convert --to html file.md [--full]
-swift run macdoc convert --to html file.srt
-swift run macdoc convert --to html file.bib [--full] [--css minimal|web]
-swift run macdoc convert --to md file.bib
-swift run macdoc convert --to json file.bib
-swift run macdoc convert --to md file.html
+# 執行 CLI — 統一轉換入口（textutil-compatible，15 路由）
+swift run macdoc convert --to md file.docx          # Word → Markdown
+swift run macdoc convert --to md file.docx --frontmatter  # Word → Markdown（含 YAML frontmatter）
+swift run macdoc convert --to html file.docx         # Word → HTML
+swift run macdoc convert --to marker file.docx       # Word → Marker 目錄（.md + _meta.json + images/）
+swift run macdoc convert --to html file.md [--full]  # Markdown → HTML
+swift run macdoc convert --to html file.md --html-extensions  # Markdown → HTML（啟用擴充語法）
+swift run macdoc convert --to docx file.md           # Markdown → Word
+swift run macdoc convert --to md file.html           # HTML → Markdown
+swift run macdoc convert --to docx file.html         # HTML → Word
+swift run macdoc convert --to html file.srt [--full] [--css dark|light]  # SRT → HTML
+swift run macdoc convert --to md file.pdf            # PDF → Markdown
+swift run macdoc convert --to docx file.pdf          # PDF → Word
+swift run macdoc convert --to docx file.tex          # TeX → Word
+swift run macdoc convert --to html file.bib [--full] [--css minimal|web]  # Bib → HTML
+swift run macdoc convert --to md file.bib            # Bib → Markdown
+swift run macdoc convert --to json file.bib          # Bib → JSON
 
-# 執行 CLI — Word
-swift run macdoc word input.docx -o output.md
-
-# 使用 Marker 模式（輸出 metadata + images）
-swift run macdoc word input.docx --marker -o output/
-
-# 執行 CLI — PDF to LaTeX（Phase 2 consolidation）
+# 執行 CLI — PDF pipeline（Phase 2 consolidation）
 swift run macdoc pdf normalize --project /path/to/project
 swift run macdoc pdf fix-envs --project /path/to/project [--fix]
 swift run macdoc pdf compile-check --project /path/to/project
@@ -193,12 +196,11 @@ swift package clean && swift build
 
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
-- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法
-- **Word**：標準模式（`.md`）、Marker 模式（`.md` + `_meta.json` + `images/`）
+- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，15 路由
 - **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
-- **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list）
+- **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list，支援 --key 過濾）
 - **Config**：AI 後端設定管理
-- **依賴**：word-to-md-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
+- **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
 
 #### che-word-mcp（145 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -303,12 +305,11 @@ swift build
 ## Key Files
 
 ### macdoc
-- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + Word + PDF + Bib + Config 子命令群）
-- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（textutil-compatible）
+- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config 子命令群）
+- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（15 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（Phase 1 pipeline + Phase 2 consolidation）
-- `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown）
+- `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
-- `Sources/MarkerWordConverter/MarkerWordConverter.swift` - Marker 模式轉換器
 
 ### pdf-to-latex-swift
 - `Sources/PDFToLaTeXCore/AIConfig.swift` - AI CLI 工具設定
@@ -340,7 +341,8 @@ swift build
 
 測試時可使用任意 `.docx` 文件：
 ```bash
-swift run macdoc word /path/to/test.docx --marker -o /tmp/test_output/
+swift run macdoc convert --to md /path/to/test.docx
+swift run macdoc convert --to marker /path/to/test.docx -o /tmp/test_output/
 ```
 
 ## Platform Requirements

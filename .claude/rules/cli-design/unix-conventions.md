@@ -12,3 +12,4 @@ macdoc CLI 遵循標準 Unix 命令列工具的設計慣例。
 6. **`--stdout` 強制輸出到 stdout** — 覆蓋 `--output`（stdout 優先）
 7. **`--` long flags** — 遵循 GNU 慣例（`--to`, `--output`, `--full`），不用單 dash
 8. **靜默原則** — 成功時不輸出多餘訊息到 stderr，除非寫檔時報告路徑
+9. **二進位/目錄格式不支援 stdout** — `docx`（二進位）和 `marker`（目錄結構）不能輸出到 stdout，必須寫入檔案或目錄

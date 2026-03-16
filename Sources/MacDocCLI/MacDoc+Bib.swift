@@ -9,7 +9,7 @@ extension MacDoc {
     struct Bib: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "bib",
-            abstract: "BibLaTeX (.bib) → APA 7 格式轉換",
+            abstract: "BibLaTeX (.bib) → APA 7 格式轉換（支援 --key filtering，無 --key 時可用 convert）",
             subcommands: [ToHTML.self, ToJSON.self, ToMarkdown.self, List.self]
         )
     }

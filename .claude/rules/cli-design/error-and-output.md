@@ -22,6 +22,11 @@ guard FileManager.default.fileExists(atPath: inputURL.path) else {
 - 寫入檔案後的狀態訊息寫到 stderr：`已寫入: <path>`
 - 不要重複實作 output 邏輯
 
+## 二進位與目錄格式限制
+
+- docx 是二進位格式，不支援 stdout 輸出；未指定 `--output` 時自動生成輸出路徑
+- marker 是目錄結構，不支援 stdout 輸出；必須用 `--output` 指定輸出目錄
+
 ## CSS / Full Document
 
 - `--full` 輸出完整 HTML 文件（DOCTYPE + head + CSS + body）
