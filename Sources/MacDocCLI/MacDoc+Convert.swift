@@ -26,7 +26,7 @@ extension MacDoc {
         @Flag(name: .long, help: "Force output to stdout")
         var stdout: Bool = false
 
-        @Option(name: .long, help: "CSS style for bib→html: minimal (academic) or web (modern)")
+        @Option(name: .long, help: "CSS style: minimal|web (bib), dark|light (srt)")
         var css: CSSStyle = .web
 
         @Flag(name: .long, help: "Treat soft breaks as hard line breaks")
@@ -39,10 +39,7 @@ extension MacDoc {
         var input: String
 
         mutating func run() throws {
-            let inputURL = URL(fileURLWithPath: input)
-            guard FileManager.default.fileExists(atPath: inputURL.path) else {
-                throw ValidationError("File not found: \(input)")
-            }
+            let inputURL = try validatedInputURL(input)
 
             let ext = inputURL.pathExtension.lowercased()
             let target = to.lowercased()
@@ -135,14 +132,20 @@ extension MacDoc {
         // MARK: - SRT → HTML
 
         private func convertSRTToHTML(inputURL: URL) throws {
-            let options = ConversionOptions.default
             let converter = SRTConverter()
 
-            if let outputPath = resolveOutputPath() {
-                let outputURL = URL(fileURLWithPath: outputPath)
-                try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+            if full {
+                let cssString = css == .light ? SRTCSS.light : SRTCSS.dark
+                let html = try converter.convertFull(input: inputURL, css: cssString)
+                try writeStringOutput(html, to: resolveOutputPath())
             } else {
-                try converter.convertToStdout(input: inputURL, options: options)
+                let options = ConversionOptions.default
+                if let outputPath = resolveOutputPath() {
+                    let outputURL = URL(fileURLWithPath: outputPath)
+                    try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+                } else {
+                    try converter.convertToStdout(input: inputURL, options: options)
+                }
             }
         }
 

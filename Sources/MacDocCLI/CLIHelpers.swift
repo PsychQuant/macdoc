@@ -74,7 +74,12 @@ func buildAPAFullHTML(entries: [BibEntry], css: CSSStyle) -> String {
 
 // MARK: - CSS Style Enum
 
+/// Unified CSS style for all HTML-outputting converters.
+/// - bib: `minimal` (academic) or `web` (modern)
+/// - srt: `dark` (dark theme) or `light` (print-friendly)
 enum CSSStyle: String, ExpressibleByArgument, CaseIterable {
     case minimal
     case web
+    case dark
+    case light
 }
