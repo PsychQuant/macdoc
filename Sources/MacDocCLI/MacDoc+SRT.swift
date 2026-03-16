@@ -17,7 +17,7 @@ extension MacDoc {
 
 // MARK: - srt to-html
 extension MacDoc.SRT {
-    struct ToHTML: AsyncParsableCommand {
+    struct ToHTML: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "to-html",
             abstract: "將 SRT (.srt) 轉換為 HTML"
@@ -29,22 +29,39 @@ extension MacDoc.SRT {
         @Option(name: [.short, .long], help: "輸出 .html 檔案路徑（預設為 stdout）")
         var output: String?
 
+        @Flag(name: .long, help: "輸出完整 HTML 文件（含 CSS）")
+        var full: Bool = false
+
+        @Option(name: .long, help: "CSS 風格：dark（深色）或 light（淺色）")
+        var css: SRTCSSStyle = .dark
+
         @Flag(name: .long, help: "輸出前加入 HTML comment frontmatter")
         var frontmatter: Bool = false
 
-        mutating func run() async throws {
+        mutating func run() throws {
             let inputURL = try validatedInputURL(input)
-
-            var options = ConversionOptions.default
-            options.includeFrontmatter = frontmatter
-
             let converter = SRTConverter()
-            if let outputPath = output {
-                let outputURL = URL(fileURLWithPath: outputPath)
-                try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+
+            if full {
+                let cssString = css == .light ? SRTCSS.light : SRTCSS.dark
+                let html = try converter.convertFull(input: inputURL, css: cssString)
+                try writeStringOutput(html, to: output)
             } else {
-                try converter.convertToStdout(input: inputURL, options: options)
+                var options = ConversionOptions.default
+                options.includeFrontmatter = frontmatter
+
+                if let outputPath = output {
+                    let outputURL = URL(fileURLWithPath: outputPath)
+                    try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+                } else {
+                    try converter.convertToStdout(input: inputURL, options: options)
+                }
             }
         }
     }
+}
+
+enum SRTCSSStyle: String, ExpressibleByArgument, CaseIterable {
+    case dark
+    case light
 }
