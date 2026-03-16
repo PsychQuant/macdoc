@@ -29,7 +29,7 @@ macdoc 必須優先使用 macOS 原生 framework 處理文件，不引入外部 
 
 ## textutil 能力對照
 
-`textutil` 是 macOS 內建的文件轉換 CLI，macdoc 的轉換指令語法與其相容（見 `cli-textutil-compat.md`）。
+`textutil` 是 macOS 內建的文件轉換 CLI，macdoc 的轉換指令語法與其相容（見 `cli-design/textutil-compat.md`）。
 
 | textutil 支援 | macdoc 對應 | 差異 |
 |--------------|------------|------|
@@ -45,5 +45,5 @@ macdoc 必須優先使用 macOS 原生 framework 處理文件，不引入外部 
 - [ ] 基礎提取用原生 framework（PDFKit / Vision / CoreGraphics）
 - [ ] 不引入可用原生替代的外部依賴
 - [ ] 如果需要外部依賴，記錄在上方「允許的例外」
-- [ ] CLI 語法遵循 `cli-textutil-compat.md`
+- [ ] CLI 語法遵循 `cli-design/` 規範（unix-conventions + textutil-compat + convert-entry-point）
 - [ ] 在 `CONVERSIONS.md` 更新轉換矩陣
