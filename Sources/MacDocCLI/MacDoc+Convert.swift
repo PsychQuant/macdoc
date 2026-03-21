@@ -15,6 +15,7 @@ import BibAPAToHTML
 import BibAPAToJSON
 import BibAPAToMD
 import MarkerWordConverter
+import NoteToHTML
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
@@ -99,6 +100,9 @@ extension MacDoc {
 
             case ("tex", "docx"):
                 try convertTeXToWord(inputURL: inputURL)
+
+            case ("note", "html"):
+                try convertNoteToHTML(inputURL: inputURL)
 
             default:
                 throw ValidationError(
@@ -336,6 +340,38 @@ extension MacDoc {
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
+        // MARK: - Note → HTML
+
+        private func convertNoteToHTML(inputURL: URL) throws {
+            if css != .dark && css != .light {
+                throw ValidationError("Note → HTML 的 --css 只支援 dark 或 light")
+            }
+
+            let converter = NoteConverter()
+            let theme: NoteConverter.Theme = css == .dark ? .dark : .light
+
+            if stdout {
+                // --stdout: 完全內嵌（base64），單一 HTML 輸出到 stdout
+                if full {
+                    let html = try converter.convertFull(input: inputURL, theme: theme)
+                    print(html)
+                } else {
+                    let options = ConversionOptions.default
+                    try converter.convertToStdout(input: inputURL, options: options)
+                }
+            } else {
+                // 預設：資料夾輸出（index.html + media/）(#65)
+                let outputDir: URL
+                if let outputPath = output {
+                    outputDir = URL(fileURLWithPath: outputPath)
+                } else {
+                    outputDir = inputURL.deletingPathExtension()
+                }
+                try converter.convertToDirectory(input: inputURL, outputDir: outputDir, theme: theme)
+                FileHandle.standardError.write(Data("已寫入: \(outputDir.path)/\n".utf8))
+            }
+        }
+
         // MARK: - Helpers
 
         /// Resolve the output path: --stdout forces nil (stdout), overriding --output.
@@ -343,6 +379,15 @@ extension MacDoc {
         private func resolveOutputPath() -> String? {
             if stdout { return nil }
             return output
+        }
+
+        /// Resolve the output path with auto-generated fallback.
+        /// --stdout forces stdout; --output uses specified path;
+        /// otherwise auto-generates same name with target extension in same directory.
+        private func resolveOutputPath(inputURL: URL, ext: String) -> String? {
+            if stdout { return nil }
+            if let outputPath = output { return outputPath }
+            return inputURL.deletingPathExtension().appendingPathExtension(ext).path
         }
 
         /// Resolve the output URL for binary formats (docx).
