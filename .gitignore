@@ -59,9 +59,14 @@ packages/
 !packages/tex-to-docx-swift/Tests/TeXToDOCXTests/
 mcp/
 
+# Local test files (personal .note, .pptx, .docx etc.)
+test-files/
+
 # Temp files
 .tmp/
 .tmp_*
 
 # Reference repos
 reference/
+.spectra/
+openspec/.vector-search.db*
