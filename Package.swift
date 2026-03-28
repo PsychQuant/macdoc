@@ -25,6 +25,8 @@ let package = Package(
         .package(name: "BibAPAToJSON", path: "packages/bib-apa-to-json-swift"),
         .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
         .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
+        .package(name: "NoteToHTML", path: "packages/note-to-html-swift"),
+        .package(name: "OCRSwift", path: "packages/ocr-swift"),
     ],
     targets: [
         .executableTarget(
@@ -46,6 +48,8 @@ let package = Package(
                 .product(name: "BibAPAToJSON", package: "BibAPAToJSON"),
                 .product(name: "BibAPAToMD", package: "BibAPAToMD"),
                 .product(name: "TeXToDOCX", package: "TeXToDOCX"),
+                .product(name: "NoteToHTML", package: "NoteToHTML"),
+                .product(name: "OCRCore", package: "OCRSwift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
@@ -55,6 +59,10 @@ let package = Package(
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
             ],
             resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            name: "MacDocCLITests",
+            dependencies: []
         ),
     ]
 )
