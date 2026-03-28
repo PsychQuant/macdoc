@@ -22,7 +22,9 @@ if [ ! -d "$METAL_DIR" ]; then
     exit 1
 fi
 
+shopt -s nullglob
 METAL_FILES=("$METAL_DIR"/*.metal)
+shopt -u nullglob
 if [ ${#METAL_FILES[@]} -eq 0 ]; then
     echo "❌ No .metal files found in $METAL_DIR" >&2
     exit 1
