@@ -71,6 +71,9 @@ extension MacDoc {
             case ("html", "md"), ("htm", "md"):
                 try convertHTMLToMD(inputURL: inputURL)
 
+            case ("html", "pdf"), ("htm", "pdf"):
+                try convertHTMLToPDF(inputURL: inputURL)
+
             case ("html", "docx"), ("htm", "docx"):
                 try convertHTMLToWord(inputURL: inputURL)
 
@@ -204,6 +207,66 @@ extension MacDoc {
             let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
             try HTMLToWordConverter().convertToFile(input: inputURL, output: outputURL)
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
+        }
+
+        // MARK: - HTML → PDF
+
+        private func convertHTMLToPDF(inputURL: URL) throws {
+            let outputURL = try resolveBinaryOutputURL(inputURL: inputURL, ext: "pdf")
+
+            // 檢查 playwright 是否可用
+            guard isCommandAvailable("playwright") else {
+                throw ValidationError(
+                    "需要 playwright CLI：pip install playwright && playwright install chromium"
+                )
+            }
+
+            let fileURL = "file://\(inputURL.path)"
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [
+                "playwright", "pdf",
+                fileURL,
+                outputURL.path,
+                "--paper-format", "A4",
+            ]
+
+            let stderrPipe = Pipe()
+            process.standardOutput = Pipe()
+            process.standardError = stderrPipe
+
+            try process.run()
+            process.waitUntilExit()
+
+            let stderrOutput = String(
+                data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+
+            guard process.terminationStatus == 0 else {
+                throw ValidationError(
+                    "playwright pdf 失敗（exit \(process.terminationStatus)）：\(stderrOutput)"
+                )
+            }
+
+            FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
+        }
+
+        /// 檢查外部命令是否可用
+        private func isCommandAvailable(_ command: String) -> Bool {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["which", command]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            do {
+                try process.run()
+                process.waitUntilExit()
+                return process.terminationStatus == 0
+            } catch {
+                return false
+            }
         }
 
         // MARK: - Markdown → HTML
@@ -390,16 +453,21 @@ extension MacDoc {
             return inputURL.deletingPathExtension().appendingPathExtension(ext).path
         }
 
-        /// Resolve the output URL for binary formats (docx).
-        /// --stdout is not supported; without --output, auto-generates same name with .docx extension.
-        private func resolveDocxOutputURL(inputURL: URL) throws -> URL {
+        /// Resolve the output URL for binary formats (docx, pdf).
+        /// --stdout is not supported; without --output, auto-generates same name with target extension.
+        private func resolveBinaryOutputURL(inputURL: URL, ext: String) throws -> URL {
             if stdout {
-                throw ValidationError("docx 是二進位格式，不支援 stdout 輸出")
+                throw ValidationError("\(ext) 是二進位格式，不支援 stdout 輸出")
             }
             if let outputPath = output {
                 return URL(fileURLWithPath: outputPath)
             }
-            return inputURL.deletingPathExtension().appendingPathExtension("docx")
+            return inputURL.deletingPathExtension().appendingPathExtension(ext)
+        }
+
+        /// Convenience for docx output (backward compat).
+        private func resolveDocxOutputURL(inputURL: URL) throws -> URL {
+            try resolveBinaryOutputURL(inputURL: inputURL, ext: "docx")
         }
 
         private func loadBibEntries(from inputURL: URL) throws -> [BibEntry] {
