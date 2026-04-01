@@ -1,3 +1,31 @@
+<!-- SPECTRA:START v1.0.1 -->
+
+# Spectra Instructions
+
+This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.
+
+## Use `/spectra:*` skills when:
+
+- A discussion needs structure before coding → `/spectra:discuss`
+- User wants to plan, propose, or design a change → `/spectra:propose`
+- Tasks are ready to implement → `/spectra:apply`
+- There's an in-progress change to continue → `/spectra:ingest`
+- User asks about specs or how something works → `/spectra:ask`
+- Implementation is done → `/spectra:archive`
+
+## Workflow
+
+discuss? → propose → apply ⇄ ingest → archive
+
+- `discuss` is optional — skip if requirements are clear
+- Requirements change mid-work? Plan mode → `ingest` → resume `apply`
+
+## Parked Changes
+
+Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra:apply` and `/spectra:ingest` skills handle parked changes automatically.
+
+<!-- SPECTRA:END -->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code when working with code in this repository.
@@ -14,7 +42,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Sources/
 │   └── MacDocCLI/             # CLI 入口點
 │       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config 子命令群）
-│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（15 路由，textutil-compatible）
+│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（16 路由，textutil-compatible）
 │       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
 │       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
 │       ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown/JSON）
@@ -72,13 +100,24 @@ che-pdf-mcp
 
 ## Development Commands
 
-### Build & Run
+### Build, Install & Run
 
 ```bash
-# 建構主專案（在 repo 根目錄）
+# 建構主專案（debug，快速迭代）
 swift build
 
-# 執行 CLI — 統一轉換入口（textutil-compatible，15 路由）
+# 建構 release（推薦，效能差 10-50x）
+swift build -c release
+
+# 安裝到 PATH（~/bin 需在 $PATH 中）
+cp .build/release/macdoc ~/bin/macdoc
+
+# 驗證
+macdoc --version
+```
+
+```bash
+# 執行 CLI — 統一轉換入口（textutil-compatible，16 路由）
 swift run macdoc convert --to md file.docx          # Word → Markdown
 swift run macdoc convert --to md file.docx --frontmatter  # Word → Markdown（含 YAML frontmatter）
 swift run macdoc convert --to html file.docx         # Word → HTML
@@ -88,7 +127,8 @@ swift run macdoc convert --to html file.md --html-extensions  # Markdown → HTM
 swift run macdoc convert --to docx file.md           # Markdown → Word
 swift run macdoc convert --to md file.html           # HTML → Markdown
 swift run macdoc convert --to docx file.html         # HTML → Word
-swift run macdoc convert --to html file.srt [--full] [--css dark|light]  # SRT → HTML
+swift run macdoc convert --to pdf file.html          # HTML → PDF（需要 playwright CLI）
+swift run macdoc convert --to html file.srt [--full] [--css dark|light]  # SRT → HTML（支援 speaker 偵測）
 swift run macdoc convert --to md file.pdf            # PDF → Markdown
 swift run macdoc convert --to docx file.pdf          # PDF → Word
 swift run macdoc convert --to docx file.tex          # TeX → Word
@@ -196,7 +236,7 @@ swift package clean && swift build
 
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
-- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，15 路由
+- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，16 路由
 - **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list，支援 --key 過濾）
 - **Config**：AI 後端設定管理
@@ -306,7 +346,7 @@ swift build
 
 ### macdoc
 - `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config 子命令群）
-- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（15 路由，textutil-compatible）
+- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（Phase 1 pipeline + Phase 2 consolidation）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
@@ -317,6 +357,14 @@ swift build
 - `Sources/PDFToLaTeXCore/LaTeXEnvChecker.swift` - 環境配對檢查
 - `Sources/PDFToLaTeXCore/TexCompileChecker.swift` - 編譯錯誤解析
 - `Sources/PDFToLaTeXCore/Consolidator.swift` - consolidation orchestrator
+
+### srt-to-html-swift
+- `Sources/SRTToHTML/SRTConverter.swift` - SRT → HTML 轉換器
+- **Speaker 偵測**：自動辨識兩種格式，產出 `<span class="speaker">` badge + `data-speaker="N"` 屬性
+  - 冒號格式：`Speaker 1: text`（Otter.ai、Google Meet、部分 Plaud）
+  - 方括號格式：`[Speaker 1] text`（Whisper、Assembly AI、部分 Plaud）
+- **CSS 主題**：`--css dark`（深色卡片）或 `--css light`（淺色列表，適合列印）
+- **輸出模式**：`--full` 輸出完整 HTML 文件，否則只輸出 `<main>` fragment
 
 ### common-converter-swift
 - `Sources/CommonConverterSwift/Protocols/DocumentConverter.swift` - 轉換器 protocol
