@@ -25,7 +25,7 @@ extension MacDoc {
             abstract: "Convert documents between formats (textutil-compatible)"
         )
 
-        @Option(name: .long, help: "Target format (md, html, docx, json, marker)")
+        @Option(name: .long, help: "Target format (md, html, docx, pdf, json, marker)")
         var to: String
 
         @Option(name: .long, help: "Output file path (or directory for marker)")
@@ -221,7 +221,8 @@ extension MacDoc {
                 )
             }
 
-            let fileURL = "file://\(inputURL.path)"
+            // absoluteString 自動處理 percent-encoding（空格、中文等）
+            let fileURL = inputURL.absoluteString
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -233,16 +234,16 @@ extension MacDoc {
             ]
 
             let stderrPipe = Pipe()
-            process.standardOutput = Pipe()
+            process.standardOutput = FileHandle.nullDevice
             process.standardError = stderrPipe
 
             try process.run()
+
+            // 先讀 pipe 再 wait，避免 pipe buffer 滿造成 deadlock
+            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
 
-            let stderrOutput = String(
-                data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? ""
+            let stderrOutput = String(data: stderrData, encoding: .utf8) ?? ""
 
             guard process.terminationStatus == 0 else {
                 throw ValidationError(
