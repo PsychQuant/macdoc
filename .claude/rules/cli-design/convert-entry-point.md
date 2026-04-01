@@ -14,13 +14,14 @@
 5. 支援 `--full` 和 `--css`（如果輸出 HTML）
 6. Error messages 用中文（`找不到輸入檔案:`）
 
-## 已接線的路由（15 條）
+## 已接線的路由（16 條）
 
 ```
 (docx, md)     → WordConverter
 (docx, html)   → WordToHTMLConverter
 (docx, marker) → MarkerWordConverter（目錄輸出，不支援 stdout）
 (html, md)     → HTMLConverter
+(html, pdf)    → playwright pdf CLI（二進位輸出，不支援 stdout，需要 playwright）
 (html, docx)   → HTMLToWordConverter（二進位輸出，不支援 stdout）
 (md, html)     → MarkdownConverter（支援 --full + --html-extensions）
 (md, docx)     → MarkdownToWordConverter（二進位輸出，不支援 stdout）
@@ -39,9 +40,10 @@
 - 預設輸出到 stdout
 - 可用 `--output` 指定檔案
 
-### 二進位格式（docx）
-- docx 是二進位格式，不支援 stdout 輸出
+### 二進位格式（docx, pdf）
+- docx/pdf 是二進位格式，不支援 stdout 輸出
 - 未指定 `--output` 時自動生成輸出路徑（同目錄，改副檔名）
+- pdf 輸出需要外部 `playwright` CLI（`pip install playwright && playwright install chromium`）
 
 ### 目錄格式（marker）
 - marker 是目錄結構輸出（`.md` + `_meta.json` + `images/`）
