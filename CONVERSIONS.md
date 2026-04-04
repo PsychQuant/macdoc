@@ -17,6 +17,7 @@
 | **PDF** | ✅ `pdf-to-md` | · | ✅ `pdf-to-docx` | ✅ `pdf-to-latex` | · | — | · |
 | **BibLaTeX (.bib)** | ✅ `bib-apa-to-md` | ✅ `bib-apa-to-html` | · | · | ✅ `bib-apa-to-json` | · | · |
 | **SRT** | · | ✅ `srt-to-html` | · | · | · | · | — |
+| **Note (.note)** | · | ✅ `note-to-html` | · | · | · | · | · |
 
 ## Converter Details
 
@@ -35,6 +36,7 @@
 | HTML → Word | `html-to-word-swift` | ✅ implemented | SwiftSoup → OOXML writer |
 | Markdown → Word | `md-to-word-swift` | ✅ implemented | swift-markdown AST → OOXML writer |
 | PDF → DOCX | `pdf-to-docx-swift` | ✅ implemented | PDFKit text extraction → OOXML writer |
+| Note → HTML | `note-to-html-swift` | ✅ implemented | Notability .note → interactive HTML player with audio-synced stroke replay |
 
 ## Rules
 
