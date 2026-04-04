@@ -71,7 +71,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 │   ├── markdown-swift/        # Layer 1: Markdown 生成
 │   ├── marker-swift/          # Layer 1: 圖片分類 + Marker 輸出
 │   ├── surya-swift/           # Layer 1: OCR 文字辨識
-│   └── pdf-to-latex-swift/    # PDF → LaTeX pipeline（Phase 1 + Phase 2）
+│   └── pdf-to-latex-swift/    # PDF → LaTeX pipeline（簡化: GLM-OCR + Phase 2）
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
 │   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
@@ -136,11 +136,16 @@ swift run macdoc convert --to html file.bib [--full] [--css minimal|web]  # Bib 
 swift run macdoc convert --to md file.bib            # Bib → Markdown
 swift run macdoc convert --to json file.bib          # Bib → JSON
 
-# 執行 CLI — PDF pipeline（Phase 2 consolidation）
+# 執行 CLI — PDF pipeline（OCR + Phase 2 consolidation）
+swift run macdoc pdf ocr --project /path/to/project              # 整頁 GLM-OCR（預設 local MLX）
+swift run macdoc pdf ocr --project /path/to/project --mode ollama # 透過 Ollama HTTP API
 swift run macdoc pdf normalize --project /path/to/project
 swift run macdoc pdf fix-envs --project /path/to/project [--fix]
 swift run macdoc pdf compile-check --project /path/to/project
 swift run macdoc pdf consolidate --project /path/to/project [--dry-run] [--agent codex|claude|gemini]
+# （deprecated）舊的 block-level 轉寫命令，已被 pdf ocr 取代：
+# swift run macdoc pdf transcribe --project /path/to/project --backend codex|claude|gemini
+# swift run macdoc pdf transcribe-pages --project /path/to/project
 
 # 執行 CLI — Bib（APA 7 格式轉換）
 swift run macdoc bib list paper.bib [--show-type]
@@ -224,7 +229,7 @@ swift package clean && swift build
 
 #### pdf-to-latex-swift
 - **用途**：PDF → LaTeX 轉換 pipeline
-- **Phase 1**：PDF 掃描、頁面渲染、block 偵測、AI 轉寫、章節偵測、TeX 組裝
+- **Phase 1**：PDF 掃描、頁面渲染、GLM-OCR 整頁轉錄、章節偵測、TeX 組裝（舊的 block-level AI 轉寫已 deprecated）
 - **Phase 2（consolidation）**：
   - `AIConfig` — AI CLI 工具設定（codex/claude/gemini 自動偵測，`~/.config/macdoc/config.json`）
   - `LaTeXNormalizer` — document class 修正、符號正規化、跨頁去重
@@ -237,7 +242,7 @@ swift package clean && swift build
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
 - **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，16 路由
-- **PDF**：Phase 1（init → segment → render → blocks → transcribe → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）
+- **PDF**：簡化 pipeline（init → render → ocr → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）。舊的 block-level transcribe 已 deprecated，改用整頁 GLM-OCR。
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list，支援 --key 過濾）
 - **Config**：AI 後端設定管理
 - **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
@@ -347,7 +352,8 @@ swift build
 ### macdoc
 - `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config 子命令群）
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
-- `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（Phase 1 pipeline + Phase 2 consolidation）
+- `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
+- `Sources/MacDocCLI/MacDoc+OCR.swift` - OCR 子命令（top-level `macdoc ocr`，單檔 GLM-OCR）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
 
