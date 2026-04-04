@@ -14,6 +14,7 @@ extension MacDoc {
                 Init.self,
                 Segment.self,
                 Render.self,
+                OCRPages.self,
                 Blocks.self,
                 Transcribe.self,
                 TranscribePages.self,
@@ -167,11 +168,96 @@ extension MacDoc {
             }
         }
 
-        // MARK: macdoc pdf blocks
+        // MARK: macdoc pdf ocr
+        struct OCRPages: AsyncParsableCommand {
+            static let configuration = CommandConfiguration(
+                commandName: "ocr",
+                abstract: "整頁 GLM-OCR（簡化 pipeline，取代 blocks + transcribe）。"
+            )
+
+            @Option(name: .long, help: "專案資料夾。")
+            var project: String?
+
+            @Option(name: .long, help: "來源 PDF。")
+            var pdf: String?
+
+            @Option(name: .long, help: "輸出資料夾。")
+            var output: String?
+
+            @Option(name: .long, help: "執行模式 (local|ollama)。")
+            var mode: String = "local"
+
+            @Option(name: .long, help: "Ollama host (預設 localhost:11434)。")
+            var host: String = "localhost:11434"
+
+            @Option(name: .long, help: "起始頁碼。")
+            var firstPage: Int?
+
+            @Option(name: .long, help: "結束頁碼。")
+            var lastPage: Int?
+
+            @Option(name: .long, help: "頁面渲染 DPI。")
+            var pageDPI: Double = 200
+
+            @Option(name: .long, help: "HuggingFace 模型 repo。")
+            var model: String = "EZCon/GLM-OCR-8bit-mlx"
+
+            @Flag(name: .long, help: "強制啟用 PDFKit 交叉比對（向量 PDF 自動啟用）。")
+            var withPdfkit: Bool = false
+
+            mutating func run() async throws {
+                let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                let resolver = ProjectResolver()
+                let pipeline = BlockSegmentationPipeline()
+
+                var resolvedProject = try resolver.resolve(
+                    project: project, pdf: pdf, output: output, cwd: cwd
+                )
+                try pipeline.ensurePageRecords(in: &resolvedProject)
+                let pageNumbers = try pipeline.resolvePageNumbers(
+                    total: resolvedProject.manifest.pages.count,
+                    firstPage: firstPage, lastPage: lastPage
+                )
+
+                let runnerMode: PageOCRRunner.Mode
+                if mode == "ollama" {
+                    runnerMode = .ollama(host: host)
+                } else {
+                    runnerMode = .local
+                }
+
+                let runner = PageOCRRunner(
+                    mode: runnerMode,
+                    withPDFKit: withPdfkit,
+                    model: model
+                )
+
+                let results = try await runner.run(
+                    project: &resolvedProject,
+                    pageNumbers: pageNumbers,
+                    dpi: pageDPI
+                ) { current, total in
+                    FileHandle.standardError.write(
+                        Data("\r正在 OCR 第 \(current)/\(total) 頁...".utf8)
+                    )
+                }
+
+                FileHandle.standardError.write(Data("\n".utf8))
+
+                let conflictCount = results.filter(\.hasConflicts).count
+                print("已完成 \(results.count) 頁 OCR。")
+                if conflictCount > 0 {
+                    print("歧異頁數: \(conflictCount)")
+                }
+                print("project: \(resolvedProject.root.path)")
+            }
+        }
+
+        // MARK: macdoc pdf blocks (deprecated)
         struct Blocks: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "blocks",
-                abstract: "以 Vision OCR 偵測頁面文字區塊。"
+                abstract: "（已棄用）以 Vision OCR 偵測頁面文字區塊。請改用 `macdoc pdf ocr`。"
             )
 
             @Option(name: .long, help: "專案資料夾。")
@@ -193,6 +279,7 @@ extension MacDoc {
             var pageDPI: Double = 144
 
             mutating func run() throws {
+                FileHandle.standardError.write(Data("⚠ 此命令已棄用，請改用 `macdoc pdf ocr`。\n".utf8))
                 let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 let resolver = ProjectResolver()
                 let pipeline = BlockSegmentationPipeline()
@@ -206,11 +293,11 @@ extension MacDoc {
             }
         }
 
-        // MARK: macdoc pdf transcribe
+        // MARK: macdoc pdf transcribe (deprecated)
         struct Transcribe: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "transcribe",
-                abstract: "用 AI 將 block 圖轉成 LaTeX snippet。"
+                abstract: "（已棄用）用 AI 將 block 圖轉成 LaTeX snippet。請改用 `macdoc pdf ocr`。"
             )
 
             @Option(name: .long, help: "專案資料夾。")
@@ -256,6 +343,7 @@ extension MacDoc {
             var overwrite: Bool = false
 
             mutating func run() async throws {
+                FileHandle.standardError.write(Data("⚠ 此命令已棄用，請改用 `macdoc pdf ocr`。\n".utf8))
                 let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 let resolver = ProjectResolver()
                 let pipeline = BlockSegmentationPipeline()
@@ -357,11 +445,11 @@ extension MacDoc {
             }
         }
 
-        // MARK: macdoc pdf transcribe-pages
+        // MARK: macdoc pdf transcribe-pages (deprecated)
         struct TranscribePages: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "transcribe-pages",
-                abstract: "Page-level 轉寫：整頁送 AI，搭配 LaTeX context sliding window。"
+                abstract: "（已棄用）Page-level 轉寫。請改用 `macdoc pdf ocr`。"
             )
 
             @Option(name: .long, help: "專案資料夾。")
@@ -401,6 +489,7 @@ extension MacDoc {
             var source: String?
 
             mutating func run() async throws {
+                FileHandle.standardError.write(Data("⚠ 此命令已棄用，請改用 `macdoc pdf ocr`。\n".utf8))
                 let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 let resolver = ProjectResolver()
                 let pipeline = BlockSegmentationPipeline()
@@ -449,11 +538,11 @@ extension MacDoc {
             }
         }
 
-        // MARK: macdoc pdf resume
+        // MARK: macdoc pdf resume (deprecated)
         struct Resume: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "resume",
-                abstract: "從 checkpoint 續跑轉寫。"
+                abstract: "（已棄用）從 checkpoint 續跑轉寫。請改用 `macdoc pdf ocr`。"
             )
 
             @Option(name: .long, help: "專案資料夾。")
@@ -490,6 +579,7 @@ extension MacDoc {
             var timeoutSeconds: Double = 90
 
             mutating func run() async throws {
+                FileHandle.standardError.write(Data("⚠ 此命令已棄用，請改用 `macdoc pdf ocr`。\n".utf8))
                 var command = Transcribe()
                 command.project = project
                 command.pdf = nil
