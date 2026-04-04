@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'swift build -c release' && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"提醒：release build 完成，記得安裝最新版：cp .build/release/macdoc ~/bin/macdoc\"}}' || true",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ]
+  },
+  "includeGitInstructions": false
+}
