@@ -40,9 +40,9 @@
 - [x] 5.1 Implement `Document.getCommentsFull() -> [Comment]` in `packages/ooxml-swift/Sources/OOXMLSwift/Models/Document.swift`, mapping the internal `CommentsCollection` to public `Comment` structs preserving `parentId`
 - [x] 5.2 Run tests to confirm GREEN state (new test passes, legacy regression test passes)
 - [x] 5.3 Update `packages/ooxml-swift/CHANGELOG.md` with entry describing the additive `getCommentsFull` method
-- [ ] 5.4 Commit + push + tag the ooxml-swift release per the macdoc Swift Package update workflow rules — DEFERRED to release stage per "Implementation only" mode (committed locally as `e5b3e78`); che-word-mcp uses temporary path: override during sections 6+ to build against local ooxml-swift
-- [x] 5.5 Update `mcp/che-word-mcp/Package.resolved` by running `swift package update` to pick up new ooxml-swift tag — replaced with path: override approach (modify che-word-mcp Package.swift to use `path: "../../packages/ooxml-swift"`); revert to url: at release stage
-- [x] 5.6 Build `mcp/che-word-mcp` against the updated ooxml-swift to confirm dependency resolves (built against path: overrides for ooxml-swift + markdown-swift; build successful with pre-existing deprecation warnings unrelated to this change)
+- [x] 5.4 Commit + push + tag the ooxml-swift release per the macdoc Swift Package update workflow rules (committed locally as `e5b3e78`; tagged + pushed `v0.5.6` to `PsychQuant/ooxml-swift`. Also tagged `markdown-swift v0.2.0` for `MarkdownBuilder`.)
+- [x] 5.5 Update `mcp/che-word-mcp/Package.resolved` by running `swift package update` to pick up new ooxml-swift tag (Package.swift reverted from path: overrides to `url:` with `from: "0.5.6"` for ooxml-swift, `from: "0.2.0"` for markdown-swift, `from: "0.4.0"` for word-to-md-swift; `swift package update` resolved them to 0.5.6 / 0.2.0 / 0.5.2 respectively)
+- [x] 5.6 Build `mcp/che-word-mcp` against the updated ooxml-swift to confirm dependency resolves (final build against published tags clean; 30/30 tests passing)
 
 ## 6. che-word-mcp — Truncation policy migration (full_text → summarize)
 
@@ -119,17 +119,17 @@
 
 ## 16. Release & version bump
 
-- [ ] 16.1 Bump `mcp/che-word-mcp/mcpb/manifest.json` version (per the BREAKING `summarize` migration, increment minor or major per semver judgment)
-- [ ] 16.2 Update `mcp/che-word-mcp/CHANGELOG.md` with full entry covering: new MCP tools, ooxml-swift dependency bump, BREAKING `full_text` removal, `summarize` policy
-- [ ] 16.3 Build release binary `swift build -c release` and copy to `~/bin/CheWordMCP` and `mcp/che-word-mcp/mcpb/server/CheWordMCP`
-- [ ] 16.4 Package mcpb bundle following the `mcp/che-word-mcp/CLAUDE.md` packaging steps
-- [ ] 16.5 Publish GitHub release in `PsychQuant/che-word-mcp` with the new tag and mcpb attached
+- [x] 16.1 Bump `mcp/che-word-mcp/mcpb/manifest.json` version (per the BREAKING `summarize` migration, increment minor or major per semver judgment) — bumped from 1.17.0 to 1.19.0
+- [x] 16.2 Update `mcp/che-word-mcp/CHANGELOG.md` with full entry covering: new MCP tools, ooxml-swift dependency bump, BREAKING `full_text` removal, `summarize` policy ([Unreleased] → [1.19.0] - 2026-04-15)
+- [x] 16.3 Build release binary `swift build -c release` and copy to `~/bin/CheWordMCP` and `mcp/che-word-mcp/mcpb/server/CheWordMCP` (11 MB binary built and copied to both locations)
+- [x] 16.4 Package mcpb bundle following the `mcp/che-word-mcp/CLAUDE.md` packaging steps (`mcpb/che-word-mcp.mcpb` 3.1 MB)
+- [x] 16.5 Publish GitHub release in `PsychQuant/che-word-mcp` with the new tag and mcpb attached (https://github.com/PsychQuant/che-word-mcp/releases/tag/v1.19.0)
 
 ## 17. Issue closure
 
-- [ ] 17.1 Close `PsychQuant/che-word-mcp#2` with a closing comment referencing this change and the `export_revision_summary_markdown` tool
-- [ ] 17.2 Close `PsychQuant/che-word-mcp#3` with a closing comment referencing `compare_documents_markdown`
-- [ ] 17.3 Close `PsychQuant/che-word-mcp#4` with a closing comment referencing `export_comment_threads_markdown` and the ooxml-swift `getCommentsFull` API addition
-- [ ] 17.4 Close `PsychQuant/che-word-mcp#5` with a closing comment explaining the resolution via the `summarize` parameter migration (per the **Bundle Scope Includes Four Issues** decision)
-- [ ] 17.5 Update `PsychQuant/macdoc#75` umbrella tracking issue: tick the four che-word-mcp checklist items and add a short progress note linking to this change's archive
-- [ ] 17.6 Open the deferred `ooxml-swift` standalone issue (or close-as-resolved within this change) tracking the **ooxml-swift API is Additive (new getCommentsFull method)** outcome so the API change is discoverable in the `ooxml-swift` repo's own issue tracker
+- [x] 17.1 Close `PsychQuant/che-word-mcp#2` with a closing comment referencing this change and the `export_revision_summary_markdown` tool (auto-closed by v1.19.0 release commit's `Closes #2`; closing comment posted via separate `gh issue comment` call)
+- [x] 17.2 Close `PsychQuant/che-word-mcp#3` with a closing comment referencing `compare_documents_markdown` (auto-closed; comment posted)
+- [x] 17.3 Close `PsychQuant/che-word-mcp#4` with a closing comment referencing `export_comment_threads_markdown` and the ooxml-swift `getCommentsFull` API addition (auto-closed; comment posted)
+- [x] 17.4 Close `PsychQuant/che-word-mcp#5` with a closing comment explaining the resolution via the `summarize` parameter migration (per the **Bundle Scope Includes Four Issues** decision) (auto-closed; comment posted)
+- [x] 17.5 Update `PsychQuant/macdoc#75` umbrella tracking issue: tick the four che-word-mcp checklist items and add a short progress note linking to this change's archive (Layer 2 fully ticked; Layer 1 ooxml-swift#3 added and ticked; 2026-04-15 progress note appended to Diagnosis history)
+- [x] 17.6 Open the deferred `ooxml-swift` standalone issue (or close-as-resolved within this change) tracking the **ooxml-swift API is Additive (new getCommentsFull method)** outcome so the API change is discoverable in the `ooxml-swift` repo's own issue tracker (opened and immediately closed as `PsychQuant/ooxml-swift#3` referencing v0.5.6 implementation)
