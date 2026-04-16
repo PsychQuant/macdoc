@@ -158,6 +158,14 @@ swift run macdoc config ai detect
 swift run macdoc config ai list
 swift run macdoc config ai set agent claude
 
+# OCR 設定管理（v1.1+：具名 host profile）
+swift run macdoc config ocr list
+swift run macdoc config ocr add-host kyle localhost:11435  # 例：SSH tunnel 到遠端 Ollama
+swift run macdoc config ocr add-host local localhost:11434
+swift run macdoc config ocr set-default kyle              # 之後 ocr 命令不傳 --host 就用這個
+swift run macdoc config ocr set-model glm-ocr
+# 之後 `macdoc ocr file.pdf` 自動用 kyle profile，--host 也接受 profile 名
+
 # 建構個別套件
 cd packages/ooxml-swift && swift build
 cd packages/markdown-swift && swift build
