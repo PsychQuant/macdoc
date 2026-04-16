@@ -1,12 +1,13 @@
 import ArgumentParser
 import Foundation
 import OCRCore
+import PDFToLaTeXCore
 
 extension MacDoc {
     struct OCR: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "ocr",
-            abstract: "GLM-OCR 神經網路 OCR（PDF 和圖片 → Markdown）"
+            abstract: "VLM OCR（PDF 和圖片 → 文字，支援 MLX 本地 / Ollama）"
         )
 
         @Argument(help: "輸入檔案（PDF、PNG、JPG）")
@@ -18,8 +19,14 @@ extension MacDoc {
         @Option(name: .long, help: "PDF 頁碼範圍（例如 1-3）")
         var pages: String?
 
-        @Option(name: .long, help: "HuggingFace 模型 repo")
-        var model: String = "EZCon/GLM-OCR-8bit-mlx"
+        @Option(name: .long, help: "OCR 後端：ollama 或 mlx（預設讀 config，再 fallback ollama）")
+        var backend: String?
+
+        @Option(name: .long, help: "模型名稱（預設讀 config，再 fallback glm-ocr / mlx-community/Qwen3-VL-4B-Instruct-4bit）")
+        var model: String?
+
+        @Option(name: .long, help: "Ollama 伺服器地址或 host profile 名稱（預設用 config 的 default host）")
+        var host: String?
 
         @Option(name: .long, help: "最大生成 token 數")
         var maxTokens: Int = 4096
@@ -27,7 +34,6 @@ extension MacDoc {
         func run() async throws {
             let inputURL = try validatedInputURL(input)
 
-            // Parse page range
             let pageRange: ClosedRange<Int>?
             if let pages {
                 pageRange = try parsePageRange(pages)
@@ -35,35 +41,55 @@ extension MacDoc {
                 pageRange = nil
             }
 
-            // Initialize pipeline
-            let pipeline = OCRPipeline(maxTokens: maxTokens)
+            // Load config (沒設定檔也 OK，會回傳預設值)
+            let config = (try? AIConfig.load()) ?? AIConfig()
 
-            FileHandle.standardError.write(Data("正在載入模型 \(model)...\n".utf8))
+            // Resolve backend: --backend > config.ocrDefaultBackend > "ollama"
+            let resolvedBackend = backend ?? config.ocrDefaultBackend
 
-            try await pipeline.loadModel(repo: model) { filename, progress in
-                let percent = Int(progress * 100)
+            // Build backend
+            let ocrBackend: any OCRBackend
+            switch resolvedBackend {
+            case "ollama":
+                let modelName = model ?? config.ocrDefaultModel
+                let resolvedHost = config.resolveOCRHost(host)
                 FileHandle.standardError.write(
-                    Data("\r下載: \(filename) (\(percent)%)".utf8)
-                )
+                    Data("使用 Ollama 後端（\(resolvedHost), 模型: \(modelName)）\n".utf8))
+                ocrBackend = OllamaBackend(host: resolvedHost, model: modelName)
+
+            case "mlx":
+                let repo = model ?? (config.ocrDefaultModel == "glm-ocr"
+                    ? "mlx-community/Qwen3-VL-4B-Instruct-4bit"
+                    : config.ocrDefaultModel)
+                FileHandle.standardError.write(Data("正在載入模型 \(repo)...\n".utf8))
+                ocrBackend = try await MLXBackend.load(
+                    repo: repo, maxTokens: maxTokens
+                ) { filename, progress in
+                    let percent = Int(progress * 100)
+                    FileHandle.standardError.write(
+                        Data("\r下載: \(filename) (\(percent)%)".utf8))
+                }
+                FileHandle.standardError.write(Data("\n模型載入完成\n".utf8))
+
+            default:
+                throw ValidationError("未知的後端: \(resolvedBackend)（支援: ollama, mlx）")
             }
 
-            FileHandle.standardError.write(Data("\n模型載入完成\n".utf8))
+            // Run OCR
+            let pipeline = OCRPipeline(backend: ocrBackend)
 
-            // Process file
             let result = try await pipeline.processFile(
                 path: inputURL.path,
                 pageRange: pageRange
             ) { current, total in
                 FileHandle.standardError.write(
-                    Data("\r處理頁面 \(current)/\(total)".utf8)
-                )
+                    Data("\r處理頁面 \(current)/\(total)".utf8))
             }
 
             if pageRange != nil {
                 FileHandle.standardError.write(Data("\n".utf8))
             }
 
-            // Output
             try writeStringOutput(result, to: output)
         }
 
