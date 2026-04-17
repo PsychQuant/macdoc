@@ -25,8 +25,8 @@ let package = Package(
         .package(name: "BibAPAToJSON", path: "packages/bib-apa-to-json-swift"),
         .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
         .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
-        .package(name: "NoteToHTML", path: "packages/note-to-html-swift"),
-        .package(name: "NoteToPDF", path: "packages/note-to-pdf-swift"),
+        .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.0"),
         .package(name: "OCRSwift", path: "packages/ocr-swift"),
     ],
     targets: [
@@ -49,8 +49,8 @@ let package = Package(
                 .product(name: "BibAPAToJSON", package: "BibAPAToJSON"),
                 .product(name: "BibAPAToMD", package: "BibAPAToMD"),
                 .product(name: "TeXToDOCX", package: "TeXToDOCX"),
-                .product(name: "NoteToHTML", package: "NoteToHTML"),
-                .product(name: "NoteToPDF", package: "NoteToPDF"),
+                .product(name: "NoteToHTML", package: "note-to-html-swift"),
+                .product(name: "NoteToPDF", package: "note-to-pdf-swift"),
                 .product(name: "OCRCore", package: "OCRSwift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
