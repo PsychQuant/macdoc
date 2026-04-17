@@ -59,8 +59,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/note-core-swift.git",
       "state" : {
-        "revision" : "17c3c71715dc13155fa361afc18ca62639d49ab9",
-        "version" : "0.1.0"
+        "revision" : "1347049f0a99ef2dcbe6671cebbd93d63be36047",
+        "version" : "0.1.3"
       }
     },
     {
@@ -77,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/note-to-pdf-swift.git",
       "state" : {
-        "revision" : "e383d485e3ab2c27e0ef47226f3727f1fe1496fa",
-        "version" : "0.1.0"
+        "revision" : "6e97398db847c95139119997f34987cd62de2a22",
+        "version" : "0.1.2"
       }
     },
     {
