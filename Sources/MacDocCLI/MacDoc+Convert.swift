@@ -16,6 +16,7 @@ import BibAPAToJSON
 import BibAPAToMD
 import MarkerWordConverter
 import NoteToHTML
+import NoteToPDF
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
@@ -106,6 +107,9 @@ extension MacDoc {
 
             case ("note", "html"):
                 try convertNoteToHTML(inputURL: inputURL)
+
+            case ("note", "pdf"):
+                try convertNoteToPDF(inputURL: inputURL)
 
             default:
                 throw ValidationError(
@@ -434,6 +438,21 @@ extension MacDoc {
                 try converter.convertToDirectory(input: inputURL, outputDir: outputDir, theme: theme)
                 FileHandle.standardError.write(Data("已寫入: \(outputDir.path)/\n".utf8))
             }
+        }
+
+        private func convertNoteToPDF(inputURL: URL) throws {
+            let converter = NoteToPDFConverter()
+            let pdfData = try converter.convert(input: inputURL)
+
+            let outputURL: URL
+            if let outputPath = output {
+                outputURL = URL(fileURLWithPath: outputPath)
+            } else {
+                outputURL = inputURL.deletingPathExtension().appendingPathExtension("pdf")
+            }
+
+            try pdfData.write(to: outputURL)
+            FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
         // MARK: - Helpers
