@@ -26,6 +26,7 @@ let package = Package(
         .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
         .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
         .package(name: "NoteToHTML", path: "packages/note-to-html-swift"),
+        .package(name: "NoteToPDF", path: "packages/note-to-pdf-swift"),
         .package(name: "OCRSwift", path: "packages/ocr-swift"),
     ],
     targets: [
@@ -49,6 +50,7 @@ let package = Package(
                 .product(name: "BibAPAToMD", package: "BibAPAToMD"),
                 .product(name: "TeXToDOCX", package: "TeXToDOCX"),
                 .product(name: "NoteToHTML", package: "NoteToHTML"),
+                .product(name: "NoteToPDF", package: "NoteToPDF"),
                 .product(name: "OCRCore", package: "OCRSwift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
