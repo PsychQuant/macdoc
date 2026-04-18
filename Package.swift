@@ -27,6 +27,7 @@ let package = Package(
         .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
         .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/word-builder-swift.git", from: "0.9.0"),
         .package(name: "OCRSwift", path: "packages/ocr-swift"),
     ],
     targets: [
