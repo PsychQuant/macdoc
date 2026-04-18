@@ -91,6 +91,7 @@ che-word-mcp ────────┘                       ├──→ ooxm
 macdoc CLI ──→ pdf-to-latex-swift (PDFToLaTeXCore)                      pdf-to-latex-swift
 macdoc CLI ──→ bib-apa-to-html-swift ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ bib-apa-to-md-swift  ──→ bib-apa-swift ──→ biblatex-apa-swift
+macdoc CLI ──→ word-builder-swift ──→ ooxml-swift (fluent Swift API for .docx, 1:1 mirror of docx.js)
 
 che-pdf-mcp
 └──→ Vision.framework / surya-swift
@@ -346,6 +347,7 @@ swift build
 | `.` (root) | https://github.com/PsychQuant/macdoc.git | 主專案 CLI |
 | `packages/common-converter-swift` | https://github.com/PsychQuant/doc-converter-swift.git | 轉換器協議（remote 名 doc-converter-swift） |
 | `packages/word-to-md-swift` | https://github.com/PsychQuant/word-to-md-swift.git | Word → MD 轉換 |
+| `packages/word-builder-swift` | https://github.com/PsychQuant/word-builder-swift.git | Fluent Swift API for .docx (1:1 mirror of docx.js 9.6.x) |
 | `packages/ooxml-swift` | https://github.com/PsychQuant/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | https://github.com/PsychQuant/marker-swift.git | 圖片分類 |
