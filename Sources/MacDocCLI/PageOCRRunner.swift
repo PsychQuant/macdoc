@@ -1,6 +1,6 @@
 import Foundation
-import PDFToLaTeXCore
 import OCRCore
+import PDFToLaTeXCore
 
 #if canImport(PDFKit)
 import PDFKit
@@ -19,7 +19,7 @@ struct PageOCRRunner {
     let withPDFKit: Bool
     let model: String
 
-    init(mode: Mode = .local, withPDFKit: Bool = false, model: String = "EZCon/GLM-OCR-8bit-mlx") {
+    init(mode: Mode = .local, withPDFKit: Bool = false, model: String = "mlx-community/Qwen3-VL-4B-Instruct-4bit") {
         self.mode = mode
         self.withPDFKit = withPDFKit
         self.model = model
@@ -52,6 +52,15 @@ struct PageOCRRunner {
             }
         }
 
+        // Build backend
+        let backend: any OCRBackend
+        switch mode {
+        case .local:
+            backend = try await MLXBackend.load(repo: model)
+        case .ollama(let host):
+            backend = OllamaBackend(host: host, model: "glm-ocr")
+        }
+
         // Detect if vector PDF (for PDFKit cross-validation)
         let usesPDFKit: Bool
         if withPDFKit {
@@ -70,15 +79,8 @@ struct PageOCRRunner {
 
             guard let imagePath = renderedByPage[pageNum] else { continue }
 
-            let imageURL = URL(fileURLWithPath: imagePath)
-            let ocrText: String
-
-            switch mode {
-            case .local:
-                ocrText = try await runLocalOCR(imageURL: imageURL)
-            case .ollama(let host):
-                ocrText = try await runOllamaOCR(imageURL: imageURL, host: host)
-            }
+            let imageData = try Data(contentsOf: URL(fileURLWithPath: imagePath))
+            let ocrText = try await backend.processImage(imageData)
 
             // PDFKit extraction for vector PDFs
             var pdfkitText: String? = nil
@@ -123,36 +125,6 @@ struct PageOCRRunner {
     }
 
     // MARK: - Private
-
-    private func runLocalOCR(imageURL: URL) async throws -> String {
-        let pipeline = OCRPipeline()
-        try await pipeline.loadModel(repo: model)
-        return try await pipeline.processFile(path: imageURL.path)
-    }
-
-    private func runOllamaOCR(imageURL: URL, host: String) async throws -> String {
-        let imageData = try Data(contentsOf: imageURL)
-        let base64 = imageData.base64EncodedString()
-
-        let url = URL(string: "http://\(host)/api/generate")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 600
-
-        let body: [String: Any] = [
-            "model": "glm-ocr",
-            "prompt": "OCR the text in this image. Output the exact text as it appears.",
-            "images": [base64],
-            "stream": false,
-            "options": ["temperature": 0.1]
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        return json?["response"] as? String ?? ""
-    }
 
     #if canImport(PDFKit)
     private func extractPDFKitText(pdfURL: URL, pageNumber: Int) -> String? {
