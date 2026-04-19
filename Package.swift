@@ -57,13 +57,6 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "WordToMDTests",
-            dependencies: [
-                .product(name: "WordToMDSwift", package: "word-to-md-swift"),
-            ],
-            resources: [.copy("Fixtures")]
-        ),
-        .testTarget(
             name: "MacDocCLITests",
             dependencies: []
         ),
