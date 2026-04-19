@@ -91,6 +91,15 @@
       }
     },
     {
+      "identity" : "pdf-to-latex-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/pdf-to-latex-swift.git",
+      "state" : {
+        "revision" : "d62eb4fd77bc1a7d0f554cf1400104e3dbd68f1a",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser.git",

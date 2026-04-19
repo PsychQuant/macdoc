@@ -12,7 +12,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.5.1"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
-        .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
+        .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", from: "0.1.0"),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
         .package(name: "WordToHTML", path: "packages/word-to-html-swift"),
         .package(name: "HTMLToWord", path: "packages/html-to-word-swift"),
