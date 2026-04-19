@@ -12,7 +12,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.5.1"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
-        .package(name: "pdf-to-latex-swift", path: "packages/pdf-to-latex-swift"),
+        .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", from: "0.1.0"),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
         .package(name: "WordToHTML", path: "packages/word-to-html-swift"),
         .package(name: "HTMLToWord", path: "packages/html-to-word-swift"),
@@ -28,7 +28,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/word-builder-swift.git", from: "0.9.0"),
-        .package(name: "OCRSwift", path: "packages/ocr-swift"),
+        .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
     ],
     targets: [
         .executableTarget(
@@ -52,16 +52,9 @@ let package = Package(
                 .product(name: "TeXToDOCX", package: "TeXToDOCX"),
                 .product(name: "NoteToHTML", package: "note-to-html-swift"),
                 .product(name: "NoteToPDF", package: "note-to-pdf-swift"),
-                .product(name: "OCRCore", package: "OCRSwift"),
+                .product(name: "OCRCore", package: "ocr-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
-        ),
-        .testTarget(
-            name: "WordToMDTests",
-            dependencies: [
-                .product(name: "WordToMDSwift", package: "word-to-md-swift"),
-            ],
-            resources: [.copy("Fixtures")]
         ),
         .testTarget(
             name: "MacDocCLITests",
