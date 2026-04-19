@@ -82,6 +82,15 @@
       }
     },
     {
+      "identity" : "ocr-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/ocr-swift.git",
+      "state" : {
+        "revision" : "692dc1748d7e94a954725c9166021a1c47522397",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "ooxml-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/ooxml-swift.git",
