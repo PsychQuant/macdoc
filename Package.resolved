@@ -82,12 +82,30 @@
       }
     },
     {
+      "identity" : "ocr-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/ocr-swift.git",
+      "state" : {
+        "revision" : "692dc1748d7e94a954725c9166021a1c47522397",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "ooxml-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/ooxml-swift.git",
       "state" : {
         "revision" : "4cf39a2f8315aefb4db9e457efb0f022a309a68b",
         "version" : "0.7.0"
+      }
+    },
+    {
+      "identity" : "pdf-to-latex-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/pdf-to-latex-swift.git",
+      "state" : {
+        "revision" : "d62eb4fd77bc1a7d0f554cf1400104e3dbd68f1a",
+        "version" : "0.1.0"
       }
     },
     {

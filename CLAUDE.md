@@ -352,7 +352,8 @@ swift build
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | https://github.com/PsychQuant/marker-swift.git | 圖片分類 |
 | `packages/surya-swift` | (local only) | OCR 文字辨識 |
-| `packages/pdf-to-latex-swift` | (local, in macdoc repo) | PDF → LaTeX pipeline |
+| `packages/pdf-to-latex-swift` | https://github.com/PsychQuant/pdf-to-latex-swift.git | PDF → LaTeX pipeline (consumed via remote url dep since #79) |
+| `packages/ocr-swift` | https://github.com/PsychQuant/ocr-swift.git | OCR pipeline (MLX + Ollama backends, PDFKit extractor; consumed via remote url dep since #79) |
 | `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP |
 | `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP |
 | `reference/pandoc` | https://github.com/jgm/pandoc.git | 參考用 |
