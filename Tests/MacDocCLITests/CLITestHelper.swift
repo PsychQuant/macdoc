@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 
 /// CLI 執行結果
 struct CLIResult {
@@ -69,5 +70,45 @@ enum CLITestHelper {
     static func convert(to format: String, input: String, flags: [String] = []) throws -> CLIResult {
         var args = ["convert", "--to", format] + flags + [input]
         return try run(args)
+    }
+
+    /// 取得 .note 測試 fixture 的絕對路徑。若 repo 內無可用樣本則 XCTSkip。
+    ///
+    /// Phase 1 走 Option B（per #81 diagnosis）：使用 `test-files/*.note` 樣本。
+    /// Clean clone 或 CI 上若無該檔案，測試會被跳過而非失敗 —
+    /// 未來 follow-up 會改成 committable 小 fixture。
+    static func noteFixture(file: StaticString = #filePath, line: UInt = #line) throws -> URL {
+        let candidates = [
+            "test-files/筆記 2026-03-20 15_25_20.note",
+        ]
+
+        for relativePath in candidates {
+            let url = repoRoot.appendingPathComponent(relativePath)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+
+        // Fallback: any .note under test-files/. Sort by path to make the pick
+        // deterministic across machines (per logic-review P1: contentsOfDirectory
+        // has undefined order). Distinguish "directory missing" from real I/O
+        // errors so XCTSkip only fires when the directory genuinely isn't there.
+        let fallbackDir = repoRoot.appendingPathComponent("test-files")
+        if FileManager.default.fileExists(atPath: fallbackDir.path) {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: fallbackDir, includingPropertiesForKeys: nil
+            )
+            let noteFiles = contents
+                .filter { $0.pathExtension.lowercased() == "note" }
+                .sorted(by: { $0.path < $1.path })
+            if let found = noteFiles.first {
+                return found
+            }
+        }
+
+        throw XCTSkip(
+            "No .note fixture found under test-files/. Place a sample .note there to enable Note → PDF/HTML smoke tests. See issue #79 for a committable-fixture follow-up.",
+            file: file, line: line
+        )
     }
 }

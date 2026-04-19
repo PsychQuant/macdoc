@@ -409,6 +409,12 @@ swift run macdoc convert --to md /path/to/test.docx
 swift run macdoc convert --to marker /path/to/test.docx -o /tmp/test_output/
 ```
 
+### `.note` smoke tests (MacDocCLITests)
+
+`Tests/MacDocCLITests/NotePDFConvertTests.swift` 和 `NoteHTMLConvertTests.swift` 跑 `.note` → pdf/html 的端到端 smoke coverage（#81）。兩個 test 透過 `CLITestHelper.noteFixture()` 找 `test-files/*.note` 樣本，找不到就 `XCTSkip` — CI / clean-clone 不會 fail，只會跳過。
+
+若要在本機實際跑 coverage，把任一 `.note` 檔放到 `test-files/`（該目錄被 `.gitignore` 忽略，檔案不會入版控）。committable 小 fixture 是 follow-up（見 #79 討論 serial）。
+
 ## Platform Requirements
 
 - macOS 14+ (macdoc, pdf-to-latex-swift)
