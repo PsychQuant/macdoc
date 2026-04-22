@@ -1,0 +1,9 @@
+[submodule "mcp/che-word-mcp"]
+	path = mcp/che-word-mcp
+	url = git@github.com:PsychQuant/che-word-mcp.git
+[submodule "mcp/che-pdf-mcp"]
+	path = mcp/che-pdf-mcp
+	url = git@github.com:PsychQuant/che-pdf-mcp.git
+[submodule "mcp/che-pptx-mcp"]
+	path = mcp/che-pptx-mcp
+	url = git@github.com:PsychQuant/che-pptx-mcp.git

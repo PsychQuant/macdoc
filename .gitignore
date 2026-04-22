@@ -99,7 +99,6 @@ packages/
 !packages/bib-apa-swift/Tests/
 !packages/bib-apa-swift/Tests/BibAPATests/
 !packages/bib-apa-swift/Tests/BibAPATests/APAStylerTests.swift
-mcp/
 
 # Local test files (personal .note, .pptx, .docx etc.)
 test-files/
