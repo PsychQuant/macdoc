@@ -340,7 +340,10 @@ swift build
 
 ## Sub-Repositories
 
-主 repo 透過 `.gitignore` 忽略以下目錄，各自獨立管理。重建環境時在對應目錄 `git clone` 即可。
+主 repo 以兩種方式追蹤外部 repo：
+
+- **Submodule**（`.gitmodules`）：`mcp/` 下三個 MCP server。Clone 主 repo 時加 `--recurse-submodules` 會自動拉齊，或事後 `git submodule update --init --recursive`
+- **Gitignore 忽略**（各自獨立管理）：`packages/` 下的 Swift 套件、`reference/`。重建環境時在對應目錄 `git clone` 即可
 
 | 目錄 | Git Remote | 說明 |
 |------|-----------|------|
@@ -352,10 +355,12 @@ swift build
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | https://github.com/PsychQuant/marker-swift.git | 圖片分類 |
 | `packages/surya-swift` | (local only) | OCR 文字辨識 |
+| `packages/pptx-swift` | https://github.com/PsychQuant/pptx-swift.git | PresentationML (.pptx) 解析與生成（v0.1.0+） |
 | `packages/pdf-to-latex-swift` | https://github.com/PsychQuant/pdf-to-latex-swift.git | PDF → LaTeX pipeline (consumed via remote url dep since #79) |
 | `packages/ocr-swift` | https://github.com/PsychQuant/ocr-swift.git | OCR pipeline (MLX + Ollama backends, PDFKit extractor; consumed via remote url dep since #79) |
-| `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP |
-| `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP |
+| `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP（submodule） |
+| `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP（submodule） |
+| `mcp/che-pptx-mcp` | https://github.com/PsychQuant/che-pptx-mcp.git | PPTX MCP（submodule） |
 | `reference/pandoc` | https://github.com/jgm/pandoc.git | 參考用 |
 
 ## Key Files
