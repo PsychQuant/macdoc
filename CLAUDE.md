@@ -361,7 +361,7 @@ swift build
 | `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP（submodule） |
 | `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP（submodule） |
 | `mcp/che-pptx-mcp` | https://github.com/PsychQuant/che-pptx-mcp.git | PPTX MCP（submodule） |
-| `reference/pandoc` | https://github.com/jgm/pandoc.git | 參考用 |
+| `reference/*` | 見 [`reference/README.md`](reference/README.md) | 外部參考 repo（docx-js、pandoc、mlx-swift-lm、swift-argument-parser）— clone-on-demand，只有 README 進版控 |
 
 ## Key Files
 
