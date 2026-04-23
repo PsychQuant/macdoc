@@ -81,8 +81,18 @@ macdoc 的 `convert` 子命令語法刻意跟 macOS 內建 `textutil` 靠攏,為
 - [WordprocessingML schema 參考](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing) — `<w:*>` 元素查表
 - [DrawingML schema 參考](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing) — `<a:*>` 元素查表
 - [Office Math (OMML) 文件](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.math) — `<m:*>` 元素查表
-- [Office.js Word API 參考](https://learn.microsoft.com/en-us/javascript/api/word) — 對照 Word 本體暴露的物件模型
-- [Word API 需求集](https://learn.microsoft.com/en-us/javascript/api/requirement-sets/word/word-api-requirement-sets) — 版本相容性查表
+
+### Office.js:Word 物件模型對照
+
+Office.js 是 Word 本體暴露的 JavaScript API,直接反映 OOXML 的能力面。`che-word-mcp` 的功能擴充 roadmap(見 [PsychQuant/che-word-mcp#43](https://github.com/PsychQuant/che-word-mcp/issues/43))就是以 Office.js 為鏡整理出 20 項可擴充 OOXML 功能——實作新功能前先查 Office.js 對應的物件,對照 Word 本體如何暴露該能力再決定 Swift API 設計。
+
+- [Office.js Word API 參考](https://learn.microsoft.com/en-us/javascript/api/word) — 主文件,類別/方法/屬性查表
+- [Word API 需求集](https://learn.microsoft.com/en-us/javascript/api/requirement-sets/word/word-api-requirement-sets) — WordApi 1.1 ~ 1.9 版本相容性,判斷功能穩定度
+- [Office.js Document API](https://learn.microsoft.com/en-us/javascript/api/word/word.document) — Document 根物件、sections/body/contentControls 入口
+- [Office.js Paragraph API](https://learn.microsoft.com/en-us/javascript/api/word/word.paragraph) — 段落操作、inline 元素、格式
+- [Office.js Table API](https://learn.microsoft.com/en-us/javascript/api/word/word.table) — 表格、合併儲存格、條件格式
+- [Office.js ContentControl API](https://learn.microsoft.com/en-us/javascript/api/word/word.contentcontrol) — SDT 結構化文件標籤
+- [Office Add-ins 範例程式庫](https://github.com/OfficeDev/office-js-snippets) — 可直接在 Word 的 Script Lab 執行的範例
 
 ### 其他 OOXML 函式庫(非 clone,線上對照)
 - [officegen / docx.js (Node)](https://github.com/Ziv-Barber/officegen) — 跟 `dolanmiu/docx` 不同實作,有時邊界情況處理得更好
