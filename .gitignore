@@ -107,7 +107,9 @@ test-files/
 .tmp/
 .tmp_*
 
-# Reference repos
-reference/
+# Reference repos (clone-on-demand; only README.md + textutil manpage are tracked)
+reference/*
+!reference/README.md
+!reference/textutil-manpage.txt
 .spectra/
 openspec/.vector-search.db*
