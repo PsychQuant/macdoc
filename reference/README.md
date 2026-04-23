@@ -86,13 +86,36 @@ macdoc 的 `convert` 子命令語法刻意跟 macOS 內建 `textutil` 靠攏,為
 
 Office.js 是 Word 本體暴露的 JavaScript API,直接反映 OOXML 的能力面。`che-word-mcp` 的功能擴充 roadmap(見 [PsychQuant/che-word-mcp#43](https://github.com/PsychQuant/che-word-mcp/issues/43))就是以 Office.js 為鏡整理出 20 項可擴充 OOXML 功能——實作新功能前先查 Office.js 對應的物件,對照 Word 本體如何暴露該能力再決定 Swift API 設計。
 
-- [Office.js Word API 參考](https://learn.microsoft.com/en-us/javascript/api/word) — 主文件,類別/方法/屬性查表
+**Office.js vs Common API**:Office.js 其實是兩個 object model——Word-specific(`Word.*`)+ Common API(`Office.*`)。macdoc 關心的只有前者(OOXML 功能),Common API(dialog、UI、settings)不對映 OOXML,不參考。
+
+**核心參考**
+- [Word JavaScript API 主頁](https://learn.microsoft.com/en-us/javascript/api/word) — 所有類別/方法/屬性查表入口
+- [Word JavaScript API overview](https://learn.microsoft.com/en-us/office/dev/add-ins/reference/overview/word-add-ins-reference-overview) — 官方導覽,理解 Office.js / Common API 的區分
+- [Word JavaScript 物件模型概念](https://learn.microsoft.com/en-us/office/dev/add-ins/word/word-add-ins-core-concepts) — RequestContext、LoadOptions、proxy object 等基礎概念(重要:這些是 Office.js 基建,**不對映 OOXML**,不用實作)
 - [Word API 需求集](https://learn.microsoft.com/en-us/javascript/api/requirement-sets/word/word-api-requirement-sets) — WordApi 1.1 ~ 1.9 版本相容性,判斷功能穩定度
-- [Office.js Document API](https://learn.microsoft.com/en-us/javascript/api/word/word.document) — Document 根物件、sections/body/contentControls 入口
-- [Office.js Paragraph API](https://learn.microsoft.com/en-us/javascript/api/word/word.paragraph) — 段落操作、inline 元素、格式
-- [Office.js Table API](https://learn.microsoft.com/en-us/javascript/api/word/word.table) — 表格、合併儲存格、條件格式
-- [Office.js ContentControl API](https://learn.microsoft.com/en-us/javascript/api/word/word.contentcontrol) — SDT 結構化文件標籤
-- [Office Add-ins 範例程式庫](https://github.com/OfficeDev/office-js-snippets) — 可直接在 Word 的 Script Lab 執行的範例
+
+**常用類別深入**
+- [Word.Document](https://learn.microsoft.com/en-us/javascript/api/word/word.document) — 文件根物件,sections / body / contentControls 入口
+- [Word.Paragraph](https://learn.microsoft.com/en-us/javascript/api/word/word.paragraph) — 段落操作、inline 元素、格式
+- [Word.Table](https://learn.microsoft.com/en-us/javascript/api/word/word.table) — 表格、合併儲存格、條件格式(§9)
+- [Word.ContentControl](https://learn.microsoft.com/en-us/javascript/api/word/word.contentcontrol) — SDT 結構化文件標籤(§1)
+- [Word.Style](https://learn.microsoft.com/en-us/javascript/api/word/word.style) / [ParagraphFormat](https://learn.microsoft.com/en-us/javascript/api/word/word.paragraphformat) — 樣式系統(§8)
+- [Word.Shape](https://learn.microsoft.com/en-us/javascript/api/word/word.shape) / [InlinePicture](https://learn.microsoft.com/en-us/javascript/api/word/word.inlinepicture) — 圖片與形狀(§10)
+- [Word.TrackedChange](https://learn.microsoft.com/en-us/javascript/api/word/word.trackedchange) / [Revision](https://learn.microsoft.com/en-us/javascript/api/word/word.revision) — 修訂(§2)
+- [Word.Comment](https://learn.microsoft.com/en-us/javascript/api/word/word.comment) — 註解(§7)
+- [Word.Bookmark](https://learn.microsoft.com/en-us/javascript/api/word/word.bookmark) / [Field](https://learn.microsoft.com/en-us/javascript/api/word/word.field) / [Hyperlink](https://learn.microsoft.com/en-us/javascript/api/word/word.hyperlink) — 跳轉與動態內容(§5、§14、§17)
+- [Word.CustomXmlPart](https://learn.microsoft.com/en-us/javascript/api/word/word.customxmlpart) — 自訂 XML 資料(§11)
+
+**實驗與範例**
+- [Script Lab](https://learn.microsoft.com/en-us/office/dev/add-ins/overview/explore-with-script-lab) — Word 內建的互動式 Office.js playground。實作新功能前先在這裡跑 Office.js 看 Word 實際行為,再決定 Swift 怎麼做
+- [Office Add-ins 範例程式庫](https://github.com/OfficeDev/office-js-snippets) — Script Lab 可直接 import 的 snippets,找 `Word/` 資料夾
+- [Word add-in 教學](https://learn.microsoft.com/en-us/office/dev/add-ins/tutorials/word-tutorial) — 官方 hands-on tutorial
+
+**Issue #43 尚未納入 roadmap 但 Office.js 有暴露的類別**(未來 sub-issue 候選)
+- `Word.Annotation` — 段落註記(Word 2021+,不是 Comment)
+- `Word.Bibliography` — 參考文獻源管理(跟 `che-zotero-mcp` 生態可能整合點)
+- `Word.TableOfContents` / `Word.Index` — 目錄與索引的專屬類別(issue #43 §5 只談 TOC field,沒涵蓋這層 API)
+- `Word.Coauthor` / `Word.Conflict` / `Word.CoauthoringLock` — 即時協作(Word Online,多半跟 macdoc headless 場景無關,優先級最低)
 
 ### 其他 OOXML 函式庫(非 clone,線上對照)
 - [officegen / docx.js (Node)](https://github.com/Ziv-Barber/officegen) — 跟 `dolanmiu/docx` 不同實作,有時邊界情況處理得更好
