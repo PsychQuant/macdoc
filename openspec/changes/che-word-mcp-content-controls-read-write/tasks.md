@@ -21,31 +21,31 @@
 
 ## 4. WordDocument Mutation Methods
 
-- [ ] 4.1 [P] WordDocument.updateContentControl modifies SDT text content by id — add method that locates ContentControl by id, replaces text runs with single run containing newText, preserves `<w:sdtPr>` untouched, throws `contentControlNotFound` or `unsupportedSDTType` errors
-- [ ] 4.2 [P] WordDocument.replaceContentControlContent replaces full content XML — add method that validates input XML against element whitelist (reject `<w:sdt>`, `<w:body>`, `<w:sectPr>`, XML declaration), throws `disallowedElement(name)`, replaces `<w:sdtContent>` region of target SDT
-- [ ] 4.3 [P] WordDocument.deleteContentControl removes SDT with optional content preservation — add method with `keepContent: Bool = true` param, unwraps children into parent container when true, removes SDT and children when false, throws `contentControlNotFound` on unknown id
+- [x] 4.1 [P] WordDocument.updateContentControl modifies SDT text content by id — add method that locates ContentControl by id, replaces text runs with single run containing newText, preserves `<w:sdtPr>` untouched, throws `contentControlNotFound` or `unsupportedSDTType` errors
+- [x] 4.2 [P] WordDocument.replaceContentControlContent replaces full content XML — add method that validates input XML against element whitelist (reject `<w:sdt>`, `<w:body>`, `<w:sectPr>`, XML declaration), throws `disallowedElement(name)`, replaces `<w:sdtContent>` region of target SDT
+- [x] 4.3 [P] WordDocument.deleteContentControl removes SDT with optional content preservation — add method with `keepContent: Bool = true` param, unwraps children into parent container when true, removes SDT and children when false, throws `contentControlNotFound` on unknown id
 
 ## 5. che-word-mcp Read Tools
 
-- [ ] 5.1 [P] Tool list_content_controls enumerates SDTs in a document — register MCP tool accepting `doc_id` or `source_path` plus optional `nested: bool`, flat mode returns list with `parentSdtId`, nested mode returns tree with `children`, each entry includes id/tag/alias/type/lockType/currentText/paragraphIndex
-- [ ] 5.2 [P] Tool get_content_control fetches a single SDT by id, tag, or alias — register MCP tool requiring exactly one of {id, tag, alias}, return full metadata + `<w:sdtContent>` XML, error `not_found` when missing, error `multiple_matches` when tag/alias ambiguous
-- [ ] 5.3 [P] Tool list_repeating_section_items enumerates items of a repeating section SDT — register MCP tool accepting `doc_id` + `id`, return array of item entries each with item SDT id, item-level tag, current text content in document order
+- [x] 5.1 [P] Tool list_content_controls enumerates SDTs in a document — register MCP tool accepting `doc_id` or `source_path` plus optional `nested: bool`, flat mode returns list with `parentSdtId`, nested mode returns tree with `children`, each entry includes id/tag/alias/type/lockType/currentText/paragraphIndex
+- [x] 5.2 [P] Tool get_content_control fetches a single SDT by id, tag, or alias — register MCP tool requiring exactly one of {id, tag, alias}, return full metadata + `<w:sdtContent>` XML, error `not_found` when missing, error `multiple_matches` when tag/alias ambiguous
+- [x] 5.3 [P] Tool list_repeating_section_items enumerates items of a repeating section SDT — register MCP tool accepting `doc_id` + `id`, return array of item entries each with item SDT id, item-level tag, current text content in document order
 
 ## 6. che-word-mcp Write Tools
 
-- [ ] 6.1 [P] Tool update_content_control_text modifies plain-text SDT content — register MCP tool accepting `doc_id` + `id` + `text`, call `WordDocument.updateContentControl`, return `unsupported_type` error for picture/dropDownList/comboBox/checkbox/group/repeatingSection targets
-- [ ] 6.2 [P] Tool replace_content_control_content replaces rich-text SDT content — register MCP tool accepting `doc_id` + `id` + `content_xml`, delegate to WordDocument method with XML whitelist validation, surface `disallowed_element` error
-- [ ] 6.3 [P] Tool delete_content_control removes SDT with optional content preservation — register MCP tool accepting `doc_id` + `id` + optional `keep_content: bool` (default true), delegate to WordDocument.deleteContentControl
-- [ ] 6.4 [P] Tool update_repeating_section_item modifies a single item's content — register MCP tool accepting `doc_id` + `parent_id` + `item_index` + `text`, call `RepeatingSection.updateItem`, surface `out_of_bounds` error for invalid index
+- [x] 6.1 [P] Tool update_content_control_text modifies plain-text SDT content — register MCP tool accepting `doc_id` + `id` + `text`, call `WordDocument.updateContentControl`, return `unsupported_type` error for picture/dropDownList/comboBox/checkbox/group/repeatingSection targets
+- [x] 6.2 [P] Tool replace_content_control_content replaces rich-text SDT content — register MCP tool accepting `doc_id` + `id` + `content_xml`, delegate to WordDocument method with XML whitelist validation, surface `disallowed_element` error
+- [x] 6.3 [P] Tool delete_content_control removes SDT with optional content preservation — register MCP tool accepting `doc_id` + `id` + optional `keep_content: bool` (default true), delegate to WordDocument.deleteContentControl
+- [x] 6.4 [P] Tool update_repeating_section_item modifies a single item's content — register MCP tool accepting `doc_id` + `parent_id` + `item_index` + `text`, call `RepeatingSection.updateItem`, surface `out_of_bounds` error for invalid index
 
 ## 7. che-word-mcp Tool Extensions
 
-- [ ] 7.1 Tool insert_content_control accepts advanced SDT types and extended args + Repeating section stays separate from insert_content_control — extend args schema with `list_items`/`date_format`/`lock_type`, add 4 new types (bibliography/citation/group/repeatingSectionItem), explicitly reject `type: "repeatingSection"` with error message directing caller to `insert_repeating_section`
-- [ ] 7.2 Tool insert_repeating_section supports allow_insert_delete_sections arg — extend args schema with optional `allow_insert_delete_sections: bool` (default true), wire to RepeatingSection property
-- [ ] 7.3 SDT id allocation uses scan-max + 1 — replace `Int.random(in: 100000...999999)` call at `mcp/che-word-mcp/Sources/CheWordMCP/Server.swift:8393` with `doc.allocateSdtId()` in insertContentControl and insertRepeatingSection
+- [x] 7.1 Tool insert_content_control accepts advanced SDT types and extended args + Repeating section stays separate from insert_content_control — extend args schema with `list_items`/`date_format`/`lock_type`, add 4 new types (bibliography/citation/group/repeatingSectionItem), explicitly reject `type: "repeatingSection"` with error message directing caller to `insert_repeating_section`
+- [x] 7.2 Tool insert_repeating_section supports allow_insert_delete_sections arg — extend args schema with optional `allow_insert_delete_sections: bool` (default true), wire to RepeatingSection property
+- [x] 7.3 SDT id allocation uses scan-max + 1 — replace `Int.random(in: 100000...999999)` call at `mcp/che-word-mcp/Sources/CheWordMCP/Server.swift:8393` with `doc.allocateSdtId()` in insertContentControl and insertRepeatingSection
 
 ## 8. Stub Tool and Release
 
-- [ ] 8.1 Tool list_custom_xml_parts returns empty stub + list_custom_xml_parts ships as an empty-list stub — register MCP tool returning `[]` with schema declaring future return type (array of `{store_item_id, target_namespaces, root_element}`), add TODO comment referencing Change B (`che-word-mcp-customxml-databinding`)
-- [ ] 8.2 End-to-end fixture test — create invoice template with 8 content controls (client_name, date, invoice_number, plus repeating section with item_description/quantity/price/subtotal), fill via tool chain (list → update_text → list), save via `save_document`, reopen in Word 2021+ to verify no error dialog
-- [ ] 8.3 Release: ooxml-swift minor version bump + che-word-mcp v3.8.0 — update ooxml-swift Package.swift version, tag `v0.14.0`, push; update `mcpb/manifest.json` version + `CHANGELOG.md` + `README.md` tool count (145 → 155+); rebuild binary, copy to `~/bin/CheWordMCP` and `mcpb/server/`, create v3.8.0 GitHub release + upload mcpb asset; run `/plugin-update che-word-mcp` for marketplace sync
+- [x] 8.1 Tool list_custom_xml_parts returns empty stub + list_custom_xml_parts ships as an empty-list stub — register MCP tool returning `[]` with schema declaring future return type (array of `{store_item_id, target_namespaces, root_element}`), add TODO comment referencing Change B (`che-word-mcp-customxml-databinding`)
+- [x] 8.2 End-to-end fixture test — create invoice template with 8 content controls (client_name, date, invoice_number, plus repeating section with item_description/quantity/price/subtotal), fill via tool chain (list → update_text → list), save via `save_document`, reopen in Word 2021+ to verify no error dialog
+- [x] 8.3 Release: ooxml-swift minor version bump + che-word-mcp v3.8.0 — update ooxml-swift Package.swift version, tag `v0.14.0`, push; update `mcpb/manifest.json` version + `CHANGELOG.md` + `README.md` tool count (145 → 155+); rebuild binary, copy to `~/bin/CheWordMCP` and `mcpb/server/`, create v3.8.0 GitHub release + upload mcpb asset; run `/plugin-update che-word-mcp` for marketplace sync
