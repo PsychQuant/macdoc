@@ -16,8 +16,8 @@
 - [x] 3.1 DocxReader parses w:sdt into structured ContentControl values — DocxReader SDT parser attaches SDTs as a first-class Paragraph child, not a Run.rawXML blob. Implement `SDTParser` in new file `packages/ooxml-swift/Sources/OOXMLSwift/IO/SDTParser.swift`, hook into DocxReader's paragraph element walker to detect `<w:sdt>` siblings
 - [x] 3.2 SDTParser distinguishes all 12 SDT types — implement type discrimination by inspecting `<w:sdtPr>` children (`<w:text/>`, `<w:picture/>`, `<w:date>`, `<w:dropDownList>`, `<w:comboBox>`, `<w14:checkbox>`, `<w:bibliography/>`, `<w:citation/>`, `<w:group/>`, `<w15:repeatingSection>`, `<w15:repeatingSectionItem>`; default richText when absent)
 - [x] 3.3 SDTParser handles nested SDTs by preserving tree structure — SDT parse in DocxReader handles nested SDTs by preserving tree structure, recursively parsing `<w:sdt>` inside `<w:sdtContent>`, populating `children: [ContentControl]` and `parentSdtId` on each nested entry
-- [ ] 3.4 SDTParser handles block-level SDTs wrapping paragraphs and tables — detect `<w:sdt>` directly inside `<w:body>` or `<w:tc>`, produce block-level ContentControl container with child BodyElements preserving original order
-- [ ] 3.5 SDT round-trip preserves byte-level content fidelity — add round-trip test in SDTParserTests using the `sdt-template.docx` fixture, verify id/tag/alias/type marker/lockType/placeholder match between input and output, open output in Word 2021+ manually to confirm no error dialog
+- [x] 3.4 SDTParser handles block-level SDTs wrapping paragraphs and tables — detect `<w:sdt>` directly inside `<w:body>` or `<w:tc>`, produce block-level ContentControl container with child BodyElements preserving original order
+- [x] 3.5 SDT round-trip preserves byte-level content fidelity — add round-trip test in SDTParserTests using the `sdt-template.docx` fixture, verify id/tag/alias/type marker/lockType/placeholder match between input and output, open output in Word 2021+ manually to confirm no error dialog
 
 ## 4. WordDocument Mutation Methods
 
