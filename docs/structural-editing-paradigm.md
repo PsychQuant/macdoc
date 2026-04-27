@@ -145,20 +145,22 @@ Theme、custom XML、commentsExtended、people、glossary、嵌入字型、prese
 未改動 parts 是 **bit-exact preservation**。被改動的 parts（typically `document.xml`）
 re-serialize 時走另一條路徑——typed model emit + raw fallback for unknowns。
 
-從 v0.19.6 (sub-stack A #58) 到 v0.20.1 (sub-stack C-CONT #60) 累積建立了
+從 v0.19.6 (sub-stack A #58) 到 v0.20.3 (sub-stack E #66) 累積建立了
 **modified parts 的 content-equality 保證**：
 
 | 保留類別 | 機制 | 來源 |
 |---|---|---|
 | **Block-level markers**（`<w:bookmarkStart>`、`<w:bookmarkEnd>`、其他 `EG_BlockLevelElts`）| `BodyChild.bookmarkMarker` (typed) + `BodyChild.rawBlockElement` (catch-all)；container parsers symmetric | sub-stack A #58 (4 sub-cycles) |
 | **Whitespace `<w:t xml:space="preserve">`** | `WhitespaceOverlay` byte-stream pre-scan + `WhitespaceParseContext` + `advanceWhitespaceCounter(includeDelText:)` 跨 6 個 `<w:t>`-bearing parts | sub-stack B #59 (5 sub-cycles) |
-| **RunProperties typed**（`<w:rFonts>` 4-axis、`<w:noProof>`、`<w:kern>`、`<w:lang>` 3-axis） | typed `RFontsProperties` / `LanguageProperties` + extraction in `parseRunProperties` | sub-stack C #60 |
+| **Run-level RunProperties typed**（`<w:rFonts>` 4-axis、`<w:noProof>`、`<w:kern>`、`<w:lang>` 3-axis） | typed `RFontsProperties` / `LanguageProperties` + extraction in `parseRunProperties` | sub-stack C #60 |
 | **RunProperties raw children**（`<w14:textOutline>`、`<w:caps>`、`<w:smallCaps>`、`<w:spacing>`、`<w:position>`、`<w:shd>`、`<w:bdr>`、`<w:em>`、`<w:effect>` 等）| `RunProperties.rawChildren: [RawElement]` passthrough | sub-stack C-CONT |
+| **Paragraph-mark RunProperties**（`<w:pPr><w:rPr>` controlling pilcrow ¶ glyph）| `ParagraphProperties.markRunProperties` reuses `parseRunProperties` verbatim | **sub-stack D #65** |
+| **Paragraph w14:* GUIDs**（`<w:p w14:paraId="..." w14:textId="...">` — Word's revision-tracking anchors for collaborative editing） | `Paragraph.w14ParaId` / `w14TextId` String? plain attribute passthrough | **sub-stack E #66** |
 | **`<w:delText>` content**（tracked deletions）| Run.rawElements + writer-gate; `includeDelText: false` opt-out 防 counter desync | sub-stack B-CONT-2-CONT (hotfix) |
 
 驗證方式是 **cross-cutting matrix-pin** `testDocumentContentEqualityInvariant`，
-LOAD-BEARING with 3 preservation classes（bookmarkStart count、`<w:t>` char sum、
-rPr children ratio floors）+ size-loss ceiling，跑在 NTPU thesis fixture 上。
+LOAD-BEARING across **5 preservation classes**（bookmarkStart count、`<w:t>` char sum、
+rPr children ratio floors for rFonts/noProof/lang/kern/w14:）+ size-loss ceiling，跑在 NTPU thesis fixture 上。
 任何未來改動只要破壞這幾個 class 就會在 CI 上 fail。
 
 **Modified parts 不是 bit-exact**——必然有 canonicalization（attribute 順序、namespace
@@ -172,15 +174,14 @@ prefix 收斂）。但 **content-equality 保證 typed + raw fallback 不會 sil
 | Pre-fix v0.19.x | 32% | `<w:rFonts>` 4-axis collapse + `<w:noProof>` / `<w:kern>` / `<w:lang>` silent drop + `<w14:*>` 全部 drop + `<w:t xml:space="preserve">` 部分 drop + body bookmarks drop |
 | Sub-stack A v0.19.6-v0.19.9 | ~28% | bookmarks 保留；其他 rPr 類別仍 drop |
 | Sub-stack B v0.19.10-v0.19.13 | ~24% | whitespace 保留；rPr 仍 drop |
-| Sub-stack C v0.20.0 | 17.75% | typed + raw rPr children 大部分保留 |
-| **Sub-stack C-CONT v0.20.1** | **16.66%** | trim `recognizedRprChildren` Set，common rPr 類別（`<w:caps>`/`<w:spacing>` 等）也保留 |
+| Sub-stack C v0.20.0 | 17.75% | run-level typed + raw rPr children 大部分保留 |
+| Sub-stack C-CONT v0.20.1 | 16.66% | trim `recognizedRprChildren` Set，common rPr 類別（`<w:caps>`/`<w:spacing>` 等）也保留 |
+| Sub-stack D v0.20.2 | 10.95% | paragraph-mark `<w:pPr><w:rPr>` 完整 round-trip（`<w:lang>` 50% → 98.89%） |
+| **Sub-stack E v0.20.3** | **8.02%** | paragraph `w14:paraId` / `w14:textId` 完整 round-trip（w14:* 5% → 93.98%） |
 
-剩下的 16.66% loss 是 **out-of-scope 的兩個 pre-existing bug**：
-1. `ParagraphProperties` 缺 `markRunProperties` field — `<w:pPr><w:rPr>` paragraph-mark formatting silently dropped at parse time（~50% of remaining `<w:lang>` loss）
-2. `Paragraph` parser 不 preserve `w14:paraId` / `w14:textId` attributes on `<w:p>`（~95% of remaining w14:* loss）
-
-這兩個 bug 都不是 sub-stack A/B/C 的範圍（paragraph-level，不是 run-level），
-tracked as separate follow-up SDD。等它們落地後 loss 預期會 drop 到 < 5%。
+剩下的 8% loss 是其他 w14:* attribute classes（如 `<w:r>` 上的 w14:* 屬性、
+其他 paragraph-level attributes 等），tracked as separate follow-up SDD。
+推向 < 5% 後即可正式 ship 第 6.1 節「edit 一個字 → document.xml shrinks <1%」strong demo。
 
 ---
 
@@ -259,7 +260,7 @@ ooxml-swift 的 dirty-tracked overlay 是 categorical 解法：
 而 pandoc / textutil / python-docx 的世界裡，這個任務是 **unanswerable**——
 不是「做得不夠好」，是「結構上做不到」。
 
-### 6.1 強版 demo（v0.20.1 後）
+### 6.1 強版 demo（v0.20.3 後）
 
 > 「拿你的論文 `.docx`（含 4-axis CJK fonts + tracked deletions + Zotero custom XML
 > + `<w14:textOutline>` 文字效果 + `<w:caps>` 小型大寫 + `<w:shd>` 螢光標記），
@@ -273,18 +274,20 @@ ooxml-swift 的 dirty-tracked overlay 是 categorical 解法：
 >   （rFonts 4 axes、noProof、kern、3-axis lang）+ raw rPr children
 >   （`<w14:textOutline>`、`<w:caps>`、`<w:smallCaps>`、`<w:spacing>`、`<w:position>`、
 >   `<w:shd>`、`<w:bdr>`、`<w:em>` 等）+ tracked `<w:delText>` content
->   + whitespace `<w:t xml:space="preserve">` 全部保留。
->   Cross-cutting matrix-pin assertion 跑在 thesis fixture 上：preservation-class
->   ratio floors + `<w:t>` char sum + `<w:bookmarkStart>` count parity 全 PASS。」
+>   + whitespace `<w:t xml:space="preserve">` + **paragraph-mark `<w:pPr><w:rPr>`**
+>   + **paragraph `w14:paraId` / `w14:textId` GUIDs** 全部保留。
+>   Cross-cutting matrix-pin assertion 跑在 thesis fixture 上：5 個 preservation-class
+>   ratio floors（rFonts/noProof/lang/kern/w14: 都 ≥ 90%）+ `<w:t>` char sum +
+>   `<w:bookmarkStart>` count parity 全 PASS。」
 
-⚠️ **Caveat（v0.20.1 狀態）**：modified `document.xml` 仍有 ~16.66% byte loss，
-來自兩個 out-of-scope bug：(a) `<w:pPr><w:rPr>` paragraph-mark formatting drop、
-(b) `w14:paraId` / `w14:textId` paragraph attribute drop。這兩個落地後（separate
-follow-up SDD）loss 會 drop 到 < 5%——屆時可以正式 claim 「edit 一個字 →
-document.xml shrinks <1%（only the edit delta）」。
+⚠️ **Caveat（v0.20.3 狀態）**：modified `document.xml` 仍有 ~8.02% byte loss，
+來自其他 w14:* attribute classes（如 `<w:r>` 上的 w14:* 屬性）。這些落地後
+（separate follow-up SDD）loss 會 drop 到 < 5%——屆時可以正式 claim
+「edit 一個字 → document.xml shrinks <1%（only the edit delta）」。
 
-當前的 honest claim 是：「**typed + raw fallback 確保任何 sub-stack A/B/C 已涵蓋的
-preservation class 都不會 silently 丟失**」——LOAD-BEARING by matrix-pin。
+當前的 honest claim 是：「**typed + raw fallback 確保任何 sub-stack A/B/C/D/E 已涵蓋的
+preservation class 都不會 silently 丟失**」——LOAD-BEARING by matrix-pin across
+**5 preservation classes** spanning run-level + paragraph-level + paragraph-mark scope。
 
 ---
 
@@ -371,32 +374,39 @@ preservation class 都不會 silently 丟失**」——LOAD-BEARING by matrix-pi
 第一條（unmodified parts byte-preservation）是 #56 R5-CONT-4 stack 收斂出來的
 architectural primitive：dirty-tracked overlay save。
 
-第二條（modified parts content-equality）是 #58/#59/#60 的 7 sub-cycles 收斂出來的
-architectural primitive：typed + raw fallback at every parser raw-capture site。
+第二條（modified parts content-equality）是 #58/#59/#60/#65/#66 的 9 sub-cycles 收斂
+出來的 architectural primitive：typed + raw fallback at every parser raw-capture site。
 具體地：
 - Block-level：`BodyChild.bookmarkMarker` (typed) + `BodyChild.rawBlockElement` (catch-all)
 - Run-level whitespace：`WhitespaceOverlay` byte-stream pre-scan
 - Run-level rPr：`RFontsProperties` (4-axis) + `LanguageProperties` (3-axis) +
   `RunProperties.rawChildren: [RawElement]` catch-all
+- **Paragraph-mark rPr**（sub-stack D #65）：`ParagraphProperties.markRunProperties`
+  reuses `parseRunProperties` verbatim — schema 跟 run-level CT_RPr 一致，所以
+  typed + raw 全部繼承
+- **Paragraph w14:* GUIDs**（sub-stack E #66）：`Paragraph.w14ParaId` / `w14TextId`
+  String? 平鋪 attribute passthrough，with empty-as-absent guard + escape discipline
 
 兩條 invariants 加上 #56 R5-CONT-4 / #58 A-CONT-3 / #59 B-CONT-2-CONT / #60 C-CONT
-這 7 個 sub-cycles 收斂出來的 verification methodology
+/ #65 D / #66 E 這 9 個 sub-cycles 收斂出來的 verification methodology
 （per-task gate + cross-cutting matrix-pin LOAD-BEARING + 6-AI cross-verify
 + counter-parity vs payload-parity test split），
 是讓「LLM 可以信任地操作真實世界 .docx」這件事**可能發生**的三個必要條件。
 
 其他都是執行細節。
 
-### 10.1 仍未涵蓋的 invariant 領域（follow-up SDD）
+### 10.1 Paragraph-level coverage（sub-stack D + E 後）
 
-content-equality invariant 目前覆蓋的是 **run-level rPr**。仍有 paragraph-level
-edge cases 不在保護範圍：
-- `<w:pPr><w:rPr>`（paragraph mark formatting — 控制 pilcrow glyph 外觀）
-- `w14:paraId` / `w14:textId`（paragraph attribute — Word revision-tracking GUIDs）
+從 v0.20.2 (sub-stack D #65) + v0.20.3 (sub-stack E #66) 起，content-equality
+invariant 從 run-level 擴展到 **完整的 paragraph + run scope**：
 
-這些 drops 在 v0.20.1 的 thesis fixture round-trip 仍會造成 ~16.66% byte loss。
-等 follow-up SDD 落地（在 `ParagraphProperties` 加 `markRunProperties` field +
-`Paragraph` parser preserve `w14:paraId/textId`），第二條 invariant 才能擴展到
-paragraph-level，loss 預期 drop 到 < 5%。
+- `<w:pPr><w:rPr>`（paragraph mark formatting — pilcrow glyph 外觀）→ ✅ 涵蓋
+- `w14:paraId` / `w14:textId`（paragraph revision-tracking GUIDs）→ ✅ 涵蓋
+
+Matrix-pin 5 個 preservation classes 全部 LOAD-BEARING，loss 從 16.66% 降到 8.02%。
+
+剩下的 ~8% 來自其他 w14:* attribute classes（如 `<w:r>` 上的 w14:* attrs）—
+tracked as separate follow-up SDD。這些落地後 loss 預期 drop 到 < 5%，
+屆時可以正式 ship 第 6.1 節「edit 一個字 → document.xml shrinks <1%」strong demo。
 
 到時候第 6.1 節的「edit 一個字 → document.xml shrinks <1%」claim 就可以正式落地。
