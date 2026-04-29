@@ -1,4 +1,4 @@
-<!-- SPECTRA:START v1.0.1 -->
+<!-- SPECTRA:START v1.0.2 -->
 
 # Spectra Instructions
 
@@ -12,6 +12,7 @@ This project uses Spectra for Spec-Driven Development(SDD). Specs live in `opens
 - There's an in-progress change to continue → `$spectra-ingest`
 - User asks about specs or how something works → `$spectra-ask`
 - Implementation is done → `$spectra-archive`
+- Commit only files related to a specific change → `$spectra-commit`
 
 ## Workflow
 

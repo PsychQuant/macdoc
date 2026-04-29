@@ -1,0 +1,13 @@
+macdoc
+common-converter-swift
+word-to-md-swift
+word-builder-swift
+pdf-to-latex-swift
+ocr-swift
+note-core-swift
+note-to-pdf-swift
+note-to-html-swift
+ooxml-swift
+markdown-swift
+marker-swift
+biblatex-apa-swift

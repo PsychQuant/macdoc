@@ -6330,3 +6330,767 @@ code:
   - .remember/logs/autonomous/save-144509.log
   - .remember/logs/autonomous/save-060358.log
 -->
+
+---
+### Requirement: wrap_caption_seq MCP tool
+
+The `wrap_caption_seq` MCP tool SHALL bulk-convert plain-text caption number portions into `<w:fldSimple>`-bearing SEQ-field runs across paragraphs whose `flattenedDisplayText()` matches a user-supplied regex with one numeric capture group, returning a structured per-paragraph result for downstream verification.
+
+The tool SHALL accept the following parameters:
+
+- `doc_id: String` (required) — opened-document handle.
+- `pattern: String` (required) — regex string with exactly ONE numeric capture group.
+- `sequence_name: String` (required) — SEQ identifier (e.g., `"Figure"`, `"Table"`, custom).
+- `format: String?` (default `"ARABIC"`) — one of `"ARABIC"` / `"ROMAN"` / `"ALPHABETIC"`.
+- `scope: String?` (default `"body"`) — one of `"body"` / `"all"`.
+- `insert_bookmark: Bool?` (default `false`).
+- `bookmark_template: String?` (required when `insert_bookmark = true`) — template containing literal `${number}` placeholder substituted with the captured numeric.
+
+The tool SHALL return a JSON object with snake_case keys:
+
+```json
+{
+  "matched_paragraphs": <Int>,
+  "fields_inserted": <Int>,
+  "paragraphs_modified": [<Int>, ...],
+  "skipped": [{"paragraph_index": <Int>, "reason": "<String>"}, ...]
+}
+```
+
+The tool SHALL emit `"Error: wrap_caption_seq: <body>"` (per `#70` tool-prefix convention) for the following preconditions, BEFORE mutating the document:
+
+- Pattern is empty, fails to compile as a valid `NSRegularExpression`, or contains zero or 2+ capture groups.
+- `format` is not one of `"ARABIC"` / `"ROMAN"` / `"ALPHABETIC"`.
+- `scope` is not one of `"body"` / `"all"`.
+- `insert_bookmark = true` but `bookmark_template` is missing or does not contain the literal `${number}` placeholder.
+- Document `doc_id` is not opened.
+
+The tool SHALL be idempotent: paragraphs whose runs or `fieldSimples` already contain a `SEQ {sequence_name}` field SHALL appear in `skipped` with `reason = "already wraps SEQ {sequence_name}"` and SHALL NOT be double-wrapped.
+
+#### Scenario: Body scope wraps three plain-text figure captions
+
+##### Example:
+
+GIVEN a document body containing 3 paragraphs with text `圖 4-1：架構圖`, `圖 4-2：流程圖`, `圖 4-3：時序圖` plus 5 unrelated paragraphs
+
+WHEN `wrap_caption_seq(pattern: "圖 4-(\\d+)：", sequence_name: "Figure")` is called
+
+THEN the response SHALL be:
+
+```json
+{
+  "matched_paragraphs": 3,
+  "fields_inserted": 3,
+  "paragraphs_modified": [<idx1>, <idx2>, <idx3>],
+  "skipped": []
+}
+```
+
+AND each modified paragraph's `flattenedDisplayText()` SHALL still display `圖 4-1：架構圖` (etc.) immediately after the call (cachedResult preserved)
+
+AND the underlying XML SHALL contain `<w:fldSimple w:instr=" SEQ Figure \* ARABIC ">` wrapping each captured digit
+
+#### Scenario: Idempotent re-run skips already-wrapped paragraphs
+
+##### Example:
+
+GIVEN the same document AFTER the previous wrap_caption_seq call has succeeded
+
+WHEN `wrap_caption_seq(pattern: "圖 4-(\\d+)：", sequence_name: "Figure")` is called a second time
+
+THEN the response SHALL be:
+
+```json
+{
+  "matched_paragraphs": 3,
+  "fields_inserted": 0,
+  "paragraphs_modified": [],
+  "skipped": [
+    {"paragraph_index": <idx1>, "reason": "already wraps SEQ Figure"},
+    {"paragraph_index": <idx2>, "reason": "already wraps SEQ Figure"},
+    {"paragraph_index": <idx3>, "reason": "already wraps SEQ Figure"}
+  ]
+}
+```
+
+#### Scenario: Pattern with zero capture groups rejected before mutation
+
+##### Example:
+
+GIVEN any opened document
+
+WHEN `wrap_caption_seq(pattern: "圖 4-\\d+：", sequence_name: "Figure")` is called (no parentheses around `\d+` — zero capture groups)
+
+THEN the tool SHALL return `"Error: wrap_caption_seq: pattern must contain exactly one capture group, got 0"`
+
+AND the document SHALL be unmodified (no body.children diff)
+
+#### Scenario: Bookmark wrapping with template substitution
+
+##### Example:
+
+GIVEN a body paragraph with text `Figure 7. Distribution of MoCA scores`
+
+WHEN `wrap_caption_seq(pattern: "Figure (\\d+)\\.", sequence_name: "Figure", insert_bookmark: true, bookmark_template: "fig${number}")` is called
+
+THEN the matched paragraph SHALL be wrapped with `<w:bookmarkStart w:name="fig7" w:id="<generated>">` immediately before the SEQ-field run AND `<w:bookmarkEnd w:id="<generated>">` immediately after
+
+AND `list_bookmarks` SHALL return the new bookmark `fig7` after the call
+
+#### Scenario: insert_bookmark = true without bookmark_template rejected before mutation
+
+##### Example:
+
+GIVEN any opened document
+
+WHEN `wrap_caption_seq(pattern: "Figure (\\d+)", sequence_name: "Figure", insert_bookmark: true)` is called (no `bookmark_template`)
+
+THEN the tool SHALL return `"Error: wrap_caption_seq: bookmark_template required when insert_bookmark is true"`
+
+AND the document SHALL be unmodified
+
+<!-- @trace
+source: wrap-caption-seq
+updated: 2026-04-28
+code:
+  - .remember/logs/autonomous/save-090646.log
+  - .github/prompts/spectra-commit.prompt.md
+  - .remember/logs/autonomous/save-143640.log
+  - .remember/logs/autonomous/save-144746.log
+  - .remember/logs/autonomous/save-133847.log
+  - .remember/logs/autonomous/save-125146.log
+  - .remember/logs/autonomous/save-132924.log
+  - .remember/logs/autonomous/save-144612.log
+  - .remember/logs/autonomous/save-095249.log
+  - .remember/logs/autonomous/save-094341.log
+  - .remember/logs/autonomous/save-094948.log
+  - .remember/logs/autonomous/save-053314.log
+  - .remember/logs/autonomous/save-092720.log
+  - .remember/logs/autonomous/save-131501.log
+  - .remember/logs/autonomous/save-143948.log
+  - .remember/logs/autonomous/save-133746.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-130016.log
+  - .remember/logs/autonomous/save-144813.log
+  - .remember/logs/autonomous/save-060351.log
+  - .remember/logs/autonomous/save-091807.log
+  - .remember/logs/autonomous/save-130207.log
+  - .remember/logs/autonomous/save-060244.log
+  - .remember/logs/autonomous/save-095108.log
+  - .remember/logs/autonomous/save-064603.log
+  - .remember/logs/autonomous/save-144626.log
+  - .remember/logs/autonomous/save-144541.log
+  - .remember/logs/autonomous/save-092124.log
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095050.log
+  - .remember/logs/autonomous/save-070542.log
+  - .remember/logs/autonomous/save-070751.log
+  - .remember/logs/autonomous/save-130135.log
+  - .remember/logs/autonomous/save-144034.log
+  - .remember/logs/autonomous/save-095315.log
+  - .remember/logs/autonomous/save-084631.log
+  - .remember/logs/autonomous/save-130512.log
+  - .remember/logs/autonomous/save-142919.log
+  - .remember/logs/autonomous/save-094532.log
+  - .remember/logs/autonomous/save-095052.log
+  - .remember/logs/autonomous/save-093427.log
+  - .remember/logs/autonomous/save-060254.log
+  - .remember/logs/autonomous/save-095034.log
+  - .remember/logs/autonomous/save-144305.log
+  - .remember/logs/autonomous/save-144300.log
+  - .remember/logs/autonomous/save-144625.log
+  - .remember/logs/autonomous/save-130025.log
+  - .remember/logs/autonomous/save-093102.log
+  - .remember/logs/autonomous/save-095302.log
+  - .github/skills/spectra-discuss/SKILL.md
+  - .remember/logs/autonomous/save-095036.log
+  - .remember/logs/autonomous/save-094251.log
+  - .remember/logs/autonomous/save-095113.log
+  - .remember/logs/autonomous/save-093954.log
+  - scripts/audit-security.sh
+  - .remember/logs/autonomous/save-095127.log
+  - .remember/logs/autonomous/save-094611.log
+  - .remember/logs/autonomous/save-084724.log
+  - .remember/logs/autonomous/save-095148.log
+  - .remember/logs/autonomous/save-090842.log
+  - .remember/logs/autonomous/save-060214.log
+  - .remember/logs/autonomous/save-130150.log
+  - .github/prompts/spectra-apply.prompt.md
+  - .remember/logs/autonomous/save-125453.log
+  - .remember/logs/autonomous/save-095342.log
+  - .remember/logs/autonomous/save-093834.log
+  - .remember/logs/autonomous/save-130029.log
+  - .remember/logs/autonomous/save-132212.log
+  - .remember/logs/autonomous/save-142744.log
+  - .remember/logs/autonomous/save-133004.log
+  - .remember/logs/autonomous/save-071019.log
+  - .remember/logs/autonomous/save-130052.log
+  - .remember/logs/autonomous/save-132541.log
+  - .remember/logs/autonomous/save-144535.log
+  - .remember/logs/autonomous/save-053705.log
+  - .remember/logs/autonomous/save-055745.log
+  - .remember/logs/autonomous/save-144157.log
+  - .remember/logs/autonomous/save-095305.log
+  - .remember/logs/autonomous/save-060928.log
+  - .remember/logs/autonomous/save-053949.log
+  - .remember/logs/autonomous/save-064716.log
+  - .remember/logs/autonomous/save-144017.log
+  - .github/skills/spectra-propose/SKILL.md
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-144533.log
+  - .remember/logs/autonomous/save-050715.log
+  - .remember/logs/autonomous/save-144524.log
+  - .remember/logs/autonomous/save-094227.log
+  - .remember/logs/autonomous/save-144635.log
+  - .remember/logs/autonomous/save-053020.log
+  - .remember/logs/autonomous/save-065120.log
+  - .remember/logs/autonomous/save-143750.log
+  - .remember/logs/autonomous/save-125900.log
+  - .remember/logs/autonomous/save-060229.log
+  - .remember/logs/autonomous/save-144237.log
+  - .remember/logs/autonomous/save-133949.log
+  - .remember/logs/autonomous/save-144721.log
+  - .remember/logs/autonomous/save-084706.log
+  - .remember/logs/autonomous/save-090851.log
+  - .remember/logs/autonomous/save-090911.log
+  - .remember/logs/autonomous/save-144752.log
+  - .remember/logs/autonomous/save-130103.log
+  - .remember/logs/autonomous/save-095041.log
+  - .remember/logs/autonomous/save-143002.log
+  - .remember/logs/autonomous/save-051000.log
+  - .remember/logs/autonomous/save-060240.log
+  - .remember/logs/autonomous/save-142750.log
+  - .remember/logs/autonomous/save-052950.log
+  - .remember/logs/autonomous/save-053009.log
+  - .remember/logs/autonomous/save-052817.log
+  - .remember/logs/autonomous/save-064608.log
+  - .remember/logs/autonomous/save-144404.log
+  - .remember/logs/autonomous/save-093813.log
+  - .remember/logs/autonomous/save-062133.log
+  - .remember/logs/autonomous/save-095602.log
+  - .github/prompts/spectra-discuss.prompt.md
+  - .remember/logs/autonomous/save-091542.log
+  - .remember/logs/autonomous/save-130131.log
+  - .remember/logs/autonomous/save-143956.log
+  - .remember/logs/autonomous/save-053724.log
+  - .remember/logs/autonomous/save-142856.log
+  - .remember/logs/autonomous/save-143959.log
+  - .remember/logs/autonomous/save-095300.log
+  - .remember/logs/autonomous/save-144549.log
+  - .remember/logs/autonomous/save-091233.log
+  - .remember/logs/autonomous/save-091602.log
+  - .remember/logs/autonomous/save-094106.log
+  - .remember/logs/autonomous/save-095105.log
+  - .remember/logs/autonomous/save-084732.log
+  - .remember/logs/autonomous/save-093217.log
+  - .remember/logs/autonomous/save-091157.log
+  - .remember/logs/autonomous/save-093203.log
+  - .remember/logs/autonomous/save-095043.log
+  - .remember/logs/autonomous/save-060921.log
+  - .remember/logs/autonomous/save-095142.log
+  - .remember/logs/autonomous/save-132546.log
+  - .remember/logs/autonomous/save-144855.log
+  - .remember/logs/autonomous/save-142830.log
+  - .remember/logs/autonomous/save-065103.log
+  - .remember/logs/autonomous/save-094025.log
+  - .remember/logs/autonomous/save-130506.log
+  - scripts/_phase2-targets.txt
+  - .remember/logs/autonomous/save-092924.log
+  - .remember/logs/autonomous/save-144121.log
+  - .remember/logs/autonomous/save-095110.log
+  - .remember/logs/autonomous/save-094914.log
+  - .remember/logs/autonomous/save-071142.log
+  - .remember/logs/autonomous/save-093154.log
+  - .remember/logs/autonomous/save-125548.log
+  - .remember/logs/autonomous/save-143133.log
+  - .remember/logs/autonomous/save-144502.log
+  - .remember/logs/autonomous/save-060703.log
+  - .remember/logs/autonomous/save-094129.log
+  - .remember/logs/autonomous/save-144125.log
+  - .remember/logs/autonomous/save-142755.log
+  - .remember/logs/autonomous/save-131716.log
+  - .remember/logs/autonomous/save-143932.log
+  - .github/prompts/spectra-audit.prompt.md
+  - .remember/logs/autonomous/save-095048.log
+  - .remember/logs/autonomous/save-130041.log
+  - .remember/logs/autonomous/save-095132.log
+  - .remember/logs/autonomous/save-130049.log
+  - .remember/logs/autonomous/save-144441.log
+  - .remember/logs/autonomous/save-144554.log
+  - .remember/logs/autonomous/save-094702.log
+  - .remember/logs/autonomous/save-143230.log
+  - .remember/logs/autonomous/save-050716.log
+  - .remember/logs/autonomous/save-091107.log
+  - .remember/logs/autonomous/save-054016.log
+  - .remember/logs/autonomous/save-054354.log
+  - .remember/logs/autonomous/save-054120.log
+  - .remember/logs/autonomous/save-091534.log
+  - .remember/logs/autonomous/save-095135.log
+  - .remember/logs/autonomous/save-143442.log
+  - .remember/logs/autonomous/save-051948.log
+  - .remember/logs/autonomous/save-144001.log
+  - .remember/logs/autonomous/save-095443.log
+  - .remember/logs/autonomous/save-090617.log
+  - .remember/logs/autonomous/save-144136.log
+  - .remember/logs/autonomous/save-144405.log
+  - .remember/logs/autonomous/save-142803.log
+  - .remember/logs/autonomous/save-125734.log
+  - .remember/logs/autonomous/save-095121.log
+  - .remember/logs/autonomous/save-143252.log
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-133640.log
+  - .remember/logs/autonomous/save-142819.log
+  - .remember/logs/autonomous/save-095101.log
+  - .remember/logs/autonomous/save-095352.log
+  - .remember/logs/autonomous/save-130237.log
+  - .remember/logs/autonomous/save-133151.log
+  - .remember/logs/autonomous/save-144510.log
+  - .remember/logs/autonomous/save-144544.log
+  - .remember/logs/autonomous/save-144632.log
+  - .remember/logs/autonomous/save-143221.log
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-090640.log
+  - .remember/logs/autonomous/save-094511.log
+  - .remember/logs/autonomous/save-091715.log
+  - .remember/logs/autonomous/save-052939.log
+  - .remember/logs/autonomous/save-130310.log
+  - .remember/logs/autonomous/save-050615.log
+  - .remember/logs/autonomous/save-144623.log
+  - .remember/logs/autonomous/save-053346.log
+  - .remember/logs/autonomous/save-060915.log
+  - .remember/logs/autonomous/save-065443.log
+  - .remember/logs/autonomous/save-090908.log
+  - .remember/logs/autonomous/save-130453.log
+  - .remember/logs/autonomous/save-095154.log
+  - .remember/logs/autonomous/save-091852.log
+  - .remember/logs/autonomous/save-065426.log
+  - .remember/logs/autonomous/save-130045.log
+  - .remember/logs/autonomous/save-050954.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-144255.log
+  - .remember/logs/autonomous/save-053322.log
+  - .remember/logs/autonomous/save-130022.log
+  - .remember/logs/autonomous/save-053649.log
+  - .remember/logs/autonomous/save-054029.log
+  - .remember/logs/autonomous/save-070721.log
+  - .remember/logs/autonomous/save-143708.log
+  - .remember/logs/autonomous/save-144801.log
+  - .remember/logs/autonomous/save-144030.log
+  - .remember/logs/autonomous/save-060340.log
+  - .remember/logs/autonomous/save-060658.log
+  - .remember/logs/autonomous/save-130122.log
+  - .remember/logs/autonomous/save-093045.log
+  - .remember/logs/autonomous/save-130007.log
+  - .remember/logs/autonomous/save-133039.log
+  - .remember/logs/autonomous/save-130255.log
+  - .remember/logs/autonomous/save-143922.log
+  - .remember/logs/autonomous/save-144509.log
+  - .remember/logs/autonomous/save-144702.log
+  - .remember/logs/autonomous/save-125755.log
+  - .remember/logs/autonomous/save-094237.log
+  - .github/prompts/spectra-ingest.prompt.md
+  - .remember/logs/autonomous/save-144611.log
+  - .remember/logs/autonomous/save-130146.log
+  - .remember/logs/autonomous/save-090848.log
+  - .remember/logs/autonomous/save-130221.log
+  - .remember/logs/autonomous/save-055825.log
+  - .remember/logs/autonomous/save-070740.log
+  - .remember/logs/autonomous/save-130127.log
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-053259.log
+  - .remember/logs/autonomous/save-094117.log
+  - .remember/logs/autonomous/save-142928.log
+  - .remember/logs/autonomous/save-070806.log
+  - .remember/logs/autonomous/save-090903.log
+  - .github/prompts/spectra-ask.prompt.md
+  - .remember/logs/autonomous/save-093305.log
+  - .remember/logs/autonomous/save-094207.log
+  - .remember/logs/autonomous/save-095051.log
+  - .remember/logs/autonomous/save-092531.log
+  - .remember/logs/autonomous/save-093923.log
+  - .remember/logs/autonomous/save-095117.log
+  - .remember/logs/autonomous/save-125605.log
+  - .remember/logs/autonomous/save-095310.log
+  - references/textutil-manpage.txt
+  - .remember/logs/autonomous/save-091904.log
+  - .remember/logs/autonomous/save-125717.log
+  - .remember/logs/autonomous/save-133829.log
+  - .remember/logs/autonomous/save-144619.log
+  - .remember/logs/autonomous/save-054420.log
+  - .remember/logs/autonomous/save-130157.log
+  - .github/prompts/spectra-archive.prompt.md
+  - .remember/logs/autonomous/save-052229.log
+  - .remember/logs/autonomous/save-091145.log
+  - .remember/logs/autonomous/save-055640.log
+  - .remember/logs/autonomous/save-093841.log
+  - .remember/logs/autonomous/save-094646.log
+  - .remember/logs/autonomous/save-125953.log
+  - .remember/logs/autonomous/save-130304.log
+  - .remember/logs/autonomous/save-070735.log
+  - .remember/logs/autonomous/save-090949.log
+  - .remember/logs/autonomous/save-070537.log
+  - .remember/logs/autonomous/save-144416.log
+  - .remember/logs/autonomous/save-144940.log
+  - .remember/logs/autonomous/save-095250.log
+  - .remember/logs/autonomous/save-144633.log
+  - .remember/logs/autonomous/save-095104.log
+  - .remember/logs/autonomous/save-052004.log
+  - .remember/logs/autonomous/save-092928.log
+  - .remember/logs/autonomous/save-131142.log
+  - .remember/logs/autonomous/save-144032.log
+  - .remember/logs/autonomous/save-062105.log
+  - .remember/logs/autonomous/save-054426.log
+  - .remember/logs/autonomous/save-130332.log
+  - .remember/logs/autonomous/save-091524.log
+  - .remember/logs/autonomous/save-132957.log
+  - .remember/logs/autonomous/save-143326.log
+  - .remember/logs/autonomous/save-144327.log
+  - .remember/logs/autonomous/save-144528.log
+  - .remember/logs/autonomous/save-125748.log
+  - .remember/logs/autonomous/save-125802.log
+  - .remember/logs/autonomous/save-144639.log
+  - .remember/logs/autonomous/save-070637.log
+  - .remember/logs/autonomous/save-053700.log
+  - .remember/logs/autonomous/save-063826.log
+  - .remember/logs/autonomous/save-095056.log
+  - references/swift-argument-parser
+  - .remember/logs/autonomous/save-093942.log
+  - .remember/logs/autonomous/save-090941.log
+  - .remember/logs/autonomous/save-090628.log
+  - .remember/logs/autonomous/save-143820.log
+  - .remember/logs/autonomous/save-144714.log
+  - .remember/logs/autonomous/save-092837.log
+  - .github/skills/spectra-archive/SKILL.md
+  - .remember/logs/autonomous/save-052859.log
+  - .remember/logs/autonomous/save-133755.log
+  - .remember/logs/autonomous/save-092508.log
+  - .remember/logs/autonomous/save-091306.log
+  - .remember/logs/autonomous/save-093415.log
+  - .remember/logs/autonomous/save-095102.log
+  - .remember/logs/autonomous/save-144122.log
+  - .remember/logs/autonomous/save-142806.log
+  - AGENTS.md
+  - .remember/logs/autonomous/save-052924.log
+  - .remember/logs/autonomous/save-053252.log
+  - .remember/logs/autonomous/save-091018.log
+  - .remember/logs/autonomous/save-092950.log
+  - .remember/logs/autonomous/save-130038.log
+  - .remember/logs/autonomous/save-132911.log
+  - .remember/logs/autonomous/save-055807.log
+  - .remember/logs/autonomous/save-062125.log
+  - .remember/logs/autonomous/save-130246.log
+  - .remember/logs/autonomous/save-052154.log
+  - .remember/logs/autonomous/save-090936.log
+  - .remember/logs/autonomous/save-095008.log
+  - .remember/logs/autonomous/save-143955.log
+  - .remember/logs/autonomous/save-130337.log
+  - .remember/logs/autonomous/save-144608.log
+  - .remember/logs/autonomous/save-084640.log
+  - .remember/logs/autonomous/save-125617.log
+  - .remember/logs/autonomous/save-095111.log
+  - .remember/logs/autonomous/save-144602.log
+  - .remember/logs/autonomous/save-095058.log
+  - .remember/logs/autonomous/save-091823.log
+  - .remember/logs/autonomous/save-093333.log
+  - .remember/logs/autonomous/save-093020.log
+  - .remember/logs/autonomous/save-093405.log
+  - .remember/logs/autonomous/save-130403.log
+  - .remember/logs/autonomous/save-132937.log
+  - .remember/logs/autonomous/save-065156.log
+  - .remember/logs/autonomous/save-130227.log
+  - .remember/logs/autonomous/save-144424.log
+  - .remember/logs/autonomous/save-144450.log
+  - .remember/logs/autonomous/save-054136.log
+  - .remember/logs/autonomous/save-055723.log
+  - .github/prompts/spectra-propose.prompt.md
+  - .remember/logs/autonomous/save-144606.log
+  - .remember/logs/autonomous/save-095038.log
+  - .remember/logs/autonomous/save-144540.log
+  - .remember/logs/autonomous/save-093830.log
+  - .remember/logs/autonomous/save-144303.log
+  - .remember/logs/autonomous/save-091055.log
+  - .remember/logs/autonomous/save-093111.log
+  - .remember/logs/autonomous/save-144024.log
+  - .remember/logs/autonomous/save-144229.log
+  - .remember/logs/autonomous/save-050832.log
+  - .remember/logs/autonomous/save-084656.log
+  - .remember/logs/autonomous/save-095023.log
+  - .remember/logs/autonomous/save-144833.log
+  - .remember/logs/autonomous/save-093144.log
+  - .remember/logs/autonomous/save-130439.log
+  - .remember/logs/autonomous/save-092536.log
+  - .remember/logs/autonomous/save-092617.log
+  - .remember/logs/autonomous/save-143906.log
+  - .remember/logs/autonomous/save-094517.log
+  - .remember/logs/autonomous/save-095057.log
+  - .remember/logs/autonomous/save-143300.log
+  - .remember/logs/autonomous/save-144302.log
+  - .remember/logs/autonomous/save-143345.log
+  - .remember/logs/autonomous/save-144607.log
+  - .remember/logs/autonomous/save-095141.log
+  - .remember/logs/autonomous/save-144733.log
+  - .remember/logs/autonomous/save-144622.log
+  - .remember/logs/autonomous/save-143202.log
+  - .remember/logs/autonomous/save-143936.log
+  - .remember/logs/autonomous/save-143950.log
+  - .remember/logs/autonomous/save-093132.log
+  - .remember/logs/autonomous/save-144052.log
+  - .remember/logs/autonomous/save-095116.log
+  - .remember/logs/autonomous/save-144151.log
+  - .remember/logs/autonomous/save-094431.log
+  - .remember/logs/autonomous/save-054129.log
+  - .remember/logs/autonomous/save-142949.log
+  - .remember/logs/autonomous/save-144507.log
+  - .remember/logs/autonomous/save-144559.log
+  - .remember/logs/autonomous/save-144624.log
+  - .remember/logs/autonomous/save-144841.log
+  - .remember/logs/autonomous/save-125708.log
+  - .remember/logs/autonomous/save-093347.log
+  - .remember/logs/autonomous/save-054432.log
+  - .remember/logs/autonomous/save-095126.log
+  - .remember/logs/autonomous/save-130034.log
+  - .remember/logs/autonomous/save-094503.log
+  - .remember/logs/autonomous/save-071340.log
+  - .remember/logs/autonomous/save-095255.log
+  - .remember/logs/autonomous/save-085507.log
+  - .remember/logs/autonomous/save-143941.log
+  - .remember/logs/autonomous/save-095100.log
+  - .remember/logs/autonomous/save-143500.log
+  - .remember/logs/autonomous/save-143341.log
+  - .remember/logs/autonomous/save-144113.log
+  - .remember/logs/autonomous/save-144455.log
+  - .remember/logs/autonomous/save-130341.log
+  - .remember/logs/autonomous/save-144105.log
+  - .remember/logs/autonomous/save-090845.log
+  - .remember/logs/autonomous/save-091740.log
+  - .remember/logs/autonomous/save-054334.log
+  - .remember/logs/autonomous/save-131833.log
+  - .remember/logs/autonomous/save-144101.log
+  - .remember/logs/autonomous/save-071225.log
+  - .remember/logs/autonomous/save-144914.log
+  - .remember/logs/autonomous/save-144919.log
+  - .remember/logs/autonomous/save-144054.log
+  - .remember/tmp/save-session.pid
+  - .remember/logs/autonomous/save-092510.log
+  - .remember/logs/autonomous/save-131413.log
+  - .remember/logs/autonomous/save-133621.log
+  - .remember/logs/autonomous/save-094307.log
+  - .remember/logs/autonomous/save-144546.log
+  - .remember/logs/autonomous/save-052904.log
+  - .remember/logs/autonomous/save-095424.log
+  - .remember/logs/autonomous/save-131445.log
+  - .remember/logs/autonomous/save-144520.log
+  - .remember/logs/autonomous/save-065450.log
+  - .remember/logs/autonomous/save-095254.log
+  - .remember/logs/autonomous/save-144011.log
+  - .remember/logs/autonomous/save-062753.log
+  - .remember/logs/autonomous/save-133856.log
+  - .remember/logs/autonomous/save-125727.log
+  - SECURITY.md
+  - .remember/logs/autonomous/save-144500.log
+  - .remember/logs/autonomous/save-143952.log
+  - .remember/logs/autonomous/save-094540.log
+  - .remember/logs/autonomous/save-144002.log
+  - .remember/logs/autonomous/save-130417.log
+  - .remember/logs/autonomous/save-144149.log
+  - .remember/logs/autonomous/save-062741.log
+  - .remember/logs/autonomous/save-091753.log
+  - .remember/logs/autonomous/save-133118.log
+  - .remember/logs/autonomous/save-144006.log
+  - .remember/logs/autonomous/save-130445.log
+  - .remember/logs/autonomous/save-142809.log
+  - .remember/logs/autonomous/save-071807.log
+  - .remember/logs/autonomous/save-143938.log
+  - .remember/logs/autonomous/save-050827.log
+  - .remember/logs/autonomous/save-130458.log
+  - .remember/logs/autonomous/save-094522.log
+  - .remember/logs/autonomous/save-144948.log
+  - .remember/logs/autonomous/save-094349.log
+  - GEMINI.md
+  - .remember/logs/autonomous/save-143931.log
+  - .remember/logs/autonomous/save-092848.log
+  - .remember/logs/autonomous/save-092521.log
+  - .remember/logs/autonomous/save-125649.log
+  - .remember/logs/autonomous/save-090857.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-093359.log
+  - .remember/logs/autonomous/save-133838.log
+  - .remember/logs/autonomous/save-144342.log
+  - .remember/logs/autonomous/save-143805.log
+  - .remember/logs/autonomous/save-091241.log
+  - .remember/logs/autonomous/save-143943.log
+  - .github/skills/spectra-commit/SKILL.md
+  - .remember/logs/autonomous/save-061950.log
+  - .remember/logs/autonomous/save-071557.log
+  - .remember/logs/autonomous/save-092712.log
+  - .remember/logs/autonomous/save-130153.log
+  - .remember/logs/autonomous/save-143214.log
+  - .remember/logs/autonomous/save-093237.log
+  - .remember/logs/autonomous/save-095153.log
+  - .remember/logs/autonomous/save-143649.log
+  - .remember/logs/autonomous/save-144351.log
+  - .remember/logs/autonomous/save-093855.log
+  - .remember/logs/autonomous/save-092955.log
+  - .remember/logs/autonomous/save-050635.log
+  - .remember/logs/autonomous/save-130210.log
+  - .remember/logs/autonomous/save-092604.log
+  - .remember/logs/autonomous/save-053711.log
+  - .remember/logs/autonomous/save-065109.log
+  - .remember/logs/autonomous/save-090818.log
+  - .remember/logs/autonomous/save-093950.log
+  - .remember/logs/autonomous/save-091210.log
+  - .github/skills/spectra-apply/SKILL.md
+  - .remember/logs/autonomous/save-133144.log
+  - .remember/logs/autonomous/save-054401.log
+  - .remember/logs/autonomous/save-125624.log
+  - .remember/logs/autonomous/save-093247.log
+  - .remember/logs/autonomous/save-130325.log
+  - .remember/logs/autonomous/save-133528.log
+  - .remember/logs/autonomous/save-133510.log
+  - .remember/logs/autonomous/save-055649.log
+  - .remember/logs/autonomous/save-053239.log
+  - .remember/logs/autonomous/save-091548.log
+  - .remember/logs/autonomous/save-094212.log
+  - .remember/logs/autonomous/save-095109.log
+  - .remember/logs/autonomous/save-095222.log
+  - .remember/logs/autonomous/save-095309.log
+  - .remember/logs/autonomous/save-143236.log
+  - .remember/logs/autonomous/save-095637.log
+  - .remember/logs/autonomous/save-143635.log
+  - .remember/logs/autonomous/save-143759.log
+  - .remember/logs/autonomous/save-143617.log
+  - .remember/logs/autonomous/save-125059.log
+  - .remember/logs/autonomous/save-143322.log
+  - .remember/logs/autonomous/save-143225.log
+  - .remember/logs/autonomous/save-095416.log
+  - .remember/logs/autonomous/save-055800.log
+  - .remember/logs/autonomous/save-093515.log
+  - .remember/logs/autonomous/save-094259.log
+  - .remember/logs/autonomous/save-050442.log
+  - .remember/logs/autonomous/save-144222.log
+  - .remember/logs/autonomous/save-093351.log
+  - .remember/logs/autonomous/save-095434.log
+  - .remember/logs/autonomous/save-130430.log
+  - .remember/logs/autonomous/save-144648.log
+  - .remember/logs/autonomous/save-130241.log
+  - .remember/logs/autonomous/save-130355.log
+  - .remember/logs/autonomous/save-144309.log
+  - .remember/logs/autonomous/save-144102.log
+  - .remember/logs/autonomous/save-155729.log
+  - .remember/logs/autonomous/save-130001.log
+  - .remember/logs/autonomous/save-133537.log
+  - .remember/logs/autonomous/save-093433.log
+  - .remember/logs/autonomous/save-095358.log
+  - .remember/logs/autonomous/save-050710.log
+  - .remember/logs/autonomous/save-094527.log
+  - .remember/logs/autonomous/save-095134.log
+  - .remember/logs/autonomous/save-143944.log
+  - .remember/logs/autonomous/save-144324.log
+  - .remember/logs/autonomous/save-131239.log
+  - .remember/logs/autonomous/save-130321.log
+  - .remember/logs/autonomous/save-130413.log
+  - .remember/logs/autonomous/save-093936.log
+  - .remember/logs/autonomous/save-144449.log
+  - .remember/logs/autonomous/save-063942.log
+  - .remember/logs/autonomous/save-052807.log
+  - .remember/logs/autonomous/save-125909.log
+  - .remember/logs/autonomous/save-143125.log
+  - .remember/logs/autonomous/save-093327.log
+  - .remember/logs/autonomous/save-144529.log
+  - .remember/logs/autonomous/save-091830.log
+  - .remember/logs/autonomous/save-095248.log
+  - .remember/logs/autonomous/save-143029.log
+  - .github/prompts/spectra-debug.prompt.md
+  - .remember/logs/autonomous/save-144015.log
+  - .remember/logs/autonomous/save-144534.log
+  - .remember/logs/autonomous/save-062057.log
+  - .remember/logs/autonomous/save-050722.log
+  - .remember/logs/autonomous/save-095042.log
+  - .remember/logs/autonomous/save-095257.log
+  - .remember/logs/autonomous/save-095133.log
+  - .remember/logs/autonomous/save-094122.log
+  - .remember/logs/autonomous/save-143946.log
+  - .remember/logs/autonomous/save-095035.log
+  - .remember/logs/autonomous/save-093542.log
+  - .remember/logs/autonomous/save-133519.log
+  - .remember/logs/autonomous/save-130421.log
+  - .remember/logs/autonomous/save-155719.log
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-092557.log
+  - .remember/logs/autonomous/save-094622.log
+  - .remember/logs/autonomous/save-095103.log
+  - .remember/logs/autonomous/save-095136.log
+  - .remember/logs/autonomous/save-084647.log
+  - .remember/logs/autonomous/save-144252.log
+  - .remember/logs/autonomous/save-143331.log
+  - .remember/logs/autonomous/save-144212.log
+  - .remember/logs/autonomous/save-143433.log
+  - .remember/logs/autonomous/save-085618.log
+  - .remember/logs/autonomous/save-132540.log
+  - .remember/logs/autonomous/save-144009.log
+  - .remember/logs/autonomous/save-133805.log
+  - .remember/logs/autonomous/save-093001.log
+  - .remember/logs/autonomous/save-094810.log
+  - .remember/logs/autonomous/save-143336.log
+  - .remember/logs/autonomous/save-062111.log
+  - .remember/logs/autonomous/save-144318.log
+  - .remember/logs/autonomous/save-093230.log
+  - .remember/logs/autonomous/save-143722.log
+  - .remember/logs/autonomous/save-125913.log
+  - .remember/logs/autonomous/save-060236.log
+  - .remember/logs/autonomous/save-130425.log
+  - .remember/logs/autonomous/save-094035.log
+  - .remember/logs/autonomous/save-133942.log
+  - .remember/logs/autonomous/save-155713.log
+  - .spectra.yaml
+  - scripts/_phase3-public.txt
+  - .remember/logs/autonomous/save-060937.log
+  - .remember/logs/autonomous/save-053028.log
+  - .remember/logs/autonomous/save-062116.log
+  - .remember/logs/autonomous/save-090824.log
+  - .remember/logs/autonomous/save-093818.log
+  - .remember/logs/autonomous/save-130203.log
+  - .remember/logs/autonomous/save-090813.log
+  - .remember/logs/autonomous/save-144358.log
+  - .remember/logs/autonomous/save-130231.log
+  - .remember/logs/autonomous/save-130345.log
+  - scripts/_phase3-private.txt
+  - .remember/logs/autonomous/save-070600.log
+  - .remember/logs/autonomous/save-095131.log
+  - .remember/logs/autonomous/save-090915.log
+  - .remember/logs/autonomous/save-091105.log
+  - .remember/logs/autonomous/save-125558.log
+  - .remember/logs/autonomous/save-093212.log
+  - .remember/logs/autonomous/save-094641.log
+  - .remember/logs/autonomous/save-093930.log
+  - .remember/logs/autonomous/save-095146.log
+  - .remember/logs/autonomous/save-130435.log
+  - .remember/logs/autonomous/save-144537.log
+  - .remember/logs/autonomous/save-144204.log
+  - .remember/logs/autonomous/save-050949.log
+  - .remember/logs/autonomous/save-094030.log
+  - .remember/logs/autonomous/save-050821.log
+  - .remember/logs/autonomous/save-094905.log
+  - .remember/logs/autonomous/save-062759.log
+  - .remember/logs/autonomous/save-093551.log
+  - .remember/logs/autonomous/save-095122.log
+  - .remember/logs/autonomous/save-095130.log
+  - .remember/logs/autonomous/save-143207.log
+  - .remember/logs/autonomous/save-093907.log
+  - .remember/logs/autonomous/save-053934.log
+  - .remember/logs/autonomous/save-093524.log
+  - .remember/logs/autonomous/save-144023.log
+  - .remember/logs/autonomous/save-084715.log
+  - .remember/logs/autonomous/save-064616.log
+  - .remember/logs/autonomous/save-143156.log
+  - .remember/logs/autonomous/save-095053.log
+  - .remember/logs/autonomous/save-053244.log
+  - .remember/logs/autonomous/save-060358.log
+  - .remember/logs/autonomous/save-143743.log
+  - .remember/logs/autonomous/save-054040.log
+  - .remember/logs/autonomous/save-143937.log
+  - .remember/logs/autonomous/save-095140.log
+  - .remember/logs/autonomous/save-144026.log
+  - .remember/logs/autonomous/save-144041.log
+  - .remember/logs/autonomous/save-130216.log
+-->
