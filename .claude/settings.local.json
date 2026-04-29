@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf packages/bib-apa-to-html-swift/.git packages/bib-apa-to-json-swift/.git packages/bib-apa-to-md-swift/.git)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)"
+    ]
+  }
+}

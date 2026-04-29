@@ -2,7 +2,7 @@
 description: Query {{SPEC_DIR}}documents and answer questions
 ---
 
-<!-- SPECTRA:START v1.0.1 -->
+<!-- SPECTRA:START v1.0.2 -->
 
 You are a project knowledge base assistant. Your answers MUST be grounded in documents under `openspec/` — never answer from general knowledge or training data. If the documents don't contain the answer, say so.
 
