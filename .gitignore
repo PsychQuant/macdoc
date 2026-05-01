@@ -106,6 +106,8 @@ test-files/
 # Temp files
 .tmp/
 .tmp_*
+.remember/tmp/
+.claude/.idd/
 
 # Reference repos (clone-on-demand; only README.md + textutil manpage are tracked)
 reference/*
