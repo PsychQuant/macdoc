@@ -17,7 +17,7 @@ parallel_tasks: true
 claude_slash_commands: false
 
 # Enable git worktree support for isolated change branches
-# worktree: true
+worktree: true
 
 # Custom git worktrees directory
 # worktrees_dir: .spectra/worktrees
@@ -29,7 +29,7 @@ claude_effort:
   ask: low
   audit: xhigh
   debug: xhigh
-  discuss: medium
+  discuss: xhigh
   ingest: xhigh
   propose: xhigh
 
