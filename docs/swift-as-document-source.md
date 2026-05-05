@@ -11,6 +11,8 @@
 - `structural-editing-paradigm.md`：為什麼 conversion ≠ editing，editing 必須是 dirty-tracked overlay。
 - `lossless-conversion.md`：分層輸出怎麼避免轉檔資訊流失。
 - `openspec/changes/word-aligned-state-sync/`：本設計對應的 Spectra change（含 proposal / design / specs / tasks）。
+- `openspec/specs/mdocx-grammar/spec.md`：**`.mdocx` DSL 的 normative grammar contract**（Spectra change `mdocx-syntax` archive 後成為 canonical spec；本文件是 narrative，spec 是 normative）。任何 grammar 行為的歧義以 spec.md 為準。
+- `.claude/rules/extension-first-dsl.md`：副檔名命名 + AI-as-default-author 設計準則。
 
 ---
 
