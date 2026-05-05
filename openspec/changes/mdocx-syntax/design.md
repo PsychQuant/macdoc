@@ -165,6 +165,37 @@ Every grammar decision in this change resolves trade-offs by treating AI as the 
 
 **Rationale**: Without this principle pinned, future contributors will see verbosity (`Paragraph(style: .heading1) { Run("X", bold: true) }`) and propose shortcuts that re-introduce reverse-direction ambiguity. The principle is the load-bearing reason every decision in this change went in the verbose-but-deterministic direction.
 
+## Grammar reference (composition tree)
+
+Non-normative quick-reference card for "what nests in what". The normative contract lives in `specs/mdocx-grammar/spec.md` Requirements + Scenarios; this tree summarises the legal child sets at each layer. Notation: `[A | B]*` = zero or more of either; `[X]+` = one or more; `→` = container body; `└─` = nesting.
+
+```
+WordDocument                                       (top-level result builder entry)
+  └─ [Section]+                                    (one or more required)
+       └─ [Paragraph | Table | Hyperlink | Bookmark | WordComponent]*
+            ├─ Paragraph body : [String | Run | Tab | Break | NoBreakHyphen | Hyperlink | Bookmark]*
+            │                   (String literal → implicit unstyled Run)
+            ├─ Run             : leaf  (text + optional format flags: bold / italics / color / font / size / ...)
+            ├─ Tab             : leaf  (no children, no text)
+            ├─ Break           : leaf  (no children, no text)
+            ├─ NoBreakHyphen   : leaf  (no children, no text)
+            ├─ Hyperlink       : container → [String | Run | Tab | Break]*    (inline content only)
+            ├─ Bookmark        : container → [Paragraph body]*                (default form)
+            │                    or paired-marker form: BookmarkStart / BookmarkEnd as siblings of Paragraph
+            ├─ Table           → [TableRow]+
+            │                     └─ TableCell  → [Paragraph]+
+            │                           └─ Paragraph body (recursive — same legal child set as above)
+            └─ WordComponent   : user-defined type whose `body` expands to any of the above
+                                 (op log brackets the expansion with BeginComponent / EndComponent)
+```
+
+**Reading hints:**
+
+- `WordComponent` is the only extension point. Library users define new structural building blocks by conforming a type to `WordComponent` and writing its `body` from the legal element set above. The op log's `BeginComponent` / `EndComponent` envelope (Decision 7) preserves the component identity through reverse round-trip.
+- `Section` exists at the DSL level only. At serialisation it inverts to OOXML's marker-pattern (`<w:sectPr>` after the section's last paragraph) per Decision 6.
+- Style references (Open Item 1 → spec Requirement) attach to `Paragraph` and `Run` via a typed `WordStyle` enum, not nested in this composition tree.
+- Lists (Open Item 3 → spec Requirement) reuse `Paragraph(style: .listItem, numbering: ..., level: ...)` — there is no `List` / `ListItem` container in this tree.
+
 ## Risks / Trade-offs
 
 - *AI workflow becomes a hard dependency* → Mitigation: Spec scenarios for reverse direction (next artifact: `mdocx-grammar` spec) lock the contract; if AI workflow proves impractical, rework is contained to Phase 7 implementation, not this contract.
