@@ -28,6 +28,22 @@
 
 判斷公式：**會不會有人開 IDE 寫這個檔案？會 → 開副檔名。不會 → 不開**。
 
+## 設計 DSL 之前：先確認預設作者是誰
+
+> **設計 DSL 的第一個問題不是「語法長什麼樣」而是「誰會寫它」。** 預設作者改變所有後續 trade-off。
+
+|預設作者|看重的|看輕的|連帶設計後果|
+|---|---|---|---|
+|**人類**|簡潔、直覺、低 verbosity、Markdown-style ergonomics|嚴格 determinism、explicit ID、編譯期驗證|可接受 syntactic sugar、accept 部分 lossy、容忍 multiple parsers|
+|**AI**|可預測 (1:1 mapping)、編譯期 feedback、無歧義 syntax、reverse direction 無損|Verbosity（AI 不疲勞）、命名一致性負擔（AI 擅長）、學習曲線（AI 看 codebase 即會）|傾向純 typed builder、嚴格副檔名 dispatch、強制 explicit ID|
+|**程式工具**（lint / formatter / generator）|機器可解析 grammar、無 implicit 行為|人類可讀性|傾向 S-expression / JSON / pure data|
+
+設計 DSL **第一份文件**應在 design doc 開頭（或 callout block）明示：「本 DSL 預設作者是 X」。後續所有 trade-off（要不要 Markdown / 要不要 YAML escape hatch / 要不要 implicit ID / 要不要 sugar syntax）都從這個前提推導。
+
+**反例**：v0.x design 文件假設「人類」作者，所以保留 Markdown layer 作 ergonomics。實際上預設作者是 AI（人類只看 / 改不寫），ergonomics 計算翻轉，Markdown layer 變成純粹 determinism risk 而沒有 ergonomics 收益——應該砍掉。`docs/swift-as-document-source.md` §3.5 記錄這個 retroactive correction。
+
+切換預設作者時要 audit：每個 syntax 抉擇是不是還合理？例如「人類為主，AI 也能用」設計，AI 切到主導角色後可能變成「AI 寫得 OK，但因為 Markdown 層的 lossy reverse 導致 AI 無法迭代」。
+
 ## 副檔名設計守則
 
 ### 1. 短、好認、沒衝突
