@@ -106,7 +106,7 @@ macdoc 的所有 DSL 目前都是「Swift + result builder + macros」，沒有�
 
 | 副檔名 | 領域 | Pattern | 設計文件 | 狀態 |
 |--------|------|---------|---------|------|
-| `.mdocx` / `.mdocx.swift` | Word document scripts | B（dual） | `docs/swift-as-document-source.md`（narrative）+ `openspec/specs/mdocx-grammar/spec.md`（normative，archive 後生效）| 規格 locked（Spectra change `mdocx-syntax` apply 中）；implementation 屬 `word-aligned-state-sync` Phase 7 |
+| `.mdocx` / `.mdocx.swift` | Word document scripts | B（dual） | `docs/swift-as-document-source.md`（narrative）+ `openspec/specs/mdocx-grammar/spec.md`（normative，archive 後生效；首批 reference implementation of [`embedded-dsl-spec-pattern`](embedded-dsl-spec-pattern.md)）| 規格 locked（Spectra change `mdocx-syntax` apply 中）；implementation 屬 `word-aligned-state-sync` Phase 7 |
 
 未來預定但未開始：
 
@@ -132,6 +132,7 @@ macdoc 的所有 DSL 目前都是「Swift + result builder + macros」，沒有�
 
 ## 跟其他 rule 的關係
 
+- [`embedded-dsl-spec-pattern.md`](embedded-dsl-spec-pattern.md)：副檔名定好之後，**寫該 DSL 的 Spectra spec 時走那份 rule**。本 rule 規範 file-level contract，那份 rule 規範 spec-level shape（Requirements + Scenarios + SBE Examples + composition tree，不用 EBNF）
 - `terminology.md`：副檔名是 format 的一種表達。新 format 通常對應新 `--to` 值；新 DSL 對應新副檔名（不一定對應新 `--to`，因為 DSL 是輸入端）
 - `cli-design/textutil-compat.md`：CLI 命令的副檔名 dispatch 規則（自動偵測 input format）。新 DSL 副檔名要納入該偵測邏輯
 - `native-macos-compat.md`：副檔名跟 macOS file association 也綁——要 `lsregister` 註冊 → 雙擊開 macdoc CLI 路徑

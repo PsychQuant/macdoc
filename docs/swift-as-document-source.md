@@ -495,3 +495,7 @@ try doc.save(to: ...)
 - [ ] macdoc CLI 加 `--from .mdocx` / file-glob dispatch（**Phase 7 工作**）
 - [ ] `.gitignore` 區分 `*.mdocx.swift`（原始）vs `*.docx`（產物）（Phase 7 工作；目前可手動 ignore .docx）
 
+### 10.6 寫 grammar spec 時的指引
+
+本文是 narrative design doc。當要把 DSL 的 grammar 寫進 normative Spectra spec 時（`mdocx-syntax` 已完成 → 產出 `openspec/specs/mdocx-grammar/spec.md`），spec shape 跟 composition tree notation 遵循 [`.claude/rules/embedded-dsl-spec-pattern.md`](../.claude/rules/embedded-dsl-spec-pattern.md)：用 Requirements + Scenarios + SBE Examples + 非規範 composition tree，**不要用 EBNF / PEG**（embedded DSL 沒有獨立 parser，EBNF 替不存在的 parser 訂規格）。未來 `.mpdf` / `.mbib` / `.mpptx` 入場時走同一份 rule。
+
