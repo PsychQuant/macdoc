@@ -7,6 +7,7 @@
 ```bash
 cd reference/
 git clone https://github.com/dolanmiu/docx.git docx-js
+git clone https://github.com/python-openxml/python-docx.git
 git clone https://github.com/ml-explore/mlx-swift-lm.git
 git clone https://github.com/jgm/pandoc.git
 git clone https://github.com/apple/swift-argument-parser.git
@@ -17,7 +18,8 @@ git clone https://github.com/apple/swift-argument-parser.git
 
 | 路徑 | 類型 | Upstream | 用途 |
 |------|------|----------|------|
-| `docx-js/` | git repo | https://github.com/dolanmiu/docx | Node.js OOXML 函式庫。`word-builder-swift` 是其 1:1 Swift 移植,寫新 API 前先看 JS 對應實作 |
+| `docx-js/` | git repo | https://github.com/dolanmiu/docx | Node.js OOXML 函式庫。`word-builder-swift` 是其 1:1 Swift 移植,寫新 API 前先看 JS 對應實作。**典範:typed builder** |
+| `python-docx/` | git repo | https://github.com/python-openxml/python-docx | Python + lxml 的 OOXML 函式庫。**典範:tree-backed wrapper**——每個 `Document` / `Paragraph` / `Run` 包一個 lxml `_Element`,typed accessor 讀寫該 element。`word-aligned-state-sync` 的 Phase 1 (typed views as tree projections) 直接對照它。詳見 `docs/docx-libraries-comparison.md` |
 | `mlx-swift-lm/` | git repo | https://github.com/ml-explore/mlx-swift-lm | Apple MLX Swift LLM runtime。`pdf-to-latex-swift` Phase 1 的 local GLM-OCR backend 用它載模型 |
 | `pandoc/` | git repo | https://github.com/jgm/pandoc | Haskell 文件轉換工具。macdoc 不依賴 pandoc,純粹參考它怎麼處理邊界情況(複雜 table、field、footnote 跨段落) |
 | `swift-argument-parser/` | git repo | https://github.com/apple/swift-argument-parser | Apple 官方 CLI 解析器。`macdoc` CLI 已是使用者,這裡留一份方便查 source-level 行為(尤其是 subcommand dispatch、ExitCode) |
@@ -34,6 +36,20 @@ git clone https://github.com/apple/swift-argument-parser.git
 - `docx-js/src/file/paragraph/` — 段落 builder
 - `docx-js/src/file/table/` — 表格(含 merge 邏輯)
 - `docx-js/src/file/drawing/` — 圖片 anchor/inline
+
+### python-docx → `ooxml-swift` Phase 1 設計對照
+
+`word-aligned-state-sync` Phase 1 要把 `Paragraph` / `Run` / `Table` / `SectionProperties` 從「typed model with parsed children」改成「typed view over shared XmlNode tree + op emitter on mutation」。python-docx 多年用 lxml-tree-backed wrapper 走過同樣的路,是最直接的參考實作。
+
+關鍵參考路徑:
+- `python-docx/src/docx/oxml/` — XML element 類別(對應我們的 `Tree/`)
+- `python-docx/src/docx/oxml/parser.py` — element-class registration / lxml parser hook
+- `python-docx/src/docx/document.py` — top-level Document API
+- `python-docx/src/docx/blkcntnr.py` — block container 抽象(對應未來 `BodyChildren`)
+- `python-docx/src/docx/text/paragraph.py` — typed wrapper 案例(怎麼從 lxml element 推 typed API)
+- `python-docx/src/docx/comments.py` — comment 處理(macdoc Phase 1 的 Comment 重寫對照組)
+
+注意:python-docx **沒有 op log**,直接 mutate lxml tree。macdoc 的 op log 是 differentiator——對照 python-docx 看「沒有 op log 怎麼處理同步」就會理解我們為什麼要加。
 
 ### mlx-swift-lm → `pdf-to-latex-swift` / `ocr-swift`
 
