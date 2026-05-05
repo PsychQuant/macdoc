@@ -106,7 +106,7 @@ macdoc 的所有 DSL 目前都是「Swift + result builder + macros」，沒有�
 
 | 副檔名 | 領域 | Pattern | 設計文件 | 狀態 |
 |--------|------|---------|---------|------|
-| `.mdocx` / `.mdocx.swift` | Word document scripts | B（dual） | `docs/swift-as-document-source.md` | 設計中（`word-aligned-state-sync` Phase 7）|
+| `.mdocx` / `.mdocx.swift` | Word document scripts | B（dual） | `docs/swift-as-document-source.md`（narrative）+ `openspec/specs/mdocx-grammar/spec.md`（normative，archive 後生效）| 規格 locked（Spectra change `mdocx-syntax` apply 中）；implementation 屬 `word-aligned-state-sync` Phase 7 |
 
 未來預定但未開始：
 
