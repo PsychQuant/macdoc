@@ -2,13 +2,13 @@
 
 These tasks resolve the seven items deferred from spectra-discuss into final spec scenarios. Each task adds a corresponding Requirement + Scenarios block to `specs/mdocx-grammar/spec.md` once the open item is reviewed and accepted (or amended) by the proposal reviewer. Sequential per item but the seven items themselves are independent and parallelizable.
 
-- [x] 1.1 Review and lock Open Item 1: Style reference shape — typed enum with define-on-first-use; add corresponding Requirement + Scenarios to mdocx-grammar spec
-- [x] 1.2 [P] Review and lock Open Item 2: Table grammar — three-layer Table / TableRow / TableCell mirror; add Requirement + Scenarios
-- [x] 1.3 [P] Review and lock Open Item 3: Lists (numbered / bullet) — numPr-reference grammar with NumberingDefinition; add Requirement + Scenarios
-- [x] 1.4 [P] Review and lock Open Item 4: Hyperlinks — container with target enum (anchor / url / mailto / bookmark); add Requirement + Scenarios
-- [x] 1.5 [P] Review and lock Open Item 5: Bookmarks (paired markers, possibly cross-paragraph) — container default plus BookmarkStart / BookmarkEnd escape hatch; add Requirement + Scenarios
-- [x] 1.6 [P] Review and lock Open Item 6: `save(to:)` semantics — atomic three-file write of docx + oplog.jsonl + snapshot.json; add Requirement + Scenarios
-- [x] 1.7 [P] Review and lock Open Item 7: Reverse CLI shape — `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog]`; add Requirement + Scenarios
+- [x] 1.1 Review and lock Open Item 1: Style reference shape — add Requirement "Style references via typed enum with define-on-first-use" + Scenarios to mdocx-grammar spec
+- [x] 1.2 [P] Review and lock Open Item 2: Table grammar — add Requirement "Table grammar mirrors OOXML three-layer structure" + Scenarios
+- [x] 1.3 [P] Review and lock Open Item 3: Lists (numbered / bullet) — add Requirement "Lists use Paragraph with numPr reference, not nested containers" + Scenarios
+- [x] 1.4 [P] Review and lock Open Item 4: Hyperlinks — add Requirement "Hyperlinks are containers with target enum" + Scenarios
+- [x] 1.5 [P] Review and lock Open Item 5: Bookmarks (paired markers, possibly cross-paragraph) — add Requirement "Bookmarks default to container with paired-marker escape hatch" + Scenarios
+- [x] 1.6 [P] Review and lock Open Item 6: `save(to:)` semantics — atomic three-file write — add Requirement "save(to:) atomic three-file write" + Scenarios
+- [x] 1.7 [P] Review and lock Open Item 7: Reverse CLI shape — add Requirement "Reverse CLI shape — macdoc word reverse" + Scenarios
 
 ## 2. Spec validation across all locked decisions
 
@@ -23,3 +23,7 @@ These tasks land the empty WordDSLSwift module so Phase 7 of word-aligned-state-
 - [x] 3.1 Add WordDSLSwift product and target declarations to packages/ooxml-swift/Package.swift; depend on existing OOXMLSwift target
 - [x] 3.2 [P] Create empty WordDSLSwift module file skeleton (one Swift file per top-level DSL element type from the spec — WordDocument, Section, Paragraph, Run, Tab, Break, NoBreakHyphen, Hyperlink, Bookmark, Table, TableRow, TableCell, WordComponent, WordBuilder); each file contains only the empty type declaration with a header comment pointing to specs/mdocx-grammar/spec.md as the source of truth for Phase 7 implementation
 - [x] 3.3 [P] Create WordDSLSwiftTests target with placeholder test that verifies the module compiles cleanly and all top-level type names are reachable
+
+## 4. Grammar reference visualisation
+
+- [x] 4.1 Add a non-normative "Grammar reference (composition tree)" section to design.md positioned after the Decisions section and before Risks / Trade-offs; the tree MUST visualise the legal child set at each DSL layer (WordDocument → Section → Paragraph / Table / Hyperlink / Bookmark / WordComponent → Paragraph body and so on) using ASCII tree notation, and MUST include reading hints clarifying where WordComponent extension fits, why Section exists at DSL level only (Decision 6 cross-reference), how style references attach (Open Item 1 / spec Requirement cross-reference), and how lists reuse Paragraph (Open Item 3 / spec Requirement cross-reference)
