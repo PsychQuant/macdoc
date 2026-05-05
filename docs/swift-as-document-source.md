@@ -96,6 +96,10 @@ Auto-derive 看起來方便但對齊崩 = 整個架構失效，所以一定走 e
 
 ## 3. DSL 的形狀
 
+> **預設作者是 AI，不是人類。** 這個前提決定下面所有設計取捨：verbosity 不是成本（AI 不疲勞），命名一致性不是負擔（AI 擅長），自訂 component 學習曲線不是阻礙（AI 看 codebase 就會用）。整個 DSL 為「AI 寫腳本 + 人類寫提示」這個工作流優化。
+
+人類也可以直接寫 `.mdocx`，但那是次要 use case。AI 是一級公民，DSL 的設計決定先優先 AI 可預測性、編譯期回饋、跟 op log 的 1:1 對應，**才**考慮純人類體驗。這個排序解釋了為什麼 §3.5 拒絕 Markdown layer。
+
 ```swift
 import OOXMLSwift
 
@@ -150,6 +154,56 @@ try doc.save(to: URL(fileURLWithPath: "賽斯書.docx"))
 {"op": "InsertParagraph", "id": "ch1-summary-frame", "in": "ch1", "at": 1, "ts": "..."}
 ...
 ```
+
+---
+
+## 3.5 為什麼不混 Markdown layer
+
+> **任何在 `.mdocx` 內嵌 Markdown 內容塊的設計都被拒絕。** Markdown 帶來的 ergonomics 在「AI 作者」前提下價值為零；它帶來的 **format determinism 風險** 卻會直接打破整個 alignment 系統。
+
+### 3.5.1 Markdown 的三個不確定來源
+
+|不確定來源|後果|
+|---|---|
+|**Flavor 分歧**（CommonMark / GFM / pandoc-md / MultiMarkdown 行為不同）|同一份 `.mdocx` 在不同 macdoc 版本可能產出不同 docx|
+|**Parser 升級**（即使選定 flavor，bug fix 也算行為變動）|同一份 `.mdocx` + parser 升級 → 不同 ops → 不同 docx|
+|**Markdown ↔ Word 不雙射**|Word 改了「**bold**」對應的 docx run，import diff 變成 op；要把 op 逆轉回 Markdown 等價字串需要 lossy converter，alignment 鏈條中斷|
+
+第三點最致命——`.mdocx` 設計的整個前提是「op log 是 source of truth，腳本可以 reverse 自 oplog」。一旦腳本內含 Markdown，op log 沒辦法逆推 Markdown 字面量（因為 Markdown 跟 op log 不是 1:1 mapping），reverse direction 永遠不準。
+
+### 3.5.2 四條曾考慮的路（全部拒絕）
+
+|選項|設計|為什麼拒絕|
+|---|---|---|
+|A 純 Swift DSL，不接 Markdown（**選此**）|全部 `Paragraph(id:) { Bold(...); ... }`|無|
+|B Markdown 限制在 inline-only（不能放 heading / list / table）|只 `**bold**` / `*italic*` / `[link](url)`|inline ambiguity 沒消除（GFM vs CommonMark）；reverse direction 仍 lossy|
+|C 定義 `mdocx-md` v1：版本化 Markdown 子集 + pinned parser|規格 freeze，parser 版本進 `.mdocx` header|跟業界 Markdown 生態切斷（自創方言），且還是要寫 parser/converter 雙邊|
+|D Markdown 只當 build-time sugar：compile 時翻成等價 Swift DSL|最終 `.mdocx` 等價於沒寫 Markdown|build-time parser 行為要凍結；升級走明確 migration；複雜度沒降只是搬位置|
+
+### 3.5.3 AI 作者翻轉了 ergonomics 計算
+
+人類作者寫 prose 時，`Paragraph(id:) { Bold("..."); "...".text; ... }` vs `**bold** ...` 的差距是巨大的疲勞成本——人類會懶得寫前者，會願意為後者承擔不確定性。
+
+AI 作者完全沒這個成本：
+- AI 對「verbose typed builder」跟「terse markdown」**沒有偏好**——都是 token generation
+- AI 反而擅長維持一致命名（ch1-intro / ch1-body-1 / ch1-summary-frame ...）
+- AI 看 codebase 就學會自訂 component 用法，不需要「直覺」UX
+- Compiler 給 AI 的精確錯誤訊息 >> Markdown parser 給的「looks like a list but maybe not」silent behavior
+
+當作者是 AI，A 的所有「verbose」缺點消失，所有「determinism」優點變成 net win。
+
+### 3.5.4 連帶 hidden bonus：reverse direction 變可行
+
+選 A 後，op log 跟 Swift DSL 是 1:1 mapping——意思是：**從 oplog 重新生成等價 Swift DSL 是無損操作**。
+
+```bash
+macdoc word reverse mydoc.docx --to mdocx               # 純從 docx 反推
+macdoc word reverse mydoc.docx --to mdocx --from-oplog  # 含 Word 修改的當前狀態
+```
+
+這對 AI workflow 是**核心 dependency**——AI 要修改文件先要讀當前狀態。沒有 reverse 就沒有 AI 迭代。
+
+選 B/C/D 都做不到無損 reverse（Markdown 部分一定 lossy），所以選 A 不只是 alignment 保證的問題，也是 AI workflow 能不能成立的問題。
 
 ---
 
@@ -334,10 +388,15 @@ DSL 是這條鏈的最後一環：
 |Phase 4|Layer 2 的 typed-API 整合|`paragraph.text = "x"` 變 `log.append(.setText(...))`|
 |Phase 5|Word import|`WordImport.diff(snapshot, current) → [Op]`|
 |Phase 6|Sync orchestrator|file watcher + conflict policy|
-|Phase 7|**Layer 1 — DSL**|`@WordBuilder` + `WordDocument { ... }` + script ↔ op log transcoder|
+|Phase 7|**Layer 1 — DSL（forward）**|`@WordBuilder` + `WordDocument { ... }` + script → op log transcoder。對應 §3 / §3.5 / §10|
+|Phase 7|**Layer 1 — DSL（reverse, 核心 dependency）**|op log → 等價 Swift DSL transcoder。`macdoc word reverse mydoc.docx --to mdocx [--from-oplog]`。對應 §3.5.4|
+
+**Reverse direction 不是 nice-to-have。** AI 是預設作者（見 §3 開頭 callout），AI 修改文件的前提是讀得到當前狀態的 Swift DSL 表示——沒有 reverse 就沒有 AI 迭代。Phase 7 必須同時 ship forward + reverse，否則 alignment 系統技術上完成但實際無法被 AI 使用。
+
+`forward` 跟 `reverse` 在選 §3.5 的「純 Swift DSL，不接 Markdown」設計後是無損雙向（op log ↔ Swift DSL 是 1:1 mapping），實作上是兩個 transcoder 各自獨立的工程而非一個 reversible operation。
 
 本文件描述的 DSL 是 Phase 7 的目標形狀。Phase 0-6 是讓 DSL 能成立的基礎建設。
-跑完 Phase 7 = `word-aligned-state-sync` 全部完成 = ooxml-swift v1.0.0。
+跑完 Phase 7（含 reverse）= `word-aligned-state-sync` 全部完成 = ooxml-swift v1.0.0。
 
 ---
 
