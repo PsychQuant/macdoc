@@ -166,6 +166,21 @@ The full architecture lands across multiple ooxml-swift releases:
 
 **Why**: che-word-mcp is in production with 234 tools and 271 tests. A flag-day migration would break consumers for weeks. Staged migration lets each release ship through the existing 6-AI verify gate, and lets fixture coverage grow incrementally.
 
+### Decision 9: Phase 4 script transcoder targets the `mdocx-grammar` contract
+
+The Phase 4 script transcoder (`ooxml-script-transcode` capability — `ScriptExporter` / `ScriptImporter`) reads and writes Swift source conforming to the `mdocx-grammar` capability spec (`openspec/specs/mdocx-grammar/spec.md`, archived from sibling change `mdocx-syntax`). The 14 empty Swift files at `packages/ooxml-swift/Sources/WordDSLSwift/` (placeholders landed by `mdocx-syntax`) are the implementation targets for this phase.
+
+**Why**: When this change was originally drafted, the DSL grammar was not yet pinned — the script transcoder was specified abstractly as "Swift code that maps to operations." `mdocx-syntax` archived a normative grammar contract (15 Requirements covering file extension, inline `Run` + implicit `String`, OOXML-mirror naming, no semantic shortcuts, `Section` as DSL container with marker-pattern inversion, component-aware op log via `BeginComponent`/`EndComponent`, mandatory explicit IDs, typed style references with define-on-first-use, three-layer table grammar, `numPr`-reference list grammar, container hyperlinks, container/paired-marker bookmarks, atomic three-file `save(to:)`, and reverse CLI shape). Phase 4 conforms to that contract instead of inventing a new surface. This avoids the contract drift risk noted in `mdocx-syntax`'s Impact section.
+
+**Cross-references** (so future readers find the full chain):
+- `openspec/specs/mdocx-grammar/spec.md` — normative grammar (input/output shape)
+- `openspec/specs/embedded-dsl-spec-pattern/spec.md` — meta-rule that `mdocx-grammar` follows
+- `.claude/rules/extension-first-dsl.md` — `.mdocx` file-extension contract
+- `docs/swift-as-document-source.md` — narrative DSL design rationale
+- `packages/ooxml-swift/Sources/WordDSLSwift/` — placeholder Swift files Phase 4 fills in
+
+**Phase numbering note**: Several artifacts written before `mdocx-syntax` archived (the now-canonical `mdocx-grammar` spec, Swift placeholder file headers, ad-hoc memory notes) refer to "Phase 7" as the DSL implementation phase. That is stale wording from an earlier 9-phase draft. Canonical phase numbering is the one in `tasks.md` of this change (Phase 0–5); the DSL implementation is **Phase 4 — Script transcoder, target v0.34.0**. References to "Phase 7" elsewhere should be read as "Phase 4 of word-aligned-state-sync."
+
 ## Risks / Trade-offs
 
 - [Risk: tree memory cost on large docs] → A 60-page thesis docx parses to a tree of ~30k-100k nodes. Memory should stay under 50 MB; benchmark on the NTPU thesis fixture before each milestone. Mitigation: source-XML offset interning and on-demand attribute parsing if needed.
