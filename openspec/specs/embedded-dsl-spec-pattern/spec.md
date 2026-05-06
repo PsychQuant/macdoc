@@ -2,7 +2,9 @@
 
 ## Purpose
 
-TBD - created by archiving change 'embedded-dsl-spec-pattern-rule'. Update Purpose after archive.
+Codify the spec-shape contract for embedded DSLs in this repo — DSLs whose syntax is enforced at compile time by the host programming language (Swift `@resultBuilder`, type system, macros) rather than by a separate parser. Embedded DSL specs SHALL use Requirements + Scenarios + SBE Examples + a non-normative composition tree (in `design.md`); they SHALL NOT use EBNF / PEG / BNF / ABNF, because there is no parser for such a grammar to describe. Cross-references between this rule, the file-extension contract in `extension-first-dsl`, narrative design docs, and per-DSL capability specs (first cohort: `mdocx-grammar`) ensure authors discover the rule at the moment they need it. Future embedded DSLs (`.mpdf`, `.mbib`, `.mpptx`, and beyond) inherit this contract from inception.
+
+The companion authoring-side rule lives at `.claude/rules/embedded-dsl-spec-pattern.md`; this capability spec is the normative source of truth.
 
 ## Requirements
 
