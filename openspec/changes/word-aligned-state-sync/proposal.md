@@ -49,6 +49,13 @@ This change introduces an event-sourced, tree-backed state model that satisfies 
 - `docx-container-parsing`: Reader coverage tightens from "specific named parts" to "every part is round-trip-preserving via the tree". Container reading still populates typed views, but unknown elements are no longer dropped — they remain in the tree. Existing requirements about which parts are read remain valid; new requirements about preservation are added.
 - `docx-revision-parsing`: Revision elements (`<w:ins>`, `<w:del>`, `<w:rPrChange>`, `<w:pPrChange>`, etc.) still parse into typed `Revision` accessors, but they are now views over the underlying tree nodes. Unknown revision children are preserved verbatim instead of being surfaced as "unknown" sentinels. Round-trip preservation of revision metadata becomes a hard invariant.
 
+## External contract dependencies
+
+This change does NOT introduce the following capabilities — they were locked by sibling changes archived earlier and are referenced here so Phase 4 (Script transcoder) implementation has the full contract chain. They appear in `openspec/specs/` as canonical specs; this section exists for reader navigation, not as new spec scope:
+
+- mdocx-grammar (archived `2026-05-06-mdocx-syntax`, canonical at `openspec/specs/mdocx-grammar/spec.md`): Pins the `.mdocx` Swift DSL grammar that the script transcoder reads / writes. Phase 4 implements `ooxml-script-transcode` against this contract — `ScriptExporter` SHALL emit DSL source conforming to its 15 Requirements; `ScriptImporter` SHALL accept exactly that surface. The 14 placeholder Swift files at `packages/ooxml-swift/Sources/WordDSLSwift/` were landed by `mdocx-syntax` for Phase 4 to fill in.
+- embedded-dsl-spec-pattern (archived `2026-05-06-embedded-dsl-spec-pattern-rule`, canonical at `openspec/specs/embedded-dsl-spec-pattern/spec.md`): Codifies the spec-shape rule (Requirements + Scenarios + SBE Examples + non-normative composition tree, no EBNF / PEG) that mdocx-grammar follows. Future grammar evolution inherits the same shape.
+
 ## Impact
 
 - Affected specs:
