@@ -410,3 +410,10 @@ tracked as separate follow-up SDD。這些落地後 loss 預期 drop 到 < 5%，
 屆時可以正式 ship 第 6.1 節「edit 一個字 → document.xml shrinks <1%」strong demo。
 
 到時候第 6.1 節的「edit 一個字 → document.xml shrinks <1%」claim 就可以正式落地。
+
+
+## Related: ooxml-edit-algebra capability
+
+The architectural patterns described here (overlay save, dirty-tracking, Invariants 1+2, 5 preservation classes) are typed and formally contracted in the `ooxml-edit-algebra` capability spec at `openspec/changes/ooxml-edit-isomorphism-foundation/specs/ooxml-edit-algebra/spec.md` (see Spectra change `ooxml-edit-isomorphism-foundation` for the 9 ADRs that pin the contract).
+
+This document remains the implementation-pattern reference; the capability spec is the normative contract.

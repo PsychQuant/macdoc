@@ -225,3 +225,43 @@ Rollback strategy: each release is a separate git tag. che-word-mcp pins ooxml-s
   - *Working answer*: Single-writer assumed in v1.0. Append to the log is `O_APPEND`-locked at the OS level; concurrent Swift writers would collide on disk. v2 could add per-op vector clocks for true CRDT support if real demand emerges.
 - **Q6**: How to handle the existing ad-hoc `rawChildren` field that #67-Phase-A and #69 are about to ship? Continue patching them now, or freeze the patches until v0.30.0 lands?
   - *Working answer*: Continue patching (#67-A is already in branch). The `rawChildren` patches are bridge code; v0.31.0 deprecates them when typed views move to the tree. Each patch has its own `Issue<N>RoundTripTests` that becomes a regression test once typed views land.
+
+## Relationship to ooxml-edit-isomorphism-foundation
+
+`word-aligned-state-sync` and `ooxml-edit-isomorphism-foundation` (Spectra change opened 2026-05-25 to pin Word↔Swift edit-isomorphism as macdoc OOXML's architectural contract) describe the **same** underlying architecture, at different levels of abstraction:
+
+- **`ooxml-edit-isomorphism-foundation`**: Pins the *type-level contract* (fully faithful functor, two-layer edit algebra `WordEdit` / `OOXMLEdit`, `lower()` bridge, canonical-identity round-trip invariant, CD review discipline). Capability spec is `ooxml-edit-algebra`. Apply scope is small: Edit type elevation + property-based functor tests on 3-5 representative operations.
+
+- **`word-aligned-state-sync`**: Pins the *runtime mechanism* (event-sourced op-log, XmlNode lossless tree, typed views as read-through layer, SyncOrchestrator, sidecar JSONL). Six-release migration sequence (v0.30.0 → v1.0.0) that delivers the runtime backing for the type-level contract.
+
+### How they coordinate
+
+The two changes are **complementary**, not parallel. `word-aligned-state-sync`'s Decision 3 ("ID-based operations, never positional indices") is a **refinement** of `ooxml-edit-algebra`'s `Edit` type contract: positional indices live at the `OOXMLEdit` lower-layer (`at: bodyChildIndex`), and stable IDs at the `WordEdit` upper-layer expose the same operation to callers via element identifiers (`paraID`, `bookmarkId`, etc.).
+
+| Concern | `ooxml-edit-isomorphism-foundation` | `word-aligned-state-sync` |
+|---|---|---|
+| Edit equality / composition | First-class via `Edit` protocol | Implicit via op-log append-only semantics |
+| Round-trip contract | Canonical-identity (normative SHALL in spec) | Same — content-equality on touched sub-trees |
+| Address space | Layered: OOXMLEdit positional + WordEdit stable-ID | Stable IDs (`w14:paraId`, `r:id`, etc.) — refinement of upper layer |
+| Runtime backing | Existing `Document.applyOverlay()` / `markDirty()` machinery | New `XmlNode` tree + op-log + reducer |
+| Module organization | ADR-004 documents 3-module split (deferred implementation) | Internal to ooxml-swift v0.30.0+ refactor |
+
+### Action items for `word-aligned-state-sync` (this change)
+
+When `word-aligned-state-sync` archives (after v1.0.0 cleanup release), its archived design.md SHALL be updated to:
+
+1. Reframe Decision 3 to cite `ooxml-edit-algebra`'s two-layer split — positional addressing is `OOXMLEdit`'s contract, stable-ID addressing is `WordEdit`'s
+2. Cite ADR-001 (`ooxml-edit-isomorphism-foundation` design.md) as the source of the canonical-identity round-trip invariant
+3. Cite ADR-008 (`word-builder-swift` lens migration deferred) — the v1.0.0 cleanup phase aligns with the migration window
+
+This action is **advisory** for the current apply phase of `word-aligned-state-sync` — it does NOT block any v0.30.0 / v0.31.0 release. The reframe lands no later than v1.0.0 archival.
+
+### Why both changes coexist
+
+Decision-pinning (`ooxml-edit-isomorphism-foundation`) and runtime mechanism (`word-aligned-state-sync`) serve different purposes and would not benefit from being one change:
+
+- The decision-pinning is *empty of code* — its purpose is to commit the contract so future-AI / future-Codex / future-contributors stop relitigating it (downstream PRs #94-#98 have been blocked by lack of this commitment).
+- The runtime mechanism is *empty of contract* without the foundation — without the Edit-type framing it ships an op-log without a stated invariant for what "valid op" means.
+
+Together they form the macdoc OOXML toolchain's architectural foundation.
+
