@@ -58,7 +58,7 @@ final class NoteHTMLConvertTests: XCTestCase {
         ).filter { !$0.hasDirectoryPath }
         XCTAssertGreaterThanOrEqual(
             mediaFiles.count, 1,
-            "media/ SHALL contain at least one stroke, image, or audio asset"
+            "media/ SHALL contain at least one image or audio asset"
         )
 
         let indexData = try Data(contentsOf: indexURL)
