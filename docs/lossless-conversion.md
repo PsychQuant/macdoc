@@ -962,3 +962,9 @@ W ↔ Marker（Tier 3 Bijection）：全部 Word 的完美可逆
 4. **Metadata 無上限** — 任何讓 round-trip break 的遺漏都是 bug，不是「可接受的妥協」
 5. **Streaming 兼容** — 三通道平行輸出，O(1) 記憶體
 6. **使用者選擇** — 有損是刻意的選擇（Tier 1/2），不是設計缺陷
+
+## Related: ooxml-edit-algebra capability
+
+The canonical-identity round-trip contract described in §0 is formalized as a normative Requirement in the `ooxml-edit-algebra` capability spec at `openspec/changes/ooxml-edit-isomorphism-foundation/specs/ooxml-edit-algebra/spec.md`. See `ooxml-edit-isomorphism-foundation` design.md § ADR-001 for the contract rationale and the chosen invariant (canonical-identity over byte-identity over semantic-equivalence).
+
+This document remains the formal-systems reference; the capability spec is the implementation-binding contract.
