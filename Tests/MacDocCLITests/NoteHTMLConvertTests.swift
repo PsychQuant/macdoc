@@ -44,6 +44,32 @@ final class NoteHTMLConvertTests: XCTestCase {
             "output SHALL include index.html"
         )
 
+        let mediaURL = outputDir.appendingPathComponent("media", isDirectory: true)
+        var mediaIsDirectory: ObjCBool = false
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: mediaURL.path, isDirectory: &mediaIsDirectory),
+            "output SHALL include media/ for rendered note assets"
+        )
+        XCTAssertTrue(mediaIsDirectory.boolValue, "media/ SHALL be a directory")
+
+        let mediaFiles = try FileManager.default.contentsOfDirectory(
+            at: mediaURL,
+            includingPropertiesForKeys: nil
+        ).filter { !$0.hasDirectoryPath }
+        XCTAssertGreaterThanOrEqual(
+            mediaFiles.count, 1,
+            "media/ SHALL contain at least one image or audio asset"
+        )
+
+        let indexData = try Data(contentsOf: indexURL)
+        // Baseline 2026-05-02 using `test-files/筆記 2026-03-20 15_25_20.note`:
+        // 1,569,860 bytes. The 750 KB floor catches empty-shell regressions
+        // while leaving headroom for renderer/template changes.
+        XCTAssertGreaterThan(
+            indexData.count, 750_000,
+            "index.html SHALL be a non-trivial rendered player, not a tiny shell"
+        )
+
         let content = try String(contentsOf: indexURL, encoding: .utf8)
         XCTAssertGreaterThan(content.count, 0, "index.html SHALL be non-empty")
         XCTAssertTrue(
