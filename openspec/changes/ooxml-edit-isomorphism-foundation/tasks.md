@@ -38,7 +38,45 @@ This table maps each spec Requirement and each design ADR to the task groups tha
 | ADR-009: Downstream issue rerouting | §8.3 (che-word-mcp boundary refactor follow-up), §8.4 (PR #94 re-frame), §8.5 (PR #96 re-frame), §8.6 (PR #95 re-frame) — all per ADR-009 |
 | Relationship to active changes | §8.1 (word-aligned-state-sync cross-reference addition per design.md "Relationship to active changes" section) |
 
-## 1. Edit type protocol + OOXMLEdit / WordEdit enum scaffold
+## ASSUMPTION: Swift Implementation Deferred to Phase 2 Spectra Change
+
+**This change's apply phase scope (per spectra-discuss conclusion + UNATTENDED MODE budget reality):**
+
+- **Shipped (this change apply phase, IDs 24-35 except 33):**
+  - §8.1 word-aligned-state-sync design.md cross-reference (added Relationship section)
+  - §8.2 follow-up issue for word-builder-swift lens migration (#101 PsychQuant/macdoc)
+  - §8.3 follow-up issue for che-word-mcp boundary refactor (#162 PsychQuant/che-word-mcp)
+  - §8.4 follow-up issue for PR #94 re-frame (#102 PsychQuant/macdoc)
+  - §8.5 follow-up issue for PR #96 re-frame (#103 PsychQuant/macdoc)
+  - §8.6 follow-up issue for PR #95 re-frame (#104 PsychQuant/macdoc)
+  - §9.1 PR template requiring CD diagram for EditAlgebra/ PRs (`.github/PULL_REQUEST_TEMPLATE.md`)
+  - §9.2 EditAlgebra/README.md documenting CD discipline + worked-example guidance
+  - §10.1 spectra validate green
+  - §10.3 docs/structural-editing-paradigm.md cross-reference to ooxml-edit-algebra capability
+  - §10.4 docs/lossless-conversion.md cross-reference
+
+- **DEFERRED to dedicated Phase 2 Spectra change** (Swift code implementation, §1-§7 + §10.2 = IDs 1-23, 33):
+
+  The 23 implementation tasks (Edit protocol scaffold §1, Document.apply API §2, 3 canonical OOXMLEdit cases + CD diagrams §3, 2 additional cases §4, 3 WordEdit cases §5, property-based functor tests §6, composition/associativity tests §7) require:
+  - Deep integration with existing ooxml-swift v0.13.0+ overlay-save infrastructure (~9 ADRs touch this surface)
+  - TDD discipline per `.spectra.yaml` (write failing test first per task)
+  - Audit discipline per `.spectra.yaml` (3-lens adversary review per task)
+  - CD diagram authoring per Edit case (5+ ASCII ladders, each verified for commute)
+  - Property-based tests on NTPU thesis fixture (per-operation 100-input runs)
+
+  This is genuinely 2-5 days of focused implementation work that benefits significantly from human review at decision points (Edit type API surface trade-offs, CD diagram correctness, property-test value-domain selection). Pushing through under unattended chain pressure risks introducing the very type of subtle errors that the architectural foundation is designed to prevent.
+
+  **Per UNATTENDED MODE directive**: "If §1-§7 Swift implementation tasks exceed practical session budget, document explicit ASSUMPTION blocks in tasks.md noting what remains, mark the implementation tasks as deferred-to-Phase-2, and ship §8 + §9 + §10 mechanical tasks fully."
+
+  **Phase 2 Spectra change** (to open after this foundation archives): `ooxml-edit-algebra-implementation`. It cites this foundation's design.md ADRs + spec.md as inputs. Apply phase implements §1-§7 + §10.2 in dedicated session(s) with appropriate human checkpoints.
+
+- **§10.2 swift test full suite** (ID 33): N/A in this apply scope since no Swift code was added (only `.github/PULL_REQUEST_TEMPLATE.md` + `EditAlgebra/README.md` + 2 docs cross-refs). Test suite unchanged from main, no regression possible. Deferred to Phase 2.
+
+This deferral is **architecturally sound**: decision-pinning (this change) and runtime implementation (Phase 2) serve different purposes and need different review modes. The contract is locked here; the code lands cleanly later citing the locked contract.
+
+---
+
+## 1. Edit type protocol + OOXMLEdit / WordEdit enum scaffold (DEFERRED to Phase 2)
 
 - [ ] 1.1 Add `EditAlgebra/` subdirectory to `packages/ooxml-swift/Sources/OOXMLSwift/` and create `Edit.swift` declaring the `Edit` protocol with `apply(to:)` + `lower()` method signatures. Verify: `swift build` succeeds on ooxml-swift package with no warnings, and the `Edit` protocol appears in `swift package describe --type json` output.
 - [ ] 1.2 Create `OOXMLEdit.swift` with empty enum scaffold + conformance to `Edit` protocol (apply / lower as stubs throwing `EditError.notImplemented`). Verify: `swift build` succeeds; targeted test `EditAlgebraTests.testOOXMLEditEnumExists` instantiates the enum and asserts conformance.
@@ -84,21 +122,21 @@ This table maps each spec Requirement and each design ADR to the task groups tha
 
 ## 8. Cross-reference active changes + open follow-up issues
 
-- [ ] 8.1 Add cross-reference to `ooxml-edit-algebra` capability in `openspec/changes/word-aligned-state-sync/design.md` under a new "Relationship to ooxml-edit-isomorphism-foundation" section. Verify: section exists, includes Decision 3 (ID-based operations) reframe text per ADR-009 guidance, and `spectra validate word-aligned-state-sync` continues passing.
-- [ ] 8.2 Open follow-up GitHub issue "Spectra: word-builder-swift lens-model migration (per ooxml-edit-isomorphism-foundation ADR-008)" with body citing this change's ADR-008 deferred-migration documentation. Verify: issue number captured in this tasks file; issue body links to this change's design.md.
-- [ ] 8.3 Open follow-up GitHub issue "Spectra: che-word-mcp boundary refactor to WordEdit (per ooxml-edit-isomorphism-foundation ADR-009)" citing this change's ADR-009. Verify: issue number captured; body links to design.md.
-- [ ] 8.4 Open follow-up issue "Re-frame PR #94 (macdoc-docx-workflow-cli) proposal as Layer 3 front-end per ooxml-edit-isomorphism-foundation ADR-009". Verify: issue number captured; body summarizes PR #94's existing spec gaps from verify report + proposed re-framing.
-- [ ] 8.5 Open follow-up issue "Re-frame PR #96 (r-word-builder-mvp) proposal as Layer 4 caller per ooxml-edit-isomorphism-foundation ADR-009" — security findings (R→Swift code injection per HIGH #1) reframed around safe WordEdit API. Verify: issue number captured; body links to PR #96 verify report.
-- [ ] 8.6 Open follow-up issue "Re-frame PR #95 (che-pptx-geometry-tools) as same architecture applied to PPTX per ooxml-edit-isomorphism-foundation ADR-009". Verify: issue number captured; body identifies which Layers (1–3) apply directly vs. need PPTX specialization.
+- [x] 8.1 Add cross-reference to `ooxml-edit-algebra` capability in `openspec/changes/word-aligned-state-sync/design.md` under a new "Relationship to ooxml-edit-isomorphism-foundation" section. Verify: section exists, includes Decision 3 (ID-based operations) reframe text per ADR-009 guidance, and `spectra validate word-aligned-state-sync` continues passing.
+- [x] 8.2 Open follow-up GitHub issue "Spectra: word-builder-swift lens-model migration (per ooxml-edit-isomorphism-foundation ADR-008)" with body citing this change's ADR-008 deferred-migration documentation. Verify: issue number captured in this tasks file; issue body links to this change's design.md.
+- [x] 8.3 Open follow-up GitHub issue "Spectra: che-word-mcp boundary refactor to WordEdit (per ooxml-edit-isomorphism-foundation ADR-009)" citing this change's ADR-009. Verify: issue number captured; body links to design.md.
+- [x] 8.4 Open follow-up issue "Re-frame PR #94 (macdoc-docx-workflow-cli) proposal as Layer 3 front-end per ooxml-edit-isomorphism-foundation ADR-009". Verify: issue number captured; body summarizes PR #94's existing spec gaps from verify report + proposed re-framing.
+- [x] 8.5 Open follow-up issue "Re-frame PR #96 (r-word-builder-mvp) proposal as Layer 4 caller per ooxml-edit-isomorphism-foundation ADR-009" — security findings (R→Swift code injection per HIGH #1) reframed around safe WordEdit API. Verify: issue number captured; body links to PR #96 verify report.
+- [x] 8.6 Open follow-up issue "Re-frame PR #95 (che-pptx-geometry-tools) as same architecture applied to PPTX per ooxml-edit-isomorphism-foundation ADR-009". Verify: issue number captured; body identifies which Layers (1–3) apply directly vs. need PPTX specialization.
 
 ## 9. PR ergonomics + CD discipline rollout
 
-- [ ] 9.1 Add a PR template snippet to `.github/PULL_REQUEST_TEMPLATE.md` (or create the file) requesting attached CD diagram for PRs touching `EditAlgebra/`. Verify: opening a draft PR from this branch displays the new template section.
-- [ ] 9.2 Add a README under `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/README.md` documenting (a) the CD discipline contract, (b) how to draw an ASCII ladder for a new Edit case (with 1 worked example), (c) link to design.md ADR-002 Worked Examples. Verify: README renders correctly on GitHub; reader can author a CD diagram for a hypothetical new case using only the README as guide.
+- [x] 9.1 Add a PR template snippet to `.github/PULL_REQUEST_TEMPLATE.md` (or create the file) requesting attached CD diagram for PRs touching `EditAlgebra/`. Verify: opening a draft PR from this branch displays the new template section.
+- [x] 9.2 Add a README under `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/README.md` documenting (a) the CD discipline contract, (b) how to draw an ASCII ladder for a new Edit case (with 1 worked example), (c) link to design.md ADR-002 Worked Examples. Verify: README renders correctly on GitHub; reader can author a CD diagram for a hypothetical new case using only the README as guide.
 
 ## 10. Verification + finalization
 
-- [ ] 10.1 Run `spectra validate ooxml-edit-isomorphism-foundation` and confirm green. Verify: validator output shows no errors.
+- [x] 10.1 Run `spectra validate ooxml-edit-isomorphism-foundation` and confirm green. Verify: validator output shows no errors.
 - [ ] 10.2 Run full `swift test` on `packages/ooxml-swift` and confirm: (a) all existing tests continue passing (no regression), (b) all new EditAlgebraTests + FullyFaithfulFunctorTests pass. Verify: test report shows 100% pass rate; commit each task completion with `Refs #99`.
-- [ ] 10.3 Update `docs/structural-editing-paradigm.md` with a cross-reference to the new `ooxml-edit-algebra` capability spec. Verify: cross-reference points to live capability file path; document continues passing markdown lint if any.
-- [ ] 10.4 Update `docs/lossless-conversion.md` with cross-reference. Verify: same as above.
+- [x] 10.3 Update `docs/structural-editing-paradigm.md` with a cross-reference to the new `ooxml-edit-algebra` capability spec. Verify: cross-reference points to live capability file path; document continues passing markdown lint if any.
+- [x] 10.4 Update `docs/lossless-conversion.md` with cross-reference. Verify: same as above.
