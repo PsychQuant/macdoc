@@ -77,6 +77,126 @@ The proposed contract draws on Quine's *radical translation* (1960) framing — 
 5. Compositional reasoning — `e₁ ∘ e₂`'s CD = paste `e₁`'s + `e₂`'s
 6. Cross-layer cube — two-layer algebra (ADR-003) maps to 3D CD where 6 faces must commute
 
+#### Worked Examples
+
+The CD diagrams below are the canonical worked examples that `.github/PULL_REQUEST_TEMPLATE.md` and `docs/edit-algebra-cd-discipline.md` reference. When a new `OOXMLEdit` or `WordEdit` case is added, the PR's CD diagram should follow the same structure as one of these examples (ladder format, top arrow = Word UI action or schema change, vertical arrows = `τ`, bottom arrow = Swift Edit invocation, commutativity claim explicit at the end).
+
+##### Example 1: `OOXMLEdit.insertParagraph(at:content:)` — body-level mutation
+
+```
+                  Word UI action: position cursor at body-children index N,
+                  press Enter, type "hello"
+            ┌────────────────────────────────────────────────────────┐
+            │                                                         │
+   docx_in ─┼────────────────────────────────────────────────────► docx_out
+            │   body.children gains <w:p> with <w:r><w:t>hello</w:t> │
+            │   at index N; sectPr / comments / customXml preserved   │
+            │                                                         │
+          τ │                                                         │ τ
+            │                                                         │
+            ▼                                                         ▼
+   swift_in ─────────────────────────────────────────────────────► swift_out
+                  Document.apply(OOXMLEdit.insertParagraph(at: N, content: "hello"))
+
+CD obligation:
+  τ(docx_out) == swift_out
+  AND: c14n(docx_in.untouched_subtrees) == c14n(docx_out.untouched_subtrees)
+       where untouched_subtrees = all body children at indices ≠ N + all parts outside word/document.xml
+```
+
+##### Example 2: `OOXMLEdit.setBold(at: runPath, value: Bool)` — run-level mutation with rPr handling
+
+```
+                  Word UI action: select text in Run R, press Cmd-B
+            ┌────────────────────────────────────────────────────────┐
+            │                                                         │
+   docx_in ─┼────────────────────────────────────────────────────► docx_out
+            │   Run R's <w:rPr> gains/loses <w:b/>; existing rPr     │
+            │   children (font, color, etc.) preserved in order      │
+            │                                                         │
+          τ │                                                         │ τ
+            │                                                         │
+            ▼                                                         ▼
+   swift_in ─────────────────────────────────────────────────────► swift_out
+                  Document.apply(OOXMLEdit.setBold(at: runPath, value: true))
+
+CD obligation:
+  τ(docx_out) == swift_out
+  AND: c14n(docx_in.untouched_runs) == c14n(docx_out.untouched_runs)
+       — sibling Runs unaffected; Run R's text content unchanged; only rPr's <w:b/>
+       presence toggled
+```
+
+##### Example 3: `OOXMLEdit.insertHyperlink(at: runPath, href: URL)` — dual-part mutation (non-trivial CD)
+
+This example is non-trivial because the Edit modifies TWO parts atomically: `word/document.xml` (insert `<w:hyperlink>` element) AND `word/_rels/document.xml.rels` (add Relationship entry). The CD must show both legs commute.
+
+```
+                  Word UI action: select text in Run R, Insert → Hyperlink,
+                  paste URL, click OK
+            ┌────────────────────────────────────────────────────────┐
+            │                                                         │
+   docx_in ─┼────────────────────────────────────────────────────► docx_out
+            │   - word/document.xml: Run R wrapped in <w:hyperlink   │
+            │     r:id="rNN">; new rId allocated                      │
+            │   - word/_rels/document.xml.rels: new <Relationship    │
+            │     Id="rNN" Type="...hyperlink" Target="<url>"/>      │
+            │   - Both modifications atomic; either both land or     │
+            │     neither (no half-applied state)                    │
+            │                                                         │
+          τ │                                                         │ τ
+            │                                                         │
+            ▼                                                         ▼
+   swift_in ─────────────────────────────────────────────────────► swift_out
+                  Document.apply(OOXMLEdit.insertHyperlink(at: runPath, href: URL))
+
+CD obligation:
+  τ(docx_out) == swift_out
+  AND atomicity: throws if rels-part write fails AFTER document.xml mutation
+                 (no half-applied state in swift_out)
+  AND: c14n(docx_in.parts \ {document.xml, document.xml.rels}) ==
+       c14n(docx_out.parts \ {document.xml, document.xml.rels})
+       — all other parts (styles, settings, customXml, etc.) bytewise-equal post-c14n
+```
+
+##### Example 4: `WordEdit.applyBold(range:)` with range-crossing-paragraph — boundary ambiguity CD
+
+This example shows how a semantic-layer Edit lowers to MULTIPLE syntactic-layer Edits when the Word UI semantics cross structural boundaries. The CD must show that the WordEdit naturality property holds (i.e., `lower()` produces the same final state whether composed at the semantic layer or computed across separate per-paragraph OOXMLEdits).
+
+```
+                Word UI action: drag-select text spanning 2 paragraphs, press Cmd-B
+                   ┌────────────────────────────────────────────────────────┐
+                   │                                                         │
+   docx_in ────────┼────────────────────────────────────────────────────► docx_out
+                   │   Paragraph 1's affected Run: rPr gains <w:b/>         │
+                   │   Paragraph 2's affected Run: rPr gains <w:b/>         │
+                   │   Both Runs may need splitRun if range partial         │
+                   │                                                         │
+                 τ │                                                         │ τ
+                   │                                                         │
+                   ▼                                                         ▼
+   swift_in       Document.apply(WordEdit.applyBold(range: ...))            swift_out
+                                          │
+                                          ↓ lower()
+                                          │
+                   ┌──────────────────────┴──────────────────────┐
+                   │                                              │
+                   ▼                                              ▼
+   swift_in ─► Document.apply([                              swift_out
+                  OOXMLEdit.splitRun(at: para1.run, at: rangeStart),
+                  OOXMLEdit.splitRun(at: para2.run, at: rangeEnd),
+                  OOXMLEdit.setBold(at: para1.runAfterSplit, value: true),
+                  OOXMLEdit.setBold(at: para2.runBeforeSplit, value: true),
+              ])
+
+CD obligation (both legs commute):
+  - WordEdit.applyBold(range:).apply(swift_in) == [4 OOXMLEdits].fold(apply)(swift_in)
+  - Naturality: (WordEdit.applyBold(r1) ∘ WordEdit.applyBold(r2)).lower() ==
+                WordEdit.applyBold(r1).lower() ∘ WordEdit.applyBold(r2).lower()
+```
+
+These four examples cover: (1) trivial body-level mutation, (2) run-level mutation with rPr handling, (3) dual-part mutation requiring atomicity, (4) semantic-layer Edit that lowers to multiple syntactic-layer Edits via range splitting. New Edit cases SHOULD follow the structure of whichever example most resembles them.
+
 ### ADR-003: Two-layer edit algebra (WordEdit / OOXMLEdit), lower() as bridge
 
 **Decision**: Define `WordEdit` (semantic — `WordEdit.applyBold(range)`) and `OOXMLEdit` (syntactic — `OOXMLEdit.insertElement(at: rPr_path, element: <w:b/>)`) as separate types. `WordEdit.lower(): [OOXMLEdit]` bridges them. Naturality invariant: `WordEdit(a).lower() ∘ WordEdit(b).lower() = (WordEdit(a) ∘ WordEdit(b)).lower()` for composable operations.
@@ -113,6 +233,17 @@ The proposed contract draws on Quine's *radical translation* (1960) framing — 
 
 **Decision**: `OOXMLEdit` case names use the schema element they target: `insertParagraph(at:)`, `setBold(at:)`, `insertHyperlink(at:href:)`. `WordEdit` cases use Word UI verb: `WordEdit.applyBold(range:)`, `WordEdit.insertLink(range:url:)`.
 
+**Alternatives considered**:
+
+| Approach | Verdict |
+|---|---|
+| `OOXMLEdit.modify<W:p>(at:)` (XML-literal naming) | REJECTED — exposes namespace prefix as case name; breaks Swift naming conventions and creates ergonomics friction |
+| `OOXMLEdit.operation(.insertParagraph, at:)` (nested enum) | REJECTED — loses pattern-match exhaustiveness and adds boilerplate per case |
+| **`OOXMLEdit.insertParagraph(at:)` (flat schema-element naming)** | **CHOSEN** — matches schema vocabulary directly, Swift-idiomatic, pattern-match exhaustive |
+| `WordEdit.bold(range:)` (Word-verb-only naming, no `apply` prefix) | REJECTED — collides with property accessor convention (`run.bold = true`); apply* prefix disambiguates Edit-vs-state mutation |
+
+**Rationale**: Schema-element naming for OOXMLEdit lets implementers grep ECMA-376 spec text; verb-prefix for WordEdit signals intent (this is a mutation, not a property read).
+
 **Apply-phase canonical example set** (3–5 operations for property-test validation):
 
 1. `OOXMLEdit.insertParagraph(at: bodyChildIndex, content:)` — body-level mutation, covers ADR-001 contract for sectPr / comments preservation
@@ -131,7 +262,16 @@ The proposed contract draws on Quine's *radical translation* (1960) framing — 
 2. Inspecting the resulting OOXML diff via Word's "Save As → Word XML" (or extracting `.docx` ZIP after save)
 3. The diff *is* the `lower()` output for that `WordEdit` case
 
-**Rationale**: Avoids decisions-by-committee about "the right way" to express a Word edit in OOXML — defer to Microsoft's own implementation as oracle. Aligns with reality (we're not redefining OOXML).
+**Alternatives considered**:
+
+| Approach | Verdict |
+|---|---|
+| OOXML schema (ECMA-376) as ground truth | REJECTED — schema describes valid XML shapes but not semantic intent; Word's interpretation of ambiguous schemas is what users observe |
+| Pandoc / LibreOffice as ground truth | REJECTED — neither is a normative implementation; both make their own interpretive choices that may differ from Word |
+| **Microsoft Word as ground truth** | **CHOSEN** — Word is the canonical author tool; ~99% of `.docx` files in the wild are produced or consumed by it; matching its behavior maximizes interop |
+| Best-effort consensus across implementations | REJECTED — explosion of edge cases; lack of clear arbiter when implementations disagree |
+
+**Rationale**: Avoids decisions-by-committee about "the right way" to express a Word edit in OOXML — defer to Microsoft's own implementation as oracle. Aligns with reality (we're not redefining OOXML). **Trust-boundary caveat**: this ADR does NOT mandate accepting Word's failure modes (e.g., Word silently dropping unrecognized namespaces is NOT a contract macdoc inherits). The "ground truth" applies to *intentional* semantics, not implementation bugs / fallbacks. Phase 2 implementation MUST add adversarial-input validation (path traversal in `r:id`, XXE in customXml, zip-slip in extracted parts) — Word's best-effort handling is not the spec.
 
 ### ADR-007: Conformance suite extension from NTPU thesis fixture
 
@@ -142,24 +282,53 @@ The proposed contract draws on Quine's *radical translation* (1960) framing — 
 - (Future, per ADR-007 follow-up) Corpus expansion to thesis + Zotero customXml + people.xml + commentsExtended fixtures
 - (Future) Fuzz testing for `OOXMLEdit` argument-space corner cases
 
-**Scope of this change**: Property tests for 3–5 operations; corpus/fuzz expansion deferred.
+**Alternatives considered**:
+
+| Approach | Verdict |
+|---|---|
+| New synthetic minimal fixture (hand-crafted small `.docx`) | REJECTED — synthetic fixtures miss real-world OOXML quirks (vendor extensions, w14/w15 RSIDs, customXml) that motivate the canonical-identity contract |
+| OOXML conformance test suite (ECMA-376 reference docs) | REJECTED — ECMA reference docs test schema validity, not edit-isomorphism; orthogonal goal |
+| **NTPU thesis fixture + property-based tests** | **CHOSEN** — real-world fixture already used in RealWorldDocxRoundTripSmokeTests; 5 preservation classes already validated; property tests assert canonical-identity on randomized Edit inputs |
+| Corpus expansion (multiple thesis + customXml + people.xml fixtures) | DEFERRED — Phase 2 follow-up; current change validates contract on one rich fixture before expanding |
+
+**Scope of this change**: Property tests for 3–5 operations on the NTPU thesis fixture; corpus / fuzz expansion deferred to follow-up Spectra change.
 
 ### ADR-008: Migration path for word-builder-swift 0.9.0 → lens model (DEFERRED)
 
 **Decision**: `word-builder-swift` 0.9.0 (write-only struct serialization) will migrate to a lens-model architecture in a dedicated follow-up Spectra change. The migration is BREAKING (callers must adapt from `Document(sections: [Section(paragraphs: [...])])` builder calls to lens-rooted edits).
 
+**Alternatives considered**:
+
+| Approach | Verdict |
+|---|---|
+| Immediate breaking change in word-builder-swift 1.0.0 (no coexistence period) | REJECTED — too disruptive for existing #71 callers (che-word-mcp + macdoc CLI); migration window valuable |
+| **Coexistence + deprecation cycle (LensDocument alongside Document)** | **CHOSEN** — gradual migration, downstream callers can opt-in per call-site |
+| Keep struct-serialization permanently as alternative API | REJECTED — two parallel APIs create maintenance debt + violate single-source-of-truth principle for Edit semantics |
+| Fork word-builder-swift into wb-lens (new package) | REJECTED — splits the ecosystem; existing #71 contributors / consumers split across forks |
+
 **Documented path** (for the follow-up):
 
-1. Add a `LensDocument` type alongside existing `Document` (coexistence period)
+1. Add a `LensDocument` type alongside existing `Document` (coexistence period, ~3 months)
 2. Migrate `Packer.toFile()` callers in `che-word-mcp` and `macdoc convert` to optionally use `LensDocument`
 3. Deprecate the struct-serialization `Document` API
 4. Remove deprecated paths in word-builder-swift 1.0.0
 
-**This change does not implement any of the above**. Migration is its own Spectra change citing this foundation.
+**This change does not implement any of the above**. Migration is its own Spectra change citing this foundation. Follow-up tracking issue: PsychQuant/macdoc#101.
 
 ### ADR-009: Downstream issue rerouting
 
 **Decision**: `#92` (dxedit declarative CLI), `#88` (R-wordbuilder generator), `#90` (che-pptx-mcp) are **front-ends** for the architecture defined here, not parallel design efforts.
+
+**Alternatives considered**:
+
+| Approach | Verdict |
+|---|---|
+| Continue all four threads (this foundation + #92 + #88 + #90) as independent parallel proposals | REJECTED — already proved problematic; PR #94 / #95 / #96 / #97 / #98 each surfaced spec gaps that boil down to "no shared Edit-type framing" |
+| Cancel #92 / #88 / #90 and absorb them into this foundation's spec | REJECTED — over-bundling; each downstream has independent value as a front-end (different audience, different language ergonomics) |
+| **Reroute via ADR-009: this foundation locks contract, downstreams become Layer 3 / 4 / specialized-to-PPTX front-ends** | **CHOSEN** — preserves each downstream's autonomy while ensuring they share the Edit-type contract |
+| Foundation-first + downstream-later sequencing with explicit handoff issues | ADOPTED AS COMPLEMENT — see follow-up issues #102 / #103 / #104 / che-word-mcp#162 |
+
+**Rationale**: Reframing as Layer 3 / 4 front-ends keeps each downstream's value proposition intact (dxedit is still a declarative CLI; R-wordbuilder still generates Swift from R) while making their contract surface (what they generate / consume) align with the foundation's Edit type.
 
 | Issue | Layer | Status |
 |---|---|---|

@@ -22,9 +22,11 @@ This change pins the architectural contract via:
 
 - **Module split** (NEW, deferred implementation). `OOXMLSyntax` (Layer 0+1, lossless tree + typed lens) vs `OOXMLSemantic` (Layer 2, Word-UI-mirroring semantic API) vs `OOXMLDSL` (Layer 3, result-builder front-end). ADR-004 documents the split; actual module reorganization deferred to follow-up changes.
 
-- **Apply phase scope** (Hybrid, per spectra-discuss conclusion): implement ONLY ooxml-swift `Edit` type elevation + property-based fully-faithful-functor test on 3–5 representative `OOXMLEdit` operations (e.g., `insertParagraph`, `setBold`, `insertHyperlink`) using the existing NTPU thesis fixture. **All other migrations explicitly deferred** to follow-up Spectra changes citing this foundation.
+- **Apply phase scope** (per spectra-discuss conclusion + verify-cycle scope adjustment, see tasks.md ASSUMPTION block): this change ships **decision-pinning + mechanical artifacts only** (§8 follow-up issue creation, §9 PR template + CD discipline README, §10 docs cross-references + spectra validate). The Swift implementation (`Edit` type elevation + 3–5 OOXMLEdit cases + WordEdit cases + property-based functor tests, originally enumerated in tasks §1–§7 + §10.2) is **DEFERRED to a dedicated Phase 2 Spectra change** named `ooxml-edit-algebra-implementation` (tracking issue PsychQuant/macdoc#105) that cites this foundation.
 
-**BREAKING**: None in this change's apply scope. The Edit type elevation is additive (existing callers continue working). Lens migration for `word-builder-swift` is a future BREAKING change deferred to its own Spectra change (per ADR-008).
+**Why the Phase 2 deferral**: The 23 Swift tasks require TDD discipline + audit discipline per `.spectra.yaml` + CD diagram authoring + property-based test calibration on the NTPU thesis fixture — work that benefits from dedicated implementation cycles with human checkpoints at API surface trade-off decisions. Bundling them with the decision-pinning work (this change) would either rush the implementation or block the decision-pinning indefinitely. Splitting them lets the contract land first, the runtime code follow with proper review.
+
+**BREAKING**: None in this change's apply scope. Decision-pinning is normative-content-only (no code shipped that callers could break against). Lens migration for `word-builder-swift` is a future BREAKING change deferred to its own Spectra change (per ADR-008).
 
 ## Non-Goals (optional)
 
@@ -49,13 +51,13 @@ Captured in design.md Non-Goals section per template guidance. Key Non-Goals:
 ## Impact
 
 - Affected specs: `ooxml-edit-algebra` (new capability under `openspec/specs/ooxml-edit-algebra/`)
-- Affected code:
-  - New: `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/Edit.swift` (Edit type elevation)
-  - New: `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/OOXMLEdit.swift` (3–5 representative cases)
-  - New: `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/WordEdit.swift` (corresponding semantic-layer cases)
-  - New: `packages/ooxml-swift/Tests/EditAlgebraTests/FullyFaithfulFunctorTests.swift` (property-based test using NTPU thesis fixture)
-  - Modified: `packages/ooxml-swift/Sources/OOXMLSwift/Document.swift` (add Edit-type convenience constructors; existing applyOverlay/markDirty unchanged)
-- Affected docs:
+- Affected code (DEFERRED to Phase 2 Spectra change `ooxml-edit-algebra-implementation` (#105) — not shipped in this change's apply scope):
+  - **Deferred**: New `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/Edit.swift` (Edit type elevation)
+  - **Deferred**: New `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/OOXMLEdit.swift` (3–5 representative cases)
+  - **Deferred**: New `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/WordEdit.swift` (corresponding semantic-layer cases)
+  - **Deferred**: New `packages/ooxml-swift/Tests/EditAlgebraTests/FullyFaithfulFunctorTests.swift` (property-based test using NTPU thesis fixture)
+  - **Deferred**: Modified `packages/ooxml-swift/Sources/OOXMLSwift/Document.swift` (add Edit-type convenience constructors; existing applyOverlay/markDirty unchanged)
+- Affected docs (shipped in this change):
   - Modified: `docs/structural-editing-paradigm.md` (add cross-reference to new `ooxml-edit-algebra` capability)
   - Modified: `docs/lossless-conversion.md` (add cross-reference)
 - Affected processes:
