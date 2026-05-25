@@ -132,7 +132,7 @@ This deferral is **architecturally sound**: decision-pinning (this change) and r
 ## 9. PR ergonomics + CD discipline rollout
 
 - [x] 9.1 Add a PR template snippet to `.github/PULL_REQUEST_TEMPLATE.md` (or create the file) requesting attached CD diagram for PRs touching `EditAlgebra/`. Verify: opening a draft PR from this branch displays the new template section.
-- [x] 9.2 Add a README under `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/README.md` documenting (a) the CD discipline contract, (b) how to draw an ASCII ladder for a new Edit case (with 1 worked example), (c) link to design.md ADR-002 Worked Examples. Verify: README renders correctly on GitHub; reader can author a CD diagram for a hypothetical new case using only the README as guide.
+- [x] 9.2 Add a README documenting (a) the CD discipline contract, (b) how to draw an ASCII ladder for a new Edit case (with 1 worked example), (c) link to design.md ADR-002 Worked Examples. **Shipped at `docs/edit-algebra-cd-discipline.md`** (NOT the originally-proposed `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/README.md` location — `packages/` is gitignored in the monorepo, so README cannot live inside the package directory until Phase 2 Spectra change `ooxml-edit-algebra-implementation` (#105) moves it there alongside actual Swift code). Verify: README renders correctly on GitHub at https://github.com/PsychQuant/macdoc/blob/main/docs/edit-algebra-cd-discipline.md after merge; reader can author a CD diagram for a hypothetical new case using only the README + design.md ADR-002 Worked Examples as guide.
 
 ## 10. Verification + finalization
 
