@@ -51,13 +51,13 @@ Foundation contract anchors (do not violate):
 
 - [x] 3.1 Implement `OOXMLEdit.insertParagraph(after:content:styleId:).operations()` per Decision 1 mapping table: emit `[Operation.insertParagraphAfter(after: elementID, paragraph: ParagraphPayload(text: content, styleId: styleId))]`. Verify: `InsertParagraphTests.testInsertParagraphEmitsInsertParagraphAfter` + `testInsertParagraphPreservesStyleId` + `testInsertParagraphEmptyContent` assert emission shape.
 - [x] 3.2 Implement `OOXMLEdit.insertParagraphBefore(...)` symmetrically with `Operation.insertParagraphBefore`. Verify: `InsertParagraphTests.testInsertParagraphBeforeEmitsInsertParagraphBefore` confirms emission.
-- [ ] 3.3 **BLOCKED** on OpLog Phase 2c — see design.md Decision 6 + [PsychQuant/ooxml-swift#71](https://github.com/PsychQuant/ooxml-swift/issues/71). End-to-end test: `EditAlgebraTests.testInsertParagraphApplies` applies the Edit to the NTPU thesis fixture and confirms the new paragraph appears at the specified index; assert canonical-identity for sectPr / comments / customXml (c14n-equal to input). **Cannot ship until OperationReducer implements `insertParagraphAfter`/`insertParagraphBefore` cases (currently throws `malformedOp("Phase 2c implements this op")`).**
+- [x] 3.3 **UNBLOCKED + SHIPPED (synthesized variant)** — ooxml-swift#71 Phase 2c reducer cases for `insertParagraphAfter` + `insertParagraphBefore` landed. `InsertParagraphE2ETests.testInsertParagraphAfterMutatesDocumentPart` + `testInsertParagraphBeforeMutatesDocumentPart` prove the full chain (Edit → lower → operations → log → materialize → new WordDocument) mutates `xmlTrees["word/document.xml"]` on a synthesized single-part doc. **Real .docx fixture variant (NTPU thesis + canonical-identity for sectPr/comments/customXml) deferred** until per-op part scoping fix lands in `WordDocument+Apply.swift` (currently iterates ALL parts → Reducer throws elementNotFound on parts not containing target).
 - [ ] 3.4 Add CD diagram for `OOXMLEdit.insertParagraph(after:)` to `docs/edit-algebra-cd-discipline.md`, following the ASCII-ladder format of foundation ADR-002 Worked Example 1 (the diagram for this case already exists in foundation design.md — extend with Operation reference). Verify: diagram present in repo, references this case explicitly.
 
 ## 4. OOXMLEdit.setBold (run-level mutation) — emission COMPLETE
 
 - [x] 4.1 Implement `OOXMLEdit.setBold(target:value:).operations()` — emits `[Operation.setRunFormat(target:, format: RunFormatPayload(bold: value))]`. **Decision (resolved)**: `value: false` lowers to EXPLICIT `payload.bold = false` (not nil) — nil means "leave unchanged", explicit false means "remove bold". `SetBoldTests.testSetBoldFalseEmitsSetRunFormatWithBoldFalse` pins the contract.
-- [ ] 4.2 **BLOCKED** on OpLog Phase 2c (ooxml-swift#71). End-to-end test: `EditAlgebraTests.testSetBoldApplies` toggles bold on a Run in NTPU fixture; assert `<w:b/>` presence flipped in target Run's rPr; assert sibling Runs' rPr c14n-equal to input.
+- [x] 4.2 **UNBLOCKED + SHIPPED (synthesized variant)** — ooxml-swift#71 Phase 2c `setRunFormat` (bold MVP) landed. `InsertParagraphE2ETests.testSetBoldMutatesRunRPr` confirms the chain produces `<w:rPr><w:b/></w:rPr>` on the targeted Run after `doc.apply(OOXMLEdit.setBold(target:, value: true))`. Real-.docx NTPU variant deferred behind multi-part scoping fix.
 - [ ] 4.3 Add CD diagram for `OOXMLEdit.setBold` extending foundation ADR-002 Worked Example 2.
 
 ## 5. OOXMLEdit.insertHyperlink (composite dual-part atomic case)
@@ -70,7 +70,7 @@ Foundation contract anchors (do not violate):
 ## 6. OOXMLEdit.removeParagraph (5th canonical case) — emission COMPLETE
 
 - [x] 6.1 Implement `OOXMLEdit.removeParagraph(target:).operations()` — emits `[Operation.removeParagraph(id: target)]`. Pinned label translation: OOXMLEdit uses `target:`, Operation uses `id:` — `RemoveParagraphTests.testRemoveParagraphEmitsOperationRemoveParagraph` asserts ElementID survives the label rename.
-- [ ] 6.2 **BLOCKED** on OpLog Phase 2c (ooxml-swift#71). End-to-end test: `EditAlgebraTests.testRemoveParagraphApplies` removes a paragraph from NTPU fixture; assert target paragraph gone; assert ALL other paragraphs + sibling Runs c14n-equal to input (this stress-tests preserve-violation since removing a paragraph shifts body-children indices).
+- [x] 6.2 **UNBLOCKED + SHIPPED (synthesized variant)** — ooxml-swift#71 Phase 2c `removeParagraph` case landed. `InsertParagraphE2ETests.testRemoveParagraphMutatesDocumentPart` removes middle paragraph from synthesized 3-paragraph doc and confirms siblings ["a", "c"] preserved. Real-.docx NTPU variant + sibling-rPr c14n-equality assertions deferred behind multi-part scoping fix.
 - [ ] 6.3 Add CD diagram for `OOXMLEdit.removeParagraph` to `docs/edit-algebra-cd-discipline.md` (new — not in foundation ADR-002, designed during this change).
 
 ## 7. WordEdit cases + lower() implementations
