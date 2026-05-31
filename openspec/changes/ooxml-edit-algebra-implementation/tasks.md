@@ -54,10 +54,10 @@ Foundation contract anchors (do not violate):
 - [ ] 3.3 **BLOCKED** on OpLog Phase 2c — see design.md Decision 6 + [PsychQuant/ooxml-swift#71](https://github.com/PsychQuant/ooxml-swift/issues/71). End-to-end test: `EditAlgebraTests.testInsertParagraphApplies` applies the Edit to the NTPU thesis fixture and confirms the new paragraph appears at the specified index; assert canonical-identity for sectPr / comments / customXml (c14n-equal to input). **Cannot ship until OperationReducer implements `insertParagraphAfter`/`insertParagraphBefore` cases (currently throws `malformedOp("Phase 2c implements this op")`).**
 - [ ] 3.4 Add CD diagram for `OOXMLEdit.insertParagraph(after:)` to `docs/edit-algebra-cd-discipline.md`, following the ASCII-ladder format of foundation ADR-002 Worked Example 1 (the diagram for this case already exists in foundation design.md — extend with Operation reference). Verify: diagram present in repo, references this case explicitly.
 
-## 4. OOXMLEdit.setBold (run-level mutation)
+## 4. OOXMLEdit.setBold (run-level mutation) — emission COMPLETE
 
-- [ ] 4.1 Implement `OOXMLEdit.setBold(target:value:).operations()` per Decision 1: emit `[Operation.setRunFormat(target: targetID, format: RunFormatPayload(bold: value, ...other fields nil))]`. Decide: pass `bold: false` as explicit-false vs nil-omit (depends on how RunFormatPayload represents "remove bold" vs "leave unchanged"). Verify: `EditAlgebraTests.testSetBoldEmitsOperation` confirms emission.
-- [ ] 4.2 End-to-end test: `EditAlgebraTests.testSetBoldApplies` toggles bold on a Run in NTPU fixture; assert `<w:b/>` presence flipped in target Run's rPr; assert sibling Runs' rPr c14n-equal to input.
+- [x] 4.1 Implement `OOXMLEdit.setBold(target:value:).operations()` — emits `[Operation.setRunFormat(target:, format: RunFormatPayload(bold: value))]`. **Decision (resolved)**: `value: false` lowers to EXPLICIT `payload.bold = false` (not nil) — nil means "leave unchanged", explicit false means "remove bold". `SetBoldTests.testSetBoldFalseEmitsSetRunFormatWithBoldFalse` pins the contract.
+- [ ] 4.2 **BLOCKED** on OpLog Phase 2c (ooxml-swift#71). End-to-end test: `EditAlgebraTests.testSetBoldApplies` toggles bold on a Run in NTPU fixture; assert `<w:b/>` presence flipped in target Run's rPr; assert sibling Runs' rPr c14n-equal to input.
 - [ ] 4.3 Add CD diagram for `OOXMLEdit.setBold` extending foundation ADR-002 Worked Example 2.
 
 ## 5. OOXMLEdit.insertHyperlink (composite dual-part atomic case)
@@ -67,10 +67,10 @@ Foundation contract anchors (do not violate):
 - [ ] 5.3 End-to-end test: `EditAlgebraTests.testInsertHyperlinkApplies` adds hyperlink to NTPU fixture; assert both `<w:hyperlink r:id="rNN">` element added to document.xml AND new `<Relationship>` entry in _rels/document.xml.rels; assert all other parts c14n-equal to input.
 - [ ] 5.4 Add CD diagram for `OOXMLEdit.insertHyperlink` extending foundation ADR-002 Worked Example 3 (dual-part atomic).
 
-## 6. OOXMLEdit.removeParagraph (5th canonical case)
+## 6. OOXMLEdit.removeParagraph (5th canonical case) — emission COMPLETE
 
-- [ ] 6.1 Implement `OOXMLEdit.removeParagraph(target:).operations()` per Decision 1: emit `[Operation.removeParagraph(id: targetID)]`. Verify: `EditAlgebraTests.testRemoveParagraphEmitsOperation` confirms emission.
-- [ ] 6.2 End-to-end test: `EditAlgebraTests.testRemoveParagraphApplies` removes a paragraph from NTPU fixture; assert target paragraph gone; assert ALL other paragraphs + sibling Runs c14n-equal to input (this stress-tests preserve-violation since removing a paragraph shifts body-children indices). 
+- [x] 6.1 Implement `OOXMLEdit.removeParagraph(target:).operations()` — emits `[Operation.removeParagraph(id: target)]`. Pinned label translation: OOXMLEdit uses `target:`, Operation uses `id:` — `RemoveParagraphTests.testRemoveParagraphEmitsOperationRemoveParagraph` asserts ElementID survives the label rename.
+- [ ] 6.2 **BLOCKED** on OpLog Phase 2c (ooxml-swift#71). End-to-end test: `EditAlgebraTests.testRemoveParagraphApplies` removes a paragraph from NTPU fixture; assert target paragraph gone; assert ALL other paragraphs + sibling Runs c14n-equal to input (this stress-tests preserve-violation since removing a paragraph shifts body-children indices).
 - [ ] 6.3 Add CD diagram for `OOXMLEdit.removeParagraph` to `docs/edit-algebra-cd-discipline.md` (new — not in foundation ADR-002, designed during this change).
 
 ## 7. WordEdit cases + lower() implementations
