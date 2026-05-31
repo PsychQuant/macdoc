@@ -18,7 +18,7 @@ Meanwhile, ooxml-swift v0.31.x has shipped a substantial chunk of the runtime me
   - `WordEdit.swift` — `public enum WordEdit: Edit` with corresponding semantic-layer cases (applyBold, applyLink, applyInsertParagraph)
   - `OOXMLEdit+Operation.swift` — 1:1 (or 1:N) mapping from `OOXMLEdit` cases to `Operation` cases (the canonical mapping table, verifiable via property tests)
 
-- **NEW**: `Document.apply(_ edit: any Edit) throws -> Document` public method. Implementation routes through existing `Operation` + `OperationLog` + `OperationReducer.materialize` infrastructure. Returns new Document (immutable apply — input unchanged).
+- **NEW**: `WordDocument.apply(_ edit: any Edit) throws -> WordDocument` public method, declared as an extension in `EditAlgebra/WordDocument+Apply.swift`. Implementation routes through existing `Operation` + `OperationLog` + `OperationReducer.materialize` infrastructure. Returns new WordDocument (immutable apply — input unchanged). The conceptual name "Document" in foundation #99 design refers to the actual type `WordDocument`.
 
 - **NEW**: `Tests/OOXMLSwiftTests/EditAlgebraTests/` test target:
   - `EditProtocolTests.swift` — protocol conformance smoke tests for OOXMLEdit + WordEdit
@@ -27,7 +27,7 @@ Meanwhile, ooxml-swift v0.31.x has shipped a substantial chunk of the runtime me
   - `WordEditLowerTests.swift` — `lower()` correctness for WordEdit cases (including range-crossing-paragraph)
   - `NaturalityTests.swift` — `(a ∘ b).lower() == a.lower() ∘ b.lower()` for composable WordEdit pairs
 
-- **MODIFIED (additive)**: `packages/ooxml-swift/Sources/OOXMLSwift/Models/Document.swift` gains `apply(_:)` public method. Existing `modifiedPartsView`, `markPartDirty`, `partTree`, `xmlTrees` unchanged.
+- **MODIFIED (additive)**: `packages/ooxml-swift/Sources/OOXMLSwift/Models/Document.swift` gains one additive field — `public var operationLog: OperationLog` — with custom Equatable excluding it from content equality. Existing `modifiedPartsView`, `markPartDirty`, `partTree`, `xmlTrees` unchanged. The `apply(_:)` method lives in a NEW file `EditAlgebra/WordDocument+Apply.swift`, not in `Models/Document.swift`.
 
 **BREAKING**: None. Edit type is additive; existing callers continue compiling.
 
@@ -64,7 +64,8 @@ Captured in design.md Non-Goals. Key:
   - New: `packages/ooxml-swift/Tests/OOXMLSwiftTests/EditAlgebraTests/FullyFaithfulFunctorTests.swift`
   - New: `packages/ooxml-swift/Tests/OOXMLSwiftTests/EditAlgebraTests/WordEditLowerTests.swift`
   - New: `packages/ooxml-swift/Tests/OOXMLSwiftTests/EditAlgebraTests/NaturalityTests.swift`
-  - Modified: `packages/ooxml-swift/Sources/OOXMLSwift/Models/Document.swift` (add `apply(_:)` method only)
+  - Modified: `packages/ooxml-swift/Sources/OOXMLSwift/Models/Document.swift` (add `operationLog: OperationLog` field + custom Equatable; `apply(_:)` method ships in new file `EditAlgebra/WordDocument+Apply.swift`)
+  - New: `packages/ooxml-swift/Sources/OOXMLSwift/EditAlgebra/WordDocument+Apply.swift`
 - Affected docs:
   - Modified: `docs/edit-algebra-cd-discipline.md` — add CD diagrams for the 5 implemented OOXMLEdit cases (links from `design.md` ADR-002 Worked Examples)
 - Affected processes:
@@ -73,6 +74,8 @@ Captured in design.md Non-Goals. Key:
   - `word-aligned-state-sync` Spectra change — runtime mechanism dependency satisfied (Operation/OperationLog/OperationReducer in v0.31.x)
   - macdoc#99 design.md ADR-002 — backing reference updates from `applyOverlay/markDirty` to `Operation/OperationLog/OperationReducer` (errata to be applied to closed #99 issue body or referenced from this change's design.md)
 
-**ASSUMPTION** (documented per spectra-discuss conclusion + verified during scout): `Operation` enum already covers the operations needed for the 3 canonical cases (insertParagraph → `insertParagraphAfter`; setBold → `setRunFormat`; insertHyperlink → composition of `insertNode` + `updateAttribute` for the relationship part). If property tests reveal a gap, route via `insertNode` fallback + file ooxml-swift issue for new Operation case.
+**ASSUMPTION** (documented per spectra-discuss conclusion + verified during scout): `Operation` enum already covers the operations needed for the 3 canonical cases (insertParagraph → `insertParagraphAfter`; setBold → `setRunFormat`; insertHyperlink → composition of `insertNode` + `updateAttribute` for the relationship part).
+
+**REVISED ASSUMPTION** (discovered during §3 implementation — see design.md Decision 6 errata): The `Operation` enum cases EXIST in v0.31.x, but their REDUCER implementations are Phase 2c-pending. `OperationReducer.apply(entry:to:)` throws `malformedOp("Phase 2c implements this op")` for `insertParagraphAfter`, `insertParagraphBefore`, `removeParagraph`, `setRunFormat`, `insertNode`, `updateAttribute`, and the rest of the tree-mutating Operation family. Tracked as [PsychQuant/ooxml-swift#71](https://github.com/PsychQuant/ooxml-swift/issues/71); critical-path subset (4 of 14 cases) shipped via [ooxml-swift PR #72](https://github.com/PsychQuant/ooxml-swift/pull/72). `insertHyperlink`'s composite mapping requires the remaining `insertNode` + `updateAttribute` reducer cases, which are not yet in PR #72.
 
 **ASSUMPTION**: NTPU thesis fixture remains the single shared fixture for property tests. Corpus expansion is deferred to #99 ADR-007 follow-up.

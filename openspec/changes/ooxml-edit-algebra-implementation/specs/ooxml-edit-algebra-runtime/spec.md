@@ -6,7 +6,7 @@ The `ooxml-swift` library SHALL provide a `public protocol Edit` in `Sources/OOX
 
 ```swift
 public protocol Edit {
-    func apply(to document: Document) throws -> Document
+    func apply(to document: WordDocument) throws -> WordDocument
     func lower() -> [OOXMLEdit]
 }
 ```
@@ -16,7 +16,7 @@ The library SHALL provide `public enum EditError: Error, Equatable` with at mini
 #### Scenario: Edit protocol defines apply + lower
 
 - **WHEN** a caller imports OOXMLSwift and declares a type conforming to `Edit`
-- **THEN** the type MUST implement `apply(to: Document) throws -> Document` and `lower() -> [OOXMLEdit]`
+- **THEN** the type MUST implement `apply(to: WordDocument) throws -> WordDocument` and `lower() -> [OOXMLEdit]`
 
 #### Scenario: EditError cases are Equatable
 
@@ -42,23 +42,23 @@ Each case SHALL implement `Edit` protocol's `apply(to:)` by emitting one or more
 #### Scenario: OOXMLEdit.insertParagraph routes to Operation.insertParagraphAfter
 
 - **WHEN** `OOXMLEdit.insertParagraph(after: paraID, content: "Hello", styleId: nil).apply(to: doc)` is called
-- **THEN** the resulting Document's OperationLog SHALL contain a new `Operation.insertParagraphAfter(after: paraID, paragraph: ParagraphPayload(text: "Hello", styleId: nil))` entry
+- **THEN** the resulting WordDocument's OperationLog SHALL contain a new `Operation.insertParagraphAfter(after: paraID, paragraph: ParagraphPayload(text: "Hello", styleId: nil))` entry
 
 ##### Example: insertParagraph emits expected Operation
 
-- **GIVEN** a Document with paragraph ID `p1` and empty OperationLog
+- **GIVEN** a WordDocument with paragraph ID `p1` and empty OperationLog
 - **WHEN** `OOXMLEdit.insertParagraph(after: p1, content: "Hello", styleId: nil).apply(to: doc)` is called
-- **THEN** the new Document's OperationLog has exactly 1 entry of type `Operation.insertParagraphAfter` with `after == p1` and `paragraph.text == "Hello"`
+- **THEN** the new WordDocument's OperationLog has exactly 1 entry of type `Operation.insertParagraphAfter` with `after == p1` and `paragraph.text == "Hello"`
 
 #### Scenario: OOXMLEdit.setBold routes to Operation.setRunFormat
 
 - **WHEN** `OOXMLEdit.setBold(target: runID, value: true).apply(to: doc)` is called
-- **THEN** the resulting Document's OperationLog SHALL contain a new `Operation.setRunFormat` entry whose `RunFormatPayload.bold == true`
+- **THEN** the resulting WordDocument's OperationLog SHALL contain a new `Operation.setRunFormat` entry whose `RunFormatPayload.bold == true`
 
 #### Scenario: OOXMLEdit.insertHyperlink routes to atomic composite Operations
 
 - **WHEN** `OOXMLEdit.insertHyperlink(target: runID, href: url, displayText: "example").apply(to: doc)` is called AND both the document.xml node insertion AND the rels-part attribute update succeed
-- **THEN** the new Document's OperationLog SHALL contain BOTH the `Operation.insertNode` entry (for the `<w:hyperlink>` element) AND the `Operation.updateAttribute` entry (for the Relationship Target)
+- **THEN** the new WordDocument's OperationLog SHALL contain BOTH the `Operation.insertNode` entry (for the `<w:hyperlink>` element) AND the `Operation.updateAttribute` entry (for the Relationship Target)
 - **AND** if either sub-operation fails validation, NEITHER SHALL be appended (atomic rollback at Edit level)
 
 ### Requirement: WordEdit Enum with 3 Canonical Cases
@@ -90,23 +90,25 @@ And `public struct WordRange: Equatable, Sendable` with `startRun: ElementID`, `
 - **WHEN** any defined `WordEdit` case has `lower()` called
 - **THEN** the call SHALL return a non-empty `[OOXMLEdit]` list (never returns empty array or throws)
 
-### Requirement: Document.apply Public Method
+### Requirement: WordDocument.apply Public Method
 
-The `Document` type SHALL expose `public func apply(_ edit: any Edit) throws -> Document` in `Sources/OOXMLSwift/Models/Document.swift`. This method SHALL:
+The `WordDocument` type (declared in `Sources/OOXMLSwift/Models/Document.swift`) SHALL expose `public func apply(_ edit: any Edit) throws -> WordDocument`. The apply method is implemented as an extension in `Sources/OOXMLSwift/EditAlgebra/WordDocument+Apply.swift`. This method SHALL:
 
 1. Internally route the edit's emitted Operations through the existing `OperationLog` and `OperationReducer.materialize` infrastructure
-2. Return a new Document instance (immutable apply — input Document unchanged)
+2. Return a new WordDocument instance (immutable apply — input WordDocument unchanged)
 3. NOT replace or modify the existing `applyOverlay`, `markPartDirty`, `partTree`, `xmlTrees` APIs
-4. Throw `EditError.pathNotFound(elementID)` if any target ElementID does not resolve in the input Document
-5. Throw `EditError.preserveViolation(...)` if the resulting Document's c14n form differs from input on a part NOT targeted by the edit (defensive check)
+4. **(PHASED — Phase 2c follow-up)** Throw `EditError.pathNotFound(elementID)` if any target ElementID does not resolve in the input WordDocument. Until phased delivery lands, target-not-found surfaces via Reducer-wrapping as `EditError.operationLogFailure(underlying: "...elementNotFound...")`.
+5. **(PHASED — Phase 2c follow-up)** Throw `EditError.preserveViolation(...)` if the resulting WordDocument's c14n form differs from input on a part NOT targeted by the edit (defensive check). Until phased delivery lands, the apply pipeline trusts the Reducer's per-op semantics for non-target preservation.
 6. Wrap any `OperationReducer.materialize` error as `EditError.operationLogFailure(underlying: ...)`
 
-The library SHALL also provide `public func apply<S: Sequence>(_ edits: S) throws -> Document where S.Element == any Edit` for sequence-folding apply.
+The library SHALL also provide `public func apply<S: Sequence>(_ edits: S) throws -> WordDocument where S.Element == any Edit` for sequence-folding apply.
 
-#### Scenario: apply returns new immutable Document
+**Phased acceptance note**: Items #4 and #5 are normative end-state requirements but ship in a later phase (see this change's design.md Decision 6 errata — depends on multi-part scoping fix + per-op target extraction). Items #1, #2, #3, #6 + sequence-folding are required for initial acceptance.
+
+#### Scenario: apply returns new immutable WordDocument
 
 - **WHEN** `let d2 = try d1.apply(OOXMLEdit.setBold(target: runID, value: true))`
-- **THEN** `d2` is a new Document with the edit applied AND `d1` is bytewise-equal-after-c14n to its state before the call
+- **THEN** `d2` is a new WordDocument with the edit applied AND `d1` is bytewise-equal-after-c14n to its state before the call
 
 #### Scenario: apply throws pathNotFound on missing ElementID
 
@@ -115,7 +117,7 @@ The library SHALL also provide `public func apply<S: Sequence>(_ edits: S) throw
 
 #### Scenario: apply preserves existing API surface
 
-- **WHEN** existing callers of `Document.applyOverlay()`, `Document.markPartDirty(_:)`, `Document.partTree(at:)`, `Document.xmlTrees` continue compiling and running after this change
+- **WHEN** existing callers of `WordDocument.applyOverlay()`, `WordDocument.markPartDirty(_:)`, `WordDocument.partTree(at:)`, `WordDocument.xmlTrees` continue compiling and running after this change
 - **THEN** their behavior MUST be unchanged
 
 ### Requirement: Property-Based Fully-Faithful-Functor Tests
@@ -123,9 +125,9 @@ The library SHALL also provide `public func apply<S: Sequence>(_ edits: S) throw
 The `ooxml-swift` test suite SHALL include `Tests/OOXMLSwiftTests/EditAlgebraTests/FullyFaithfulFunctorTests.swift` using `swift-testing` `@Test(arguments:)` parameterized tests that:
 
 1. Cover at least 5 implemented `OOXMLEdit` cases (all 5 canonical: insertParagraph, insertParagraphBefore, setBold, insertHyperlink, removeParagraph)
-2. Use the existing `RealWorldDocxRoundTripSmokeTests` NTPU thesis fixture loader as the input Document source
+2. Use the existing `RealWorldDocxRoundTripSmokeTests` NTPU thesis fixture loader as the input WordDocument source
 3. For each Edit case, generate at least 100 randomized argument samples within valid input domain
-4. For each sample, assert: the resulting Document's c14n form on subtrees NOT in the Edit's target path is bytewise-equal to the input's c14n form (canonical-identity invariant)
+4. For each sample, assert: the resulting WordDocument's c14n form on subtrees NOT in the Edit's target path is bytewise-equal to the input's c14n form (canonical-identity invariant)
 
 The suite SHALL also include `Tests/OOXMLSwiftTests/EditAlgebraTests/NaturalityTests.swift` asserting `(WordEdit.a ∘ WordEdit.b).lower() == WordEdit.a.lower() ∘ WordEdit.b.lower()` for at least 50 randomized pairs of each composable WordEdit pair-type (applyBold ∘ applyLink, applyBold ∘ applyInsertParagraph, applyLink ∘ applyInsertParagraph).
 
@@ -160,7 +162,7 @@ Each CD diagram SHALL show:
 
 ### Requirement: Edit Apply Performance Within Foundation Baseline
 
-The `Document.apply(_ edit:)` method's performance on the NTPU thesis fixture SHALL be within 10% of the baseline measured by direct `OperationLog` manipulation + `OperationReducer.materialize`. If a regression exceeds 10%, this Requirement is NOT satisfied and the implementation MUST be optimized before merge.
+The `WordDocument.apply(_ edit:)` method's performance on the NTPU thesis fixture SHALL be within 10% of the baseline measured by direct `OperationLog` manipulation + `OperationReducer.materialize`. If a regression exceeds 10%, this Requirement is NOT satisfied and the implementation MUST be optimized before merge.
 
 #### Scenario: insertParagraph apply benchmark
 
@@ -175,7 +177,7 @@ This change's implementation SHALL satisfy all foundation `ooxml-edit-algebra` c
 - Foundation Requirement "Edit Type Algebra" — satisfied via Edit protocol + 5 OOXMLEdit cases
 - Foundation Requirement "Fully Faithful Functor Property (Naturality of lower)" — satisfied via NaturalityTests
 - Foundation Requirement "CD Review Discipline for Edit Cases" — satisfied via PR template enforcement + CD diagrams in docs
-- Foundation Requirement "Edit Apply Surface on Document" — satisfied via Document.apply(_:) public method
+- Foundation Requirement "Edit Apply Surface on Document" — satisfied via `WordDocument.apply(_:)` public method (foundation Requirement title uses the conceptual name "Document"; the actual ooxml-swift type is `WordDocument`)
 - Foundation Requirement "Word UI Behavior as Ground Truth for WordEdit Semantics" — satisfied via WordEdit cases referencing Word UI verbs (applyBold ↔ Cmd-B, applyLink ↔ Cmd-K, etc.)
 - Foundation Requirement "Property-Based Functor Tests on NTPU Thesis Fixture" — satisfied via FullyFaithfulFunctorTests
 - Foundation Requirement "Downstream Architectural Compliance Documentation" — satisfied as ADVISORY (this change does not itself enforce downstream compliance; che-word-mcp#162 + word-builder-swift lens migration trackers continue)

@@ -172,7 +172,7 @@ extension WordDocument {
 **Why customized Equatable (excluding log)**:
 - "Two WordDocuments are equal" semantically means "their content is equal" — what callers care about for diff, comparison, snapshot tests
 - "Their edit histories are equal" is a separate concept — caller compares `doc1.operationLog == doc2.operationLog` explicitly when needed
-- Without customization, `let docA = WordDocument.read(url); let docB = WordDocument.read(url); XCTAssertEqual(docA, docB)` would fail because each parse generates fresh log entries (TODO: verify if log starts empty or seeded — see §2.1 implementation)
+- Without customization, `let docA = WordDocument.read(url); let docB = WordDocument.read(url); XCTAssertEqual(docA, docB)` would fail because each parse generates fresh log entries (parsed log starts empty per `DocumentApplyTests.testOperationLogStartsEmpty`; verified during §2 implementation)
 - Customization is additive (compares same fields as auto-synthesized Equatable would, minus log)
 
 **Why apply returns new WordDocument (not mutating)**:
@@ -245,6 +245,8 @@ We **ship emission-layer tests now** (validates the translation code we just wro
 | Stub Reducer to no-op on Phase 2c cases just for #105 e2e tests | REJECTED — gives false confidence that `apply()` works; defeats the purpose of e2e validation |
 
 **Tracking**: Filed as [PsychQuant/ooxml-swift#71](https://github.com/PsychQuant/ooxml-swift/issues/71) — "OpLog Phase 2c: implement tree-mutating Operation cases in OperationReducer". Scope: implement the 14 currently-throwing Operation cases in `OperationReducer.apply(entry:to:)`, each with its own test fixture proving tree mutation correctness + canonical-identity preservation. macdoc#105 §3.3 / §8 / §9 unblock once ooxml-swift#71 ships.
+
+**Critical-path subset SHIPPED** via [ooxml-swift PR #72](https://github.com/PsychQuant/ooxml-swift/pull/72) — 4 of 14 cases: `insertParagraphAfter`, `insertParagraphBefore`, `removeParagraph`, `setRunFormat` (bold MVP). The 4 OOXMLEdit cases that lower to these now run end-to-end on synthesized single-part documents (proven via 7 `InsertParagraphE2ETests`). Remaining 10 cases (including `insertNode` + `updateAttribute` needed for `insertHyperlink` composite) tracked in ooxml-swift#71 follow-up.
 
 **Errata to Decision 3**: Decision 3 assumed the runtime backing (`OperationReducer.materialize`) could replay any Operation. In reality the Reducer's `apply` method handles Phase 2b only. This doesn't change the architectural choice (WordDocument owns OperationLog — still correct), but it does mean `WordDocument.apply(_:)` is currently end-to-end functional only for setText/setParagraphStyle-based Edits (none exist in §1's OOXMLEdit case list; all 5 cases are tree-mutating). The pipeline wiring in §2 is correct; it just throws at the Reducer step until Phase 2c.
 
