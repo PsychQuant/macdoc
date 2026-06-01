@@ -64,6 +64,12 @@ public struct WordHTMLConverter: DocumentConverter {
             case .table(let table):
                 try emitTable(table, context: &context, output: &output)
                 index += 1
+            default:
+                // BodyChild added new cases in ooxml-swift main
+                // (.contentControl, .bookmarkMarker, .rawBlockElement) after
+                // this converter was last updated. Skip silently in Phase 1 —
+                // a follow-up Spectra change handles each case explicitly.
+                index += 1
             }
         }
 
