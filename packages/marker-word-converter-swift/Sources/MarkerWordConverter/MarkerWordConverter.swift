@@ -65,6 +65,11 @@ public struct MarkerWordConverter {
                 )
             case .table(let table):
                 try processTable(table, writer: writer, options: options)
+            default:
+                // BodyChild added .contentControl / .bookmarkMarker /
+                // .rawBlockElement in newer ooxml-swift. Skip silently —
+                // follow-up Spectra handles each.
+                continue
             }
         }
 

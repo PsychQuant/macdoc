@@ -10,7 +10,10 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
-        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.5.1"),
+        // Local override — packages/word-to-md-swift has the BodyChild fix
+        // (`.bookmarkMarker` / `.rawBlockElement` cases) ahead of the published
+        // 0.5.2 tag. Pin to local path until upstream bumps a new tag.
+        .package(name: "word-to-md-swift", path: "packages/word-to-md-swift"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
         .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", from: "0.1.0"),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
@@ -25,6 +28,7 @@ let package = Package(
         .package(name: "BibAPAToJSON", path: "packages/bib-apa-to-json-swift"),
         .package(name: "BibAPAToMD", path: "packages/bib-apa-to-md-swift"),
         .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
+        .package(name: "DocxWorkflowLib", path: "packages/docx-workflow-swift"),
         .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.1"),
         .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.3"),
         // word-builder-swift v1.0.0 is the lens-model API; MacDocCLI does not
@@ -53,6 +57,7 @@ let package = Package(
                 .product(name: "BibAPAToJSON", package: "BibAPAToJSON"),
                 .product(name: "BibAPAToMD", package: "BibAPAToMD"),
                 .product(name: "TeXToDOCX", package: "TeXToDOCX"),
+                .product(name: "DocxWorkflowLib", package: "DocxWorkflowLib"),
                 .product(name: "NoteToHTML", package: "note-to-html-swift"),
                 .product(name: "NoteToPDF", package: "note-to-pdf-swift"),
                 .product(name: "OCRCore", package: "ocr-swift"),

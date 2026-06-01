@@ -42,7 +42,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Package.swift              # CLI 的 Swift Package 定義
 ├── Sources/
 │   └── MacDocCLI/             # CLI 入口點
-│       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config 子命令群）
+│       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config + OCR + Docx 子命令群）
 │       ├── MacDoc+Convert.swift # Convert 統一轉換入口（16 路由，textutil-compatible）
 │       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
 │       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
@@ -351,7 +351,8 @@ swift build
 | `.` (root) | https://github.com/PsychQuant/macdoc.git | 主專案 CLI |
 | `packages/common-converter-swift` | https://github.com/PsychQuant/doc-converter-swift.git | 轉換器協議（remote 名 doc-converter-swift） |
 | `packages/word-to-md-swift` | https://github.com/PsychQuant/word-to-md-swift.git | Word → MD 轉換 |
-| `packages/word-builder-swift` | https://github.com/PsychQuant/word-builder-swift.git | Fluent Swift API for .docx (1:1 mirror of docx.js 9.6.x) |
+| `packages/word-builder-swift` | https://github.com/PsychQuant/word-builder-swift.git | Lens-model authoring surface for .docx (v1.0.0+) — wraps OOXMLSwift.WordDocument |
+| `packages/docx-workflow-swift` | (local only — not yet published) | Layer 3 manifest-driven docx-edit library on top of word-builder-swift v1.0.0 |
 | `packages/ooxml-swift` | https://github.com/PsychQuant/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | https://github.com/PsychQuant/marker-swift.git | 圖片分類 |
@@ -367,7 +368,8 @@ swift build
 ## Key Files
 
 ### macdoc
-- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config 子命令群）
+- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config + OCR + Docx 子命令群）
+- `Sources/MacDocCLI/MacDoc+Docx.swift` - `macdoc docx ...` 子命令（apply / plan / verify / diff —— manifest-driven .docx edit workflows，per openspec change `macdoc-docx-workflow-cli`，library 在 `packages/docx-workflow-swift`）
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
 - `Sources/MacDocCLI/MacDoc+OCR.swift` - OCR 子命令（top-level `macdoc ocr`，單檔 GLM-OCR）

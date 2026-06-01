@@ -76,6 +76,11 @@ public struct MarkdownToWordConverter: DocumentConverter {
                 xml += paragraph.toXML()
             case .table(let table):
                 xml += table.toXML()
+            default:
+                // BodyChild added .contentControl / .bookmarkMarker /
+                // .rawBlockElement in newer ooxml-swift. Skip silently —
+                // follow-up Spectra handles each.
+                continue
             }
         }
 
