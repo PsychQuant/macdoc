@@ -27,7 +27,10 @@ let package = Package(
         .package(name: "TeXToDOCX", path: "packages/tex-to-docx-swift"),
         .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.1"),
         .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.3"),
-        .package(url: "https://github.com/PsychQuant/word-builder-swift.git", from: "0.9.0"),
+        // word-builder-swift v1.0.0 is the lens-model API; MacDocCLI does not
+        // consume it yet (deferred per word-builder-swift-lens-migration
+        // design.md "Out of scope"). Re-add when a CLI target imports
+        // WordBuilderSwift.
         .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
     ],
     targets: [
