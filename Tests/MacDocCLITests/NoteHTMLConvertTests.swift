@@ -57,8 +57,10 @@ final class NoteHTMLConvertTests: XCTestCase {
         //   "media ≥ 1 asset" + ">750 KB index.html" floors per #81 calibration.
         // - Synthetic fixtures (NoteFixtureGenerator output, per #100) have no
         //   media + minimal strokes → only structural assertions apply.
-        let isSyntheticFixture = fixture.path.contains("macdoc-note-fixture-cache")
-            || fixture.lastPathComponent.contains("synthetic-fixture")
+        // Detection: synthetic fixtures live in $TMPDIR with the
+        // `macdoc-synthetic-fixture-` prefix (per CLITestHelper.swift, no
+        // cache subdirectory since #100 round-2 fix).
+        let isSyntheticFixture = fixture.lastPathComponent.contains("macdoc-synthetic-fixture")
 
         let mediaFiles = try FileManager.default.contentsOfDirectory(
             at: mediaURL,
