@@ -74,11 +74,23 @@ enum CLITestHelper {
 
     /// 取得 .note 測試 fixture 的絕對路徑。若 repo 內無可用樣本則 XCTSkip。
     ///
-    /// Resolution order (per PsychQuant/macdoc#100 Plan-tier delivery):
-    /// 1. Tests/MacDocCLITests/Fixtures/mini.note (if committed pre-generated)
-    /// 2. Synthesized via NoteFixtureGenerator (synthetic content, zero PII)
-    /// 3. test-files/*.note (gitignored local samples — Phase 1 #81 path)
-    /// 4. XCTSkip (only if all of the above fail)
+    /// Resolution order (per PsychQuant/macdoc#100 verify fix 2026-06-01):
+    /// 1. Tests/MacDocCLITests/Fixtures/mini.note (curated committable)
+    /// 2. test-files/*.note (rich developer fixture — preferred when present
+    ///    so strict NoteHTMLConvertTests assertions exercise real content)
+    /// 3. Freshly synthesized via NoteFixtureGenerator (synthetic content;
+    ///    regenerated every call — no cache, since stale-cache bugs were the
+    ///    #100 verify P1 finding)
+    /// 4. XCTSkip (only if all of the above fail — should be rare)
+    ///
+    /// Why prefer test-files over synthetic: the strict assertions in
+    /// `NoteHTMLConvertTests.testNoteToHTMLSmoke` (`>750KB index.html` +
+    /// `media/ >= 1 asset`) calibrated against rich content per #81 only
+    /// fire when the fixture has actual recordings/images. Cache + synthetic
+    /// silently masked test-files in the initial #100 implementation; this
+    /// order prevents that regression. Synthetic remains the CI fallback so
+    /// repos without a local fixture still run the smoke tests (with
+    /// fixture-type-aware structural assertions).
     static func noteFixture(file: StaticString = #filePath, line: UInt = #line) throws -> URL {
         // 1. Pre-generated committable fixture (if present)
         let committedFixture = repoRoot.appendingPathComponent(
@@ -88,29 +100,9 @@ enum CLITestHelper {
             return committedFixture
         }
 
-        // 2. Synthesized via NoteFixtureGenerator — synthetic content, no PII.
-        //    Cached in temp dir so repeated calls within a test run reuse the
-        //    same generated file. The temp dir is cleaned up by macOS on reboot.
-        let cacheDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macdoc-note-fixture-cache")
-        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        let cachedFixture = cacheDir.appendingPathComponent("synthetic-fixture.note")
-        if !FileManager.default.fileExists(atPath: cachedFixture.path) {
-            do {
-                try NoteFixtureGenerator.generate(at: cachedFixture)
-            } catch {
-                // Fall through to legacy path if generator fails.
-                // Errors logged so CI surfaces the failure without skipping tests outright.
-                FileHandle.standardError.write(Data(
-                    "[CLITestHelper] NoteFixtureGenerator failed: \(error); falling back to test-files/*.note\n".utf8
-                ))
-            }
-        }
-        if FileManager.default.fileExists(atPath: cachedFixture.path) {
-            return cachedFixture
-        }
-
-        // 3. Legacy path: test-files/*.note (gitignored local samples per #81).
+        // 2. Rich developer fixture — gitignored local samples per #81.
+        //    Prefer this over synthetic so strict assertions exercise real
+        //    content when a developer has it locally.
         let candidates = [
             "test-files/筆記 2026-03-20 15_25_20.note",
         ]
@@ -133,10 +125,22 @@ enum CLITestHelper {
             }
         }
 
-        // 4. Genuine XCTSkip — generator + legacy paths both failed.
-        throw XCTSkip(
-            "No .note fixture available (generator + test-files both failed). See PsychQuant/macdoc#100.",
-            file: file, line: line
-        )
+        // 3. Freshly synthesized — regenerate every call. Generator is fast
+        //    (~ms), so the no-cache strategy avoids the stale-cache bugs
+        //    flagged in #100's first-round verify (P1). The output URL uses
+        //    a UUID per invocation so concurrent test processes don't race.
+        let freshURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macdoc-synthetic-fixture-\(UUID().uuidString).note")
+        do {
+            try NoteFixtureGenerator.generate(at: freshURL)
+            return freshURL
+        } catch {
+            // Generator failure is unexpected — surface clearly. Don't silently
+            // skip; raise via XCTSkip with the underlying error in the message.
+            throw XCTSkip(
+                "NoteFixtureGenerator failed: \(error). No .note fixture available. See PsychQuant/macdoc#100.",
+                file: file, line: line
+            )
+        }
     }
 }
