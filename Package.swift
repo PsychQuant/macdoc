@@ -31,6 +31,10 @@ let package = Package(
         .package(name: "DocxWorkflowLib", path: "packages/docx-workflow-swift"),
         .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.1"),
         .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.3"),
+        // NoteCore is transitively pulled via note-to-html-swift/note-to-pdf-swift,
+        // but declaring it here lets MacDocCLITests `import NoteCore` to verify
+        // synthetic .note generation against the parser (per #100 Plan).
+        .package(url: "https://github.com/PsychQuant/note-core-swift.git", from: "0.1.0"),
         // word-builder-swift v1.0.0 is the lens-model API; MacDocCLI does not
         // consume it yet (deferred per word-builder-swift-lens-migration
         // design.md "Out of scope"). Re-add when a CLI target imports
@@ -66,7 +70,9 @@ let package = Package(
         ),
         .testTarget(
             name: "MacDocCLITests",
-            dependencies: []
+            dependencies: [
+                .product(name: "NoteCore", package: "note-core-swift"),
+            ]
         ),
     ]
 )
