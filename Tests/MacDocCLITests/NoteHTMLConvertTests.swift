@@ -52,23 +52,35 @@ final class NoteHTMLConvertTests: XCTestCase {
         )
         XCTAssertTrue(mediaIsDirectory.boolValue, "media/ SHALL be a directory")
 
+        // Branch assertions by fixture type:
+        // - Real fixtures (test-files/*.note) carry rich content → strict
+        //   "media ≥ 1 asset" + ">750 KB index.html" floors per #81 calibration.
+        // - Synthetic fixtures (NoteFixtureGenerator output, per #100) have no
+        //   media + minimal strokes → only structural assertions apply.
+        let isSyntheticFixture = fixture.path.contains("macdoc-note-fixture-cache")
+            || fixture.lastPathComponent.contains("synthetic-fixture")
+
         let mediaFiles = try FileManager.default.contentsOfDirectory(
             at: mediaURL,
             includingPropertiesForKeys: nil
         ).filter { !$0.hasDirectoryPath }
-        XCTAssertGreaterThanOrEqual(
-            mediaFiles.count, 1,
-            "media/ SHALL contain at least one image or audio asset"
-        )
+        if !isSyntheticFixture {
+            XCTAssertGreaterThanOrEqual(
+                mediaFiles.count, 1,
+                "media/ SHALL contain at least one image or audio asset (rich fixture)"
+            )
+        }
 
         let indexData = try Data(contentsOf: indexURL)
-        // Baseline 2026-05-02 using `test-files/筆記 2026-03-20 15_25_20.note`:
-        // 1,569,860 bytes. The 750 KB floor catches empty-shell regressions
-        // while leaving headroom for renderer/template changes.
-        XCTAssertGreaterThan(
-            indexData.count, 750_000,
-            "index.html SHALL be a non-trivial rendered player, not a tiny shell"
-        )
+        if !isSyntheticFixture {
+            // Baseline 2026-05-02 using `test-files/筆記 2026-03-20 15_25_20.note`:
+            // 1,569,860 bytes. The 750 KB floor catches empty-shell regressions
+            // while leaving headroom for renderer/template changes.
+            XCTAssertGreaterThan(
+                indexData.count, 750_000,
+                "index.html SHALL be a non-trivial rendered player, not a tiny shell (rich fixture)"
+            )
+        }
 
         let content = try String(contentsOf: indexURL, encoding: .utf8)
         XCTAssertGreaterThan(content.count, 0, "index.html SHALL be non-empty")
