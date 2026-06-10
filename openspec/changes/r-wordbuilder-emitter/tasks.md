@@ -66,11 +66,11 @@ Implements the TDD discipline per `.spectra.yaml` `tdd: true`. Write tests BEFOR
 
 ## 7. Documentation + CI
 
-- [ ] 7.1 Update the repo's `README.md` (created in §1.1) with full installation + usage guide: prerequisites (Swift toolchain), installation (`devtools::install_github("PsychQuant/r-wordbuilder")`), minimum example (the pipeline from spec.md `##### Example: Minimum pipeline emit`), security model (the typed escape boundary, with reference to the closed PR #96 finding), Layer 4 framing (link to PsychQuant/macdoc#99 ADR-009), compatibility (pinned WordBuilderSwift version). **Verify**: README has sections "Installation", "Usage", "Security", "Layer 4 Framing", "Compatibility".
+- [x] 7.1 Update the repo's `README.md` (created in §1.1) with full installation + usage guide: prerequisites (Swift toolchain), installation (`devtools::install_github("PsychQuant/r-wordbuilder")`), minimum example (the pipeline from spec.md `##### Example: Minimum pipeline emit`), security model (the typed escape boundary, with reference to the closed PR #96 finding), Layer 4 framing (link to PsychQuant/macdoc#99 ADR-009), compatibility (pinned WordBuilderSwift version). **Verify**: README has sections "Installation", "Usage", "Security", "Layer 4 Framing", "Compatibility".
 
-- [ ] 7.2 [P] Add `.github/workflows/r-check.yml` that runs `R CMD check --as-cran` on push + PR. The R CI matrix SHALL include macOS-latest (the platform where Swift is most available) + Ubuntu-latest (with swift install step) + R 4.1 / R 4.3 / R-devel. **Verify**: GitHub Actions runs the workflow on first push; macOS + Ubuntu builds pass.
+- [x] 7.2 [P] Add `.github/workflows/r-check.yml` that runs `R CMD check --as-cran` on push + PR. The R CI matrix SHALL include macOS-latest (the platform where Swift is most available) + Ubuntu-latest (with swift install step) + R 4.1 / R 4.3 / R-devel. **Verify**: GitHub Actions runs the workflow on first push; macOS + Ubuntu builds pass.
 
-- [ ] 7.3 [P] Add `tools/check-no-direct-paste.sh` from §2.3 to the CI workflow as a separate job, gating the build. **Verify**: a deliberate `paste0("WordEdit.applyBold(...)")` injected into a stash branch fails the CI check.
+- [x] 7.3 [P] Add `tools/check-no-direct-paste.sh` from §2.3 to the CI workflow as a separate job, gating the build. **Verify**: a deliberate `paste0("WordEdit.applyBold(...)")` injected into a stash branch fails the CI check.
 
 ## 8. Validation gates
 
