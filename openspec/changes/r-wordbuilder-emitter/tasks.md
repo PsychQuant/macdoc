@@ -74,10 +74,10 @@ Implements the TDD discipline per `.spectra.yaml` `tdd: true`. Write tests BEFOR
 
 ## 8. Validation gates
 
-- [ ] 8.1 Run `R CMD check --as-cran` locally in the `r-wordbuilder` repo. **Behavior**: zero ERRORs, zero WARNINGs, NOTES limited to expected non-blocking items (e.g., "Maintainer field" formatting in fresh package init). **Verify**: `R CMD check r-wordbuilder` exits 0 with 0 ERR + 0 WARN.
+- [x] 8.1 Run `R CMD check --as-cran` locally in the `r-wordbuilder` repo. **Behavior**: zero ERRORs, zero WARNINGs, NOTES limited to expected non-blocking items (e.g., "Maintainer field" formatting in fresh package init). **Verify**: `R CMD check r-wordbuilder` exits 0 with 0 ERR + 0 WARN.
 
-- [ ] 8.2 Run the full testthat suite. **Behavior**: all tests in §6.1–§6.6 pass (or cleanly skip per their `skip_if` conditions). **Verify**: `Rscript -e 'devtools::test()'` reports 0 failures.
+- [x] 8.2 Run the full testthat suite. **Behavior**: all tests in §6.1–§6.6 pass (or cleanly skip per their `skip_if` conditions). **Verify**: `Rscript -e 'devtools::test()'` reports 0 failures.
 
-- [ ] 8.3 Run `spectra validate r-wordbuilder-emitter` from the macdoc repo. **Behavior**: Spectra change validates structurally and semantically. **Verify**: command exits 0 with `✓ ... — valid`.
+- [x] 8.3 Run `spectra validate r-wordbuilder-emitter` from the macdoc repo. **Behavior**: Spectra change validates structurally and semantically. **Verify**: command exits 0 with `✓ ... — valid`.
 
-- [ ] 8.4 Integration smoke: run a minimum pipeline end-to-end (R → emit `.swift` → `swift run`) against a controlled fixture; verify the resulting `.docx` opens in Microsoft Word OR Apple Pages OR LibreOffice. **Behavior**: produces a valid `.docx` matching the pipeline's intended content. **Verify**: manual inspection + `unzip -l` shows OOXML structure; smoke documented in the repo's `tests/integration/README.md` for follow-up automation.
+- [x] 8.4 Integration smoke: run a minimum pipeline end-to-end (R → emit `.swift` → `swift run`) against a controlled fixture; verify the resulting `.docx` opens in Microsoft Word OR Apple Pages OR LibreOffice. **Behavior**: produces a valid `.docx` matching the pipeline's intended content. **Verify**: manual inspection + `unzip -l` shows OOXML structure; smoke documented in the repo's `tests/integration/README.md` for follow-up automation.
