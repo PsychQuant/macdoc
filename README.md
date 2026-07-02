@@ -18,7 +18,7 @@ claude plugin marketplace add PsychQuant/macdoc
 claude plugin install che-word-mcp@macdoc   # 或 che-pdf-mcp / che-pptx-mcp / macdoc
 ```
 
-MCP plugins 的 wrapper 會自動從各 repo 的 GitHub Releases 下載 signed + notarized universal binary。
+MCP plugins 的 wrapper 會自動從各 repo 的 GitHub Releases 下載 universal binary，並在安裝前**強制驗證** sha256 與 Developer ID 簽章鏈（Team `6W377FS7BS`）；驗證不過即拒裝。
 
 > 遷移註記：`che-word-mcp` 與 `macdoc` 兩個 plugins 原先發布於 `psychquant-claude-plugins` marketplace，自 2026-07 起以本 marketplace 為準。
 

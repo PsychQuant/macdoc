@@ -5,9 +5,20 @@
 # - Reads desired version from plugin.json (plugin's intended binary version)
 # - Compares against ~/bin/.ChePPTXMCP.version sidecar
 # - Re-downloads when plugin has been updated but binary is stale
-# - Atomic file swap (.tmp + mv) so partial downloads never break things
-# - Falls back to releases/latest if plugin.json unreadable or pinned tag missing
+# - Unique temp file (mktemp, same fs) + atomic mv so partial downloads never break things
+# - Pinned version does NOT fall back to releases/latest (supply-chain pinning);
+#   latest is used only when plugin.json carries no version
 #
+# Supply-chain verification (PsychQuant/macdoc#112 security review R1+R2):
+# - sha256 (MANDATORY): release must ship ChePPTXMCP.sha256; missing/malformed/
+#   mismatching asset refuses install (fail-closed integrity gate)
+# - Code signature (AUTHENTICITY): requirement-based codesign check pins the
+#   Apple chain + Team OU 6W377FS7BS. NOTE: a grep on `codesign -dvv` output is
+#   spoofable via the attacker-controlled Identifier field, and --verify alone
+#   accepts ad-hoc signatures (empirically reproduced in #112 verify round 1) —
+#   only the -R requirement form is sound.
+# - On any verification failure: keep + exec the existing binary if present
+#   (fail-to-known-good), else exit 1.
 
 set -u
 
@@ -16,20 +27,32 @@ BINARY_NAME="ChePPTXMCP"
 INSTALL_DIR="$HOME/bin"
 BINARY="$INSTALL_DIR/$BINARY_NAME"
 VERSION_FILE="$INSTALL_DIR/.${BINARY_NAME}.version"
+SCRIPT_ARGS=("$@")
 
 # Locate plugin root via wrapper's own path (more reliable than $CLAUDE_PLUGIN_ROOT
 # which isn't guaranteed in MCP spawn env). Wrapper lives at PLUGIN_ROOT/bin/*.sh.
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 
-# Read desired version from plugin.json (empty string on any failure → fallback to "latest").
+run_existing_or_die() {
+    # $1 = error message. Fail-to-known-good: prefer the already-installed
+    # binary over aborting the MCP server spawn entirely.
+    echo "$BINARY_NAME: ERROR — $1" >&2
+    if [[ -x "$BINARY" ]]; then
+        echo "$BINARY_NAME: keeping existing binary" >&2
+        exec "$BINARY" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
+    fi
+    exit 1
+}
+
+# Read desired version from plugin.json (empty string on any failure → latest).
 DESIRED_VERSION=""
 if [[ -f "$PLUGIN_JSON" ]]; then
     DESIRED_VERSION=$(grep -oE '"version":[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
         | head -1 | cut -d'"' -f4 || true)
 fi
 
-# Read currently installed version from sidecar (empty string if file missing/unreadable).
+# Read currently installed version from sidecar (empty string if missing).
 INSTALLED_VERSION=""
 [[ -f "$VERSION_FILE" ]] && INSTALLED_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || true)
 
@@ -48,66 +71,48 @@ if $NEED_DOWNLOAD; then
     echo "$BINARY_NAME: $REASON — downloading from $REPO..." >&2
     mkdir -p "$INSTALL_DIR"
 
-    # Try pinned tag first, then fall back to latest release.
-    URL=""
-    for API_URL in \
-        "${DESIRED_VERSION:+https://api.github.com/repos/$REPO/releases/tags/v$DESIRED_VERSION}" \
-        "https://api.github.com/repos/$REPO/releases/latest"
-    do
-        [[ -z "$API_URL" ]] && continue
-        URL=$(curl -sL --max-time 30 "$API_URL" 2>/dev/null \
-            | grep '"browser_download_url"' | grep "/$BINARY_NAME\"" | head -1 \
-            | sed 's/.*"\(https[^"]*\)".*/\1/')
-        [[ -n "$URL" ]] && break
-    done
-
-    if [[ -z "$URL" ]]; then
-        if [[ -x "$BINARY" ]]; then
-            echo "$BINARY_NAME: WARNING — no download URL found, keeping existing binary" >&2
-        else
-            echo "$BINARY_NAME: ERROR — no download URL found at $REPO. Install manually: https://github.com/$REPO/releases" >&2
-            exit 1
-        fi
+    # Resolve release via the API-free direct-download endpoints (unauthenticated
+    # api.github.com is rate-limited to 60 req/hr per IP and fails closed here;
+    # the /releases/download/ redirect endpoints have no such limit).
+    # Pinned version does NOT fall back to latest — a missing pinned tag is a
+    # release-channel fault, not a downgrade licence.
+    if [[ -n "$DESIRED_VERSION" ]]; then
+        URL="https://github.com/$REPO/releases/download/v$DESIRED_VERSION/$BINARY_NAME"
+        TARGET_DESC="v$DESIRED_VERSION"
     else
-        if curl -sL --max-time 300 "$URL" -o "${BINARY}.tmp" 2>/dev/null; then
-            # --- Supply-chain verification (PsychQuant/macdoc#112 security review) ---
-            # 1. sha256: compare against the release's .sha256 asset when present
-            #    (fail-closed on mismatch; warn-and-continue when asset missing).
-            EXPECTED_SHA=$(curl -sL --max-time 30 "${URL}.sha256" 2>/dev/null | tr -d '[:space:]' | head -c 64)
-            if [[ ${#EXPECTED_SHA} -eq 64 ]]; then
-                ACTUAL_SHA=$(shasum -a 256 "${BINARY}.tmp" | awk '{print $1}')
-                if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
-                    rm -f "${BINARY}.tmp"
-                    echo "$BINARY_NAME: ERROR — sha256 mismatch against release asset; refusing to install" >&2
-                    [[ -x "$BINARY" ]] && exec "$BINARY" "$@"
-                    exit 1
-                fi
-            else
-                echo "$BINARY_NAME: WARNING — no .sha256 asset found; relying on code-signature check" >&2
-            fi
-            # 2. Code signature: require a valid signature from Team 6W377FS7BS
-            #    (Developer ID, CHE CHENG) before executing anything downloaded.
-            if ! codesign --verify --strict "${BINARY}.tmp" 2>/dev/null || \
-               ! codesign -dvv "${BINARY}.tmp" 2>&1 | grep -q "TeamIdentifier=6W377FS7BS"; then
-                rm -f "${BINARY}.tmp"
-                echo "$BINARY_NAME: ERROR — code-signature verification failed (not signed by expected Team ID); refusing to install" >&2
-                [[ -x "$BINARY" ]] && exec "$BINARY" "$@"
-                exit 1
-            fi
-            chmod +x "${BINARY}.tmp"
-            mv "${BINARY}.tmp" "$BINARY"
-            echo "${DESIRED_VERSION:-unknown}" > "$VERSION_FILE"
-            echo "$BINARY_NAME: installed v${DESIRED_VERSION:-latest}" >&2
-        else
-            rm -f "${BINARY}.tmp" 2>/dev/null
-            if [[ -x "$BINARY" ]]; then
-                echo "$BINARY_NAME: WARNING — download failed, keeping existing binary" >&2
-            else
-                echo "$BINARY_NAME: ERROR — download failed" >&2
-                exit 1
-            fi
-        fi
+        URL="https://github.com/$REPO/releases/latest/download/$BINARY_NAME"
+        TARGET_DESC="latest"
     fi
+
+    TMP_FILE=$(mktemp "$INSTALL_DIR/.${BINARY_NAME}.download.XXXXXX") || run_existing_or_die "mktemp failed"
+    trap 'rm -f "$TMP_FILE"' EXIT
+
+    # -w url_effective: after redirects the final URL contains /download/vX.Y.Z/,
+    # which is the authoritative resolved version (needed for the latest path).
+    EFFECTIVE_URL=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP_FILE" -w '%{url_effective}' 2>/dev/null) \
+        || run_existing_or_die "download failed for $TARGET_DESC at $REPO (pinned versions do not fall back to latest). Install manually: https://github.com/$REPO/releases"
+    RESOLVED_VERSION=$(printf '%s' "$EFFECTIVE_URL" | sed -En 's#.*/download/v?([^/]+)/[^/]+$#\1#p')
+
+    # 1. sha256 — mandatory fail-closed integrity gate.
+    EXPECTED_SHA=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "${URL}.sha256" 2>/dev/null \
+        | head -1 | awk '{print $1}')
+    [[ "$EXPECTED_SHA" =~ ^[0-9a-fA-F]{64}$ ]] \
+        || run_existing_or_die "missing/malformed .sha256 release asset — refusing to install"
+    ACTUAL_SHA=$(shasum -a 256 "$TMP_FILE" | awk '{print $1}')
+    [[ "$ACTUAL_SHA" == "$EXPECTED_SHA" ]] \
+        || run_existing_or_die "sha256 mismatch against release asset — refusing to install"
+
+    # 2. Code signature — requirement-based authenticity gate (see header).
+    codesign --verify --strict \
+        -R '=anchor apple generic and certificate leaf[subject.OU] = "6W377FS7BS"' \
+        "$TMP_FILE" 2>/dev/null \
+        || run_existing_or_die "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install"
+
+    chmod +x "$TMP_FILE"
+    mv "$TMP_FILE" "$BINARY"
+    trap - EXIT
+    echo "${RESOLVED_VERSION:-${DESIRED_VERSION:-unknown}}" > "$VERSION_FILE"
+    echo "$BINARY_NAME: installed v${RESOLVED_VERSION:-${DESIRED_VERSION:-unknown}} (sha256 + Developer ID verified)" >&2
 fi
 
-exec "$BINARY" "$@"
+exec "$BINARY" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
