@@ -4,6 +4,12 @@ All notable changes to the che-pdf-mcp plugin shell will be documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.3] - 2026-07-03
+
+### Changed
+
+- Track binary v0.2.0（PsychQuant/che-pdf-mcp#2 + #3 首次出貨）：deprecated MCP content factory 遷移、Package.resolved 鎖版（swift-nio 2.101.2，含 Dependabot 修補）、serverVersion single-source 常數 + release.sh 版本同步 gate。首次透過 PsychQuant/macdoc#119 硬化 release pipeline 發布（sha256 + Developer ID gate + FINAL GATE TOCTOU 全通過）。
+
 ## [0.1.2] - 2026-07-02
 
 ### Changed
