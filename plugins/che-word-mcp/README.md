@@ -1,6 +1,6 @@
 # che-word-mcp
 
-**Word MCP Server** — Swift 原生 OOXML 操作，**235 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
+**Word MCP Server** — Swift 原生 OOXML 操作，**242 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
 
 當前版本：**v3.20.0**（Plugin shell + Binary 同步）— closes [PsychQuant/che-word-mcp#160](https://github.com/PsychQuant/che-word-mcp/issues/160) — 兩個新 MCP tools 暴露 [PsychQuant/ooxml-swift v0.24.0](https://github.com/PsychQuant/ooxml-swift/releases/tag/v0.24.0) 的 `spliceOMath` API 給 MCP callers，跨 document 拷貝 verbatim `<m:oMath>` XML 區塊。
 
@@ -182,7 +182,7 @@ v3.0.0+ session state 追蹤：dirty tracking、autosave、`finalize_document`�
 
 ## Round-trip Fidelity（v3.5.0 true byte-preservation）
 
-底層 `ooxml-swift v0.19.2` 採用 **preserve-by-default + dirty tracking** 架構：`open_document` 保留原始 archive tempDir；`save_document` overlay 模式透過 `WordDocument.modifiedParts: Set<String>` 精確判斷哪些 part 真正被改動，**未改動的 typed-managed part 完全不重寫**——byte-for-byte 保留 `word/theme/`、`webSettings.xml`、`people.xml`、`commentsExtended/Extensible/Ids`、`glossary/`、`customXml/`、**以及 `word/document.xml`、`styles.xml`、`fontTable.xml`、`header*.xml`、`footer*.xml`、`comments.xml`、`footnotes.xml`、`endnotes.xml`** 等所有 typed parts。v0.19.x 額外解決 #56 P0：`<w:document>` root 34 個 `xmlns:*` declarations 完整保留，`<w:bookmarkStart>` / `<w:hyperlink>` / `<w:fldSimple>` / `<mc:AlternateContent>` 結構化 wrapper 全程 round-trip（pre-v0.19.0 會 silently 丟掉 wrapper 內 354 個 `<w:t>` text nodes）。
+底層 `ooxml-swift v0.24.0` 採用 **preserve-by-default + dirty tracking** 架構：`open_document` 保留原始 archive tempDir；`save_document` overlay 模式透過 `WordDocument.modifiedParts: Set<String>` 精確判斷哪些 part 真正被改動，**未改動的 typed-managed part 完全不重寫**——byte-for-byte 保留 `word/theme/`、`webSettings.xml`、`people.xml`、`commentsExtended/Extensible/Ids`、`glossary/`、`customXml/`、**以及 `word/document.xml`、`styles.xml`、`fontTable.xml`、`header*.xml`、`footer*.xml`、`comments.xml`、`footnotes.xml`、`endnotes.xml`** 等所有 typed parts。v0.19.x 額外解決 #56 P0：`<w:document>` root 34 個 `xmlns:*` declarations 完整保留，`<w:bookmarkStart>` / `<w:hyperlink>` / `<w:fldSimple>` / `<mc:AlternateContent>` 結構化 wrapper 全程 round-trip（pre-v0.19.0 會 silently 丟掉 wrapper 內 354 個 `<w:t>` text nodes）。
 
 NTPU 學位論文模板的中文字體（DFKai-SB / 華康中楷體）no-op `save_document` 後完整保留 13 fontTable + 6 distinct headers + 4 footers + three-segment PAGE field + `<w15:presenceInfo>` identity。
 
@@ -382,20 +382,20 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 
 - **語言**: Swift（macOS 13.0+）
 - **MCP SDK**: swift-sdk 0.12+
-- **OOXML 引擎**: [`ooxml-swift v0.19.2`](https://github.com/PsychQuant/ooxml-swift)（preserve-by-default + dirty tracking + revision generation + `document.xml` lossless round-trip）
+- **OOXML 引擎**: [`ooxml-swift v0.24.0`](https://github.com/PsychQuant/ooxml-swift)（preserve-by-default + dirty tracking + revision generation + `document.xml` lossless round-trip）
 - **LaTeX parser**: [`latex-math-swift v0.1.0+`](https://github.com/PsychQuant/latex-math-swift)（v3.2.0+）
 - **Markdown export**: [`word-to-md-swift`](https://github.com/PsychQuant/word-to-md-swift) + [`markdown-swift`](https://github.com/PsychQuant/markdown-swift)
 
 ## 版本
 
-- **Plugin shell**: v3.13.2
-- **Binary**: v3.13.2（`CheWordMCP`）
+- **Plugin shell**: v3.20.2
+- **Binary**: v3.20.0（`CheWordMCP`，242 tools）
 - **GitHub**: https://github.com/PsychQuant/che-word-mcp
 - **完整 CHANGELOG**: https://github.com/PsychQuant/che-word-mcp/blob/main/CHANGELOG.md
 
 ### Plugin Shell vs Binary 版本
 
-兩者獨立但本次 v3.13.2 同步。Plugin shell（marketplace 端，含 SKILL.md / CLAUDE.md / `.mcp.json` / wrapper）有自己的 minor，反映文件 / skill 變動；Binary（GitHub release 端）有自己的 minor，反映 MCP server 內部新增 tool 或修 bug。Wrapper auto-download 從 release fetch binary 到 `~/bin/CheWordMCP`。
+兩者獨立（#116 起以 `binary_version` 欄位正式解耦）。Plugin shell（marketplace 端，含 SKILL.md / CLAUDE.md / `.mcp.json` / wrapper）有自己的 minor，反映文件 / skill 變動；Binary（GitHub release 端）有自己的 minor，反映 MCP server 內部新增 tool 或修 bug。Wrapper auto-download 從 release fetch binary 到 plugin 層級的 `.bin-cache/CheWordMCP`（#117），安裝與每次啟動皆驗證 sha256 + Developer ID 簽章鏈。
 
 ### 重要 milestones
 
