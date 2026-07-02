@@ -38,6 +38,7 @@ run_existing_or_die() {
     # $1 = error message. Fail-to-known-good: prefer the already-installed
     # binary over aborting the MCP server spawn entirely.
     echo "$BINARY_NAME: ERROR — $1" >&2
+    rm -f "${TMP_FILE:-}" 2>/dev/null   # trap EXIT does not fire across exec — clean up rejected download here
     if [[ -x "$BINARY" ]]; then
         echo "$BINARY_NAME: keeping existing binary" >&2
         exec "$BINARY" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
@@ -87,11 +88,11 @@ if $NEED_DOWNLOAD; then
     TMP_FILE=$(mktemp "$INSTALL_DIR/.${BINARY_NAME}.download.XXXXXX") || run_existing_or_die "mktemp failed"
     trap 'rm -f "$TMP_FILE"' EXIT
 
-    # -w url_effective: after redirects the final URL contains /download/vX.Y.Z/,
-    # which is the authoritative resolved version (needed for the latest path).
-    EFFECTIVE_URL=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP_FILE" -w '%{url_effective}' 2>/dev/null) \
+    # NOTE: successful downloads redirect to the release-assets CDN, so the
+    # effective URL does NOT expose the tag — the sidecar records the pinned
+    # version (all shipped plugins pin one; the latest path records "unknown").
+    curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP_FILE" 2>/dev/null \
         || run_existing_or_die "download failed for $TARGET_DESC at $REPO (pinned versions do not fall back to latest). Install manually: https://github.com/$REPO/releases"
-    RESOLVED_VERSION=$(printf '%s' "$EFFECTIVE_URL" | sed -En 's#.*/download/v?([^/]+)/[^/]+$#\1#p')
 
     # 1. sha256 — mandatory fail-closed integrity gate.
     EXPECTED_SHA=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "${URL}.sha256" 2>/dev/null \
@@ -104,15 +105,15 @@ if $NEED_DOWNLOAD; then
 
     # 2. Code signature — requirement-based authenticity gate (see header).
     codesign --verify --strict \
-        -R '=anchor apple generic and certificate leaf[subject.OU] = "6W377FS7BS"' \
+        -R '=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"' \
         "$TMP_FILE" 2>/dev/null \
-        || run_existing_or_die "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install"
+        || run_existing_or_die "code-signature verification failed (not a Developer ID Application cert of Team 6W377FS7BS) — refusing to install"
 
     chmod +x "$TMP_FILE"
     mv "$TMP_FILE" "$BINARY"
     trap - EXIT
-    echo "${RESOLVED_VERSION:-${DESIRED_VERSION:-unknown}}" > "$VERSION_FILE"
-    echo "$BINARY_NAME: installed v${RESOLVED_VERSION:-${DESIRED_VERSION:-unknown}} (sha256 + Developer ID verified)" >&2
+    echo "${DESIRED_VERSION:-unknown}" > "$VERSION_FILE"
+    echo "$BINARY_NAME: installed v${DESIRED_VERSION:-unknown} (sha256 + Developer ID verified)" >&2
 fi
 
 exec "$BINARY" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}

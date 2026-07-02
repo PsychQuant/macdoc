@@ -15,8 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Wrapper 改用硬化模板（同 che-pdf-mcp / che-pptx-mcp v0.1.0）：強制 sha256 + requirement-based codesign（Team OU 6W377FS7BS）+ pinned version 不 fallback latest（PsychQuant/macdoc#112 verify R1 HIGH-2）。**版本刻意不 bump**：wrapper 以 plugin.json version 挑 binary release tag（v3.20.0），bump 會使下載目標指向不存在的 tag；shell/binary 版本解耦見 PsychQuant/macdoc#116。
 
-## [Unreleased]
-
 ## [3.20.0] - 2026-05-04
 
 ### Added
