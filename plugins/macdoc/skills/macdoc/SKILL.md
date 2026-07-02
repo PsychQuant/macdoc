@@ -11,7 +11,7 @@ description: |
 # macdoc — macOS 原生文件處理 CLI
 
 安裝位置：`~/bin/macdoc`（或 `/usr/local/bin/macdoc`）
-原始碼：`/Users/che/Developer/macdoc`
+原始碼：https://github.com/PsychQuant/macdoc
 
 ## 子命令總覽
 
