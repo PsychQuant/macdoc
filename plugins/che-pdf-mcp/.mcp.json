@@ -1,0 +1,7 @@
+{
+  "pdf": {
+    "type": "stdio",
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/che-pdf-mcp-wrapper.sh",
+    "description": "PDF 文件處理 MCP server — PDFKit 解析與文字提取、Vision OCR（原生 macOS）、圖片/區域擷取、亂碼區域偵測。"
+  }
+}

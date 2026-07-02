@@ -1,0 +1,7 @@
+{
+  "pptx": {
+    "type": "stdio",
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/che-pptx-mcp-wrapper.sh",
+    "description": "PowerPoint (.pptx) MCP server — PresentationML 解析與生成：slides、shapes、tables、notes、theme、markdown 匯出。"
+  }
+}
