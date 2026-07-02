@@ -34,13 +34,24 @@ SCRIPT_ARGS=("$@")
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 
+verify_binary() {
+    # Developer ID Application (marker OIDs) + Team OU pin. Runs on every
+    # candidate before exec — download-time AND exec-time (#112 verify R2:
+    # binaries installed by the pre-hardening wrapper — including ad-hoc
+    # ones — carry a matching sidecar and would otherwise never be re-checked).
+    codesign --verify --strict \
+        -R '=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"' \
+        "$1" 2>/dev/null
+}
+
 run_existing_or_die() {
-    # $1 = error message. Fail-to-known-good: prefer the already-installed
-    # binary over aborting the MCP server spawn entirely.
+    # $1 = error message. Fail-to-VERIFIED-good: prefer the already-installed
+    # binary over aborting the MCP server spawn — but only if it passes the
+    # same signature gate as a fresh download.
     echo "$BINARY_NAME: ERROR — $1" >&2
     rm -f "${TMP_FILE:-}" 2>/dev/null   # trap EXIT does not fire across exec — clean up rejected download here
-    if [[ -x "$BINARY" ]]; then
-        echo "$BINARY_NAME: keeping existing binary" >&2
+    if [[ -x "$BINARY" ]] && verify_binary "$BINARY"; then
+        echo "$BINARY_NAME: keeping existing (signature-verified) binary" >&2
         exec "$BINARY" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
     fi
     exit 1
@@ -49,8 +60,13 @@ run_existing_or_die() {
 # Read desired version from plugin.json (empty string on any failure → latest).
 DESIRED_VERSION=""
 if [[ -f "$PLUGIN_JSON" ]]; then
-    DESIRED_VERSION=$(grep -oE '"version":[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
-        | head -1 | cut -d'"' -f4 || true)
+    DESIRED_VERSION=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
+        | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
+    if [[ -z "$DESIRED_VERSION" ]]; then
+        # plugin.json exists but version unparseable — fail closed rather than
+        # silently degrading to the unpinned latest channel (#112 verify R2).
+        run_existing_or_die "cannot parse version from plugin.json — refusing unpinned download"
+    fi
 fi
 
 # Read currently installed version from sidecar (empty string if missing).
@@ -104,16 +120,30 @@ if $NEED_DOWNLOAD; then
         || run_existing_or_die "sha256 mismatch against release asset — refusing to install"
 
     # 2. Code signature — requirement-based authenticity gate (see header).
-    codesign --verify --strict \
-        -R '=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"' \
-        "$TMP_FILE" 2>/dev/null \
+    verify_binary "$TMP_FILE" \
         || run_existing_or_die "code-signature verification failed (not a Developer ID Application cert of Team 6W377FS7BS) — refusing to install"
 
-    chmod +x "$TMP_FILE"
-    mv "$TMP_FILE" "$BINARY"
+    chmod +x "$TMP_FILE" || run_existing_or_die "chmod failed"
+    mv "$TMP_FILE" "$BINARY" || run_existing_or_die "install mv failed"
     trap - EXIT
-    echo "${DESIRED_VERSION:-unknown}" > "$VERSION_FILE"
+    echo "${DESIRED_VERSION:-unknown}" > "$VERSION_FILE" \
+        || echo "$BINARY_NAME: WARNING — version sidecar write failed (next spawn re-downloads)" >&2
     echo "$BINARY_NAME: installed v${DESIRED_VERSION:-unknown} (sha256 + Developer ID verified)" >&2
+fi
+
+# Exec-time re-verification: never exec an unverified binary, even one whose
+# sidecar version matches (covers binaries installed by pre-hardening wrappers
+# and post-install ~/bin tampering). Failure forces one re-download attempt.
+if ! verify_binary "$BINARY"; then
+    if $NEED_DOWNLOAD; then
+        # We JUST downloaded + verified it; a failure here means tampering
+        # mid-flight — refuse outright.
+        echo "$BINARY_NAME: ERROR — freshly installed binary failed re-verification" >&2
+        exit 1
+    fi
+    echo "$BINARY_NAME: existing binary failed signature verification — re-downloading" >&2
+    rm -f "$BINARY" "$VERSION_FILE"
+    exec "${BASH_SOURCE[0]}" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
 fi
 
 exec "$BINARY" ${SCRIPT_ARGS[@]+"${SCRIPT_ARGS[@]}"}
