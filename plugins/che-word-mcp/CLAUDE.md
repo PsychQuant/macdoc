@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Microsoft Word (.docx) MCP plugin. Wraps the [CheWordMCP](https://github.com/PsychQuant/che-word-mcp) Swift binary via auto-download wrapper. **Swift-native OOXML manipulation** — reads and writes .docx without requiring Microsoft Word installation. 218+ tools cover the full Office.js OOXML Roadmap P0 set ([#43](https://github.com/PsychQuant/che-word-mcp/issues/43) closed 100%).
+Microsoft Word (.docx) MCP plugin. Wraps the [CheWordMCP](https://github.com/PsychQuant/che-word-mcp) Swift binary via auto-download wrapper. **Swift-native OOXML manipulation** — reads and writes .docx without requiring Microsoft Word installation. 242 tools（binary v3.20.0 `tools/list` 實測）cover the full Office.js OOXML Roadmap P0 set ([#43](https://github.com/PsychQuant/che-word-mcp/issues/43) closed 100%).
 
-Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift) v0.18.0.
+Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift) v0.24.0.
 
 ## Components
 
-### MCP Tools (218+)
+### MCP Tools (242)
 
 | Category | Representative tools |
 |----------|---------------------|
@@ -46,7 +46,7 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 | Mode | Param | Tools | Use when |
 |------|-------|-------|----------|
 | Direct | `source_path` | 18 | 快速 read-only 檢查（list/search/info），不需 open/close lifecycle |
-| Session | `doc_id` | All 218+ | 任何寫入或多步驟編輯都要走這個 |
+| Session | `doc_id` | All 242 | 任何寫入或多步驟編輯都要走這個 |
 
 ## Track Changes Contract（v3.12.0+ 重要）
 
@@ -63,11 +63,11 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 
 ## Binary Dependency
 
-這是 binary-based plugin：`.mcp.json` 指向 `bin/che-word-mcp-wrapper.sh`，wrapper 會 auto-download `CheWordMCP` binary 到 `~/bin/`。
+這是 binary-based plugin：`.mcp.json` 指向 `bin/che-word-mcp-wrapper.sh`，wrapper 會 auto-download `CheWordMCP` binary 到 plugin 層級的 `.bin-cache/`（#117）。
 
 - Binary repo: [`PsychQuant/che-word-mcp`](https://github.com/PsychQuant/che-word-mcp)
 - Binary name: `CheWordMCP`
-- Underlying lib: [`PsychQuant/ooxml-swift`](https://github.com/PsychQuant/ooxml-swift) v0.18.0
+- Underlying lib: [`PsychQuant/ooxml-swift`](https://github.com/PsychQuant/ooxml-swift) v0.24.0
 - Release asset naming: asset filename must contain `CheWordMCP`
 
 ### Plugin vs Binary Version Sync

@@ -8,7 +8,7 @@
 
 | Plugin | 內容 |
 |--------|------|
-| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，218+ 工具） |
+| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，242 工具） |
 | `che-pdf-mcp` | PDF MCP server（PDFKit 解析、Vision OCR） |
 | `che-pptx-mcp` | PowerPoint (.pptx) MCP server（PresentationML 解析與生成） |
 | `macdoc` | macdoc CLI 使用指南 skill |
