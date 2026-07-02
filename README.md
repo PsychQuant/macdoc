@@ -2,6 +2,26 @@
 
 原生 macOS 文件處理工具集，專注於文件格式轉換和 OCR。使用 Swift 開發，充分利用 Apple 平台原生能力（PDFKit、Vision.framework）。
 
+## Claude Code Plugin Marketplace
+
+本 repo 同時是 Claude Code plugin marketplace，提供 macdoc 生態系的 4 個 plugins：
+
+| Plugin | 內容 |
+|--------|------|
+| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，218+ 工具） |
+| `che-pdf-mcp` | PDF MCP server（PDFKit 解析、Vision OCR） |
+| `che-pptx-mcp` | PowerPoint (.pptx) MCP server（PresentationML 解析與生成） |
+| `macdoc` | macdoc CLI 使用指南 skill |
+
+```bash
+claude plugin marketplace add PsychQuant/macdoc
+claude plugin install che-word-mcp@macdoc   # 或 che-pdf-mcp / che-pptx-mcp / macdoc
+```
+
+MCP plugins 的 wrapper 會自動從各 repo 的 GitHub Releases 下載 signed + notarized universal binary。
+
+> 遷移註記：`che-word-mcp` 與 `macdoc` 兩個 plugins 原先發布於 `psychquant-claude-plugins` marketplace，自 2026-07 起以本 marketplace 為準。
+
 ## Prerequisites
 
 - **macOS 14+**（Sonoma 或更新）

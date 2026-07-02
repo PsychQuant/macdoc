@@ -1,0 +1,8 @@
+{
+  "name": "macdoc",
+  "description": "macOS 原生文件處理 CLI — 格式轉換、VLM OCR（含 host profile 設定）、SRT 處理",
+  "version": "1.1.0",
+  "author": {
+    "name": "Che Cheng"
+  }
+}
