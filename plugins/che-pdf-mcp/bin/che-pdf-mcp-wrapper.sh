@@ -70,6 +70,30 @@ if $NEED_DOWNLOAD; then
         fi
     else
         if curl -sL --max-time 300 "$URL" -o "${BINARY}.tmp" 2>/dev/null; then
+            # --- Supply-chain verification (PsychQuant/macdoc#112 security review) ---
+            # 1. sha256: compare against the release's .sha256 asset when present
+            #    (fail-closed on mismatch; warn-and-continue when asset missing).
+            EXPECTED_SHA=$(curl -sL --max-time 30 "${URL}.sha256" 2>/dev/null | tr -d '[:space:]' | head -c 64)
+            if [[ ${#EXPECTED_SHA} -eq 64 ]]; then
+                ACTUAL_SHA=$(shasum -a 256 "${BINARY}.tmp" | awk '{print $1}')
+                if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+                    rm -f "${BINARY}.tmp"
+                    echo "$BINARY_NAME: ERROR — sha256 mismatch against release asset; refusing to install" >&2
+                    [[ -x "$BINARY" ]] && exec "$BINARY" "$@"
+                    exit 1
+                fi
+            else
+                echo "$BINARY_NAME: WARNING — no .sha256 asset found; relying on code-signature check" >&2
+            fi
+            # 2. Code signature: require a valid signature from Team 6W377FS7BS
+            #    (Developer ID, CHE CHENG) before executing anything downloaded.
+            if ! codesign --verify --strict "${BINARY}.tmp" 2>/dev/null || \
+               ! codesign -dvv "${BINARY}.tmp" 2>&1 | grep -q "TeamIdentifier=6W377FS7BS"; then
+                rm -f "${BINARY}.tmp"
+                echo "$BINARY_NAME: ERROR — code-signature verification failed (not signed by expected Team ID); refusing to install" >&2
+                [[ -x "$BINARY" ]] && exec "$BINARY" "$@"
+                exit 1
+            fi
             chmod +x "${BINARY}.tmp"
             mv "${BINARY}.tmp" "$BINARY"
             echo "${DESIRED_VERSION:-unknown}" > "$VERSION_FILE"
