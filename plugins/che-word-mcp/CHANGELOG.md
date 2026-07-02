@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [3.20.2] - 2026-07-02
+
+### Changed
+
+- **Plugin-scoped 安裝目錄（PsychQuant/macdoc#117）**：binary 與 sidecar 從共享 `~/bin/` 遷至 `$PLUGIN_ROOT/.bin-cache/` — 跨 marketplace 同名 plugin 碰撞 by construction 不可能；plugin 更新自然汰換 cache（重下載走完整驗證鏈）。舊 `~/bin` 副本不主動刪除（可能為使用者手動安裝），首次啟動 stderr 註記一次。
+
 ## [3.20.1] - 2026-07-02
 
 ### Security
