@@ -91,7 +91,7 @@ echo "→ [7/7] gh release create (creates tag v$VERSION at HEAD — no pre-push
 gh release create "v$VERSION" --repo "$REPO" \
     --target "$(git rev-parse HEAD)" \
     --title "v$VERSION" \
-    --notes "Developer ID signed + Apple notarized arm64 binary (CLI depends on MLX — Apple Silicon only; Intel builds from source). Released via scripts/release.sh (pre-upload signature gate, PsychQuant/macdoc#119)." \
+    --notes "Developer ID signed + Apple notarized arm64 binary (CLI depends on MLX — Apple Silicon only; Intel builds from source). Released via scripts/release-cli.sh (pre-upload signature gate, PsychQuant/macdoc#119)." \
     "$WORKDIR/$BINARY_NAME" "$WORKDIR/$BINARY_NAME.sha256"
 
 echo "✓ released $BINARY_NAME v$VERSION (signed, notarized, gated, sha256 attached)"
