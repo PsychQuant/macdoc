@@ -30,7 +30,7 @@
     },
     {
       "name": "che-pdf-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "PDF 文件處理 MCP server — PDFKit 解析與文字提取、Vision OCR（原生 macOS）、圖片/區域擷取、亂碼區域偵測。v0.1.0: 首次 marketplace 發布（signed + notarized universal binary）。",
       "author": {
         "name": "Che Cheng"
@@ -41,7 +41,7 @@
     },
     {
       "name": "che-pptx-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "PowerPoint (.pptx) MCP server — PresentationML 解析與生成：slides、shapes、tables、notes、theme、markdown 匯出。v0.1.0: 首次 marketplace 發布（signed + notarized universal binary）。",
       "author": {
         "name": "Che Cheng"
