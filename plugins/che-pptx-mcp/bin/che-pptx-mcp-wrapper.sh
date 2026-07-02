@@ -3,7 +3,7 @@
 #
 # Design:
 # - Reads desired version from plugin.json (plugin's intended binary version)
-# - Compares against ~/bin/.ChePPTXMCP.version sidecar
+# - Compares against the plugin-level .bin-cache/.ChePPTXMCP.version sidecar
 # - Re-downloads when plugin has been updated but binary is stale
 # - Unique temp file (mktemp, same fs) + atomic mv so partial downloads never break things
 # - Pinned version does NOT fall back to releases/latest (supply-chain pinning);
@@ -31,13 +31,18 @@ SCRIPT_ARGS=("$@")
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 
-# Plugin-scoped install dir (#117): every marketplace x plugin x version gets
-# its own binary copy inside the plugin's own cache dir — cross-marketplace
-# same-name collisions are impossible by construction, and a plugin update
-# naturally recycles the cache (re-download passes the full verification
-# chain). The legacy shared ~/bin/<BinaryName> copy, if any, is left alone —
-# it may be a user's manual install.
-INSTALL_DIR="$PLUGIN_ROOT/.bin-cache"
+# Plugin-scoped install dir (#117): the binary lives at the PLUGIN level —
+# one dir ABOVE the version-scoped PLUGIN_ROOT (cache layout is
+# <marketplace>/<plugin>/<version>/). Cross-marketplace and cross-plugin
+# same-name collisions stay impossible by construction (marketplace + plugin
+# are both in the path), while the binary + sidecar PERSIST across shell-only
+# version bumps — preserving the #116 sidecar short-circuit (verify DA-1:
+# a version-scoped cache re-downloaded 14-26MB on every shell bump and
+# multiplied disk per retained version dir). In a git-checkout dev context the
+# parent is plugins/, where BINARY_NAME scoping keeps copies distinct. The
+# legacy shared ~/bin/<BinaryName> copy, if any, is left alone — it may be a
+# user's manual install.
+INSTALL_DIR="$(dirname "$PLUGIN_ROOT")/.bin-cache"
 BINARY="$INSTALL_DIR/$BINARY_NAME"
 VERSION_FILE="$INSTALL_DIR/.${BINARY_NAME}.version"
 
