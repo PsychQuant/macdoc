@@ -57,11 +57,18 @@ run_existing_or_die() {
     exit 1
 }
 
-# Read desired version from plugin.json (empty string on any failure → latest).
+# Read desired BINARY version from plugin.json. Since #116 the shell version
+# ("version") and the binary release tag ("binary_version") are decoupled —
+# shell-only changes bump "version" freely. Prefer "binary_version"; fall back
+# to "version" for shells that predate the field (backward compat).
 DESIRED_VERSION=""
 if [[ -f "$PLUGIN_JSON" ]]; then
-    DESIRED_VERSION=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
+    DESIRED_VERSION=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
         | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
+    if [[ -z "$DESIRED_VERSION" ]]; then
+        DESIRED_VERSION=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
+            | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
+    fi
     if [[ -z "$DESIRED_VERSION" ]]; then
         # plugin.json exists but version unparseable — fail closed rather than
         # silently degrading to the unpinned latest channel (#112 verify R2).
