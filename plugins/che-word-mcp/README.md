@@ -2,7 +2,7 @@
 
 **Word MCP Server** — Swift 原生 OOXML 操作，**242 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
 
-當前版本：**v3.20.0**（Plugin shell + Binary 同步）— closes [PsychQuant/che-word-mcp#160](https://github.com/PsychQuant/che-word-mcp/issues/160) — 兩個新 MCP tools 暴露 [PsychQuant/ooxml-swift v0.24.0](https://github.com/PsychQuant/ooxml-swift/releases/tag/v0.24.0) 的 `spliceOMath` API 給 MCP callers，跨 document 拷貝 verbatim `<m:oMath>` XML 區塊。
+當前版本：Plugin shell **v3.20.2** / Binary **v3.20.0**（#116 起解耦）— closes [PsychQuant/che-word-mcp#160](https://github.com/PsychQuant/che-word-mcp/issues/160) — 兩個新 MCP tools 暴露 [PsychQuant/ooxml-swift v0.24.0](https://github.com/PsychQuant/ooxml-swift/releases/tag/v0.24.0) 的 `spliceOMath` API 給 MCP callers，跨 document 拷貝 verbatim `<m:oMath>` XML 區塊。
 
 - **`splice_omath_from_source`** — 單一 OMath splice，low-level。Source 用 `source_path`（Direct mode 唯讀）或 `source_doc_id`（Session mode）；target 必須是 session-mode `doc_id`。Position 支援 `atStart` / `atEnd` / `afterText` / `beforeText`（後兩者配合 `anchor` + 可選 `instance`）。`omath_index` 0-based、按 source-document order 跨 carrier 統一排序。`rpr_mode` 控制 source Run rPr 怎麼帶到 target Run（`full` 預設 verbatim / `omathOnly` 白名單 / `discard` 空 rPr）；`namespace_policy` 控制 prefix vs URI 處理（`lenient` 預設接受 `mml:` vs `m:` prefix mismatch / `strict` 任何 prefix 不同就 throw）。回傳 `Spliced 1 OMath block (...)` 或 structured error。
 - **`splice_paragraph_omath_from_source`** — paragraph-level batch convenience。把 source paragraph 內所有 OMath 按 source-document order splice 到 target paragraph 對應位置（內部用 ~10 chars source-text-context 自動推 anchor）。回傳 splice 數量或 `contextAnchorNotFound(omath_index, snippet)`（partial-success state 已留在 target）。
