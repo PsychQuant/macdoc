@@ -9,5 +9,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - 首次 marketplace 發布（PsychQuant/macdoc marketplace，Refs PsychQuant/macdoc#112）。
-- Wrapper 供應鏈驗證：release `.sha256` asset 比對（mismatch 拒裝）+ `codesign` TeamIdentifier `6W377FS7BS` 硬閘（不過即刪除、保留既有 binary）— per #112 push security review。
+- Wrapper 供應鏈驗證（#112 security review R1+R2）：sha256 asset 比對為**強制**（缺失/格式錯/mismatch 均拒裝，integrity gate）+ requirement-based `codesign` 驗證鏈定 Apple anchor + Team OU `6W377FS7BS`（authenticity gate — 取代可被 Identifier 欄位偽造的 grep 形式）+ pinned version 不 fallback latest + `curl -f --proto '=https'` + mktemp 唯一暫存檔。驗證失敗一律保留既有 binary（fail-to-known-good）。
 - `.mcp.json` + version-aware auto-download wrapper（自 `PsychQuant/che-pptx-mcp` GitHub Releases 下載 signed + notarized universal binary）。
