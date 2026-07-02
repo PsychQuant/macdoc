@@ -60,12 +60,18 @@ run_existing_or_die() {
 # Read desired BINARY version from plugin.json. Since #116 the shell version
 # ("version") and the binary release tag ("binary_version") are decoupled —
 # shell-only changes bump "version" freely. Prefer "binary_version"; fall back
-# to "version" for shells that predate the field (backward compat).
+# to "version" ONLY when the key is absent entirely (plugin.json predates the
+# field — backward compat). A binary_version key that exists but is empty or
+# malformed fails closed instead of silently chasing the shell version tag.
 DESIRED_VERSION=""
 if [[ -f "$PLUGIN_JSON" ]]; then
-    DESIRED_VERSION=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
-        | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
-    if [[ -z "$DESIRED_VERSION" ]]; then
+    if grep -qE '"binary_version"[[:space:]]*:' "$PLUGIN_JSON" 2>/dev/null; then
+        DESIRED_VERSION=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
+            | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
+        if [[ -z "$DESIRED_VERSION" ]]; then
+            run_existing_or_die "binary_version present in plugin.json but empty/malformed — refusing to guess a release tag"
+        fi
+    else
         DESIRED_VERSION=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
             | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
     fi

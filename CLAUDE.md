@@ -35,7 +35,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 **macdoc** 是一個原生 macOS 文件處理工具集，專注於文件格式解析、轉換和 OCR 功能。整個專案使用 Swift 開發，充分利用 Apple 平台的原生能力。
 
-本 repo 同時是 **Claude Code plugin marketplace**（`.claude-plugin/marketplace.json` + `plugins/`，2026-07 起，#112）：發布 `che-word-mcp`、`che-pdf-mcp`、`che-pptx-mcp`、`macdoc` 四個 plugins，使用者以 `claude plugin marketplace add PsychQuant/macdoc` 安裝。注意 `plugins/`（plugin shells，正常入版控）與 `packages/`（gitignored 本地套件）的差異；MCP shells 的 wrapper 從各 binary repo 的 GitHub Releases 自動下載 binary，安裝前強制驗證 sha256 + Developer ID 簽章鏈（requirement-based codesign，Team `6W377FS7BS`）。發布新版時同步 bump `plugins/<name>/.claude-plugin/plugin.json` 與 `.claude-plugin/marketplace.json` 兩處版本。
+本 repo 同時是 **Claude Code plugin marketplace**（`.claude-plugin/marketplace.json` + `plugins/`，2026-07 起，#112）：發布 `che-word-mcp`、`che-pdf-mcp`、`che-pptx-mcp`、`macdoc` 四個 plugins，使用者以 `claude plugin marketplace add PsychQuant/macdoc` 安裝。注意 `plugins/`（plugin shells，正常入版控）與 `packages/`（gitignored 本地套件）的差異；MCP shells 的 wrapper 從各 binary repo 的 GitHub Releases 自動下載 binary，安裝前強制驗證 sha256 + Developer ID 簽章鏈（requirement-based codesign，Team `6W377FS7BS`）。發布新版時同步 bump `plugins/<name>/.claude-plugin/plugin.json` 與 `.claude-plugin/marketplace.json` 兩處版本；**binary-backed plugin 的 `binary_version` 只在 binary repo 發新 release 後才改**（shell-only 變更 bump `version` 即可，#116 解耦契約）。
 
 ## Project Structure
 
