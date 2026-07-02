@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
-## [Unreleased — macdoc marketplace shell]
+## [3.20.1] - 2026-07-02
 
 ### Security
 
-- Wrapper 改用硬化模板（同 che-pdf-mcp / che-pptx-mcp v0.1.0）：強制 sha256 + requirement-based codesign（Team OU 6W377FS7BS）+ pinned version 不 fallback latest（PsychQuant/macdoc#112 verify R1 HIGH-2）。**版本刻意不 bump**：wrapper 以 plugin.json version 挑 binary release tag（v3.20.0），bump 會使下載目標指向不存在的 tag；shell/binary 版本解耦見 PsychQuant/macdoc#116。
+- Wrapper 改用硬化模板（同 che-pdf-mcp / che-pptx-mcp v0.1.0）：強制 sha256 + requirement-based codesign（Team OU 6W377FS7BS）+ exec-time 重驗 + pinned version 不 fallback latest（PsychQuant/macdoc#112 verify R1/R2）。
+
+### Changed
+
+- **shell/binary 版本解耦（PsychQuant/macdoc#116）**：新增 `binary_version` 欄位（=3.20.0，binary release tag 來源）；`version` 自此為 shell 版本、可獨立 bump。本版（3.20.1）即吸收 #112 的 wrapper 硬化變更。wrapper 對缺 `binary_version` 的舊 shell fallback 讀 `version`（backward compat）。
 
 ## [3.20.0] - 2026-05-04
 
