@@ -140,4 +140,5 @@ reference/*
 openspec/.vector-search.db*
 
 # Plugin-scoped binary cache (#117) — downloaded MCP binaries + version sidecars
+plugins/.bin-cache/
 plugins/*/.bin-cache/
