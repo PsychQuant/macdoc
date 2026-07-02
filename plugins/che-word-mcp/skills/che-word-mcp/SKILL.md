@@ -1,11 +1,11 @@
 ---
 name: che-word-mcp
-description: Use when working with Microsoft Word (.docx) documents — reading content, creating new documents, modifying text/formatting/structure, working with tables/images/comments/track-changes/SDT/sections/styles/headers/hyperlinks. Swift-native OOXML server, 218+ tools, no Word install required.
+description: Use when working with Microsoft Word (.docx) documents — reading content, creating new documents, modifying text/formatting/structure, working with tables/images/comments/track-changes/SDT/sections/styles/headers/hyperlinks. Swift-native OOXML server, 242 tools, no Word install required.
 ---
 
 # che-word-mcp
 
-A Swift-native MCP server for Microsoft Word (.docx) document manipulation. **218+ tools** for reading, writing, and modifying Word documents without requiring Microsoft Word installation. Built on `ooxml-swift` v0.18.0.
+A Swift-native MCP server for Microsoft Word (.docx) document manipulation. **242 tools** for reading, writing, and modifying Word documents without requiring Microsoft Word installation. Built on `ooxml-swift` v0.24.0.
 
 Office.js OOXML Roadmap P0 = **100% complete** ([PsychQuant/che-word-mcp#43](https://github.com/PsychQuant/che-word-mcp/issues/43)). Latest: v3.12.0 ships programmatic Track Changes generation.
 
@@ -14,7 +14,7 @@ Office.js OOXML Roadmap P0 = **100% complete** ([PsychQuant/che-word-mcp#43](htt
 | Mode | Parameter | Use when | Tool count |
 |------|-----------|----------|------------|
 | **Direct Mode** | `source_path` | Quick read-only access, no state needed | 18 tools |
-| **Session Mode** | `doc_id` | Full read/write with open→edit→save lifecycle | All 218+ tools |
+| **Session Mode** | `doc_id` | Full read/write with open→edit→save lifecycle | All 242 tools |
 
 ### Direct Mode (`source_path`)
 
@@ -116,7 +116,7 @@ export_comment_threads_markdown(doc_id)  → comment threads
 export_all_images(doc_id, output_dir)
 ```
 
-## Tool Categories (218+ total)
+## Tool Categories (242 total)
 
 ### Document Lifecycle
 

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.20.2] - 2026-07-02
 
+### Fixed
+
+- 文件一致性 refresh（PsychQuant/macdoc#118）：tool count 統一為 **242**（binary v3.20.0 `tools/list` 實測；原散落 145/218+/235）、ooxml-swift 版本對齊 v0.24.0、`~/bin` 路徑宣稱改 `.bin-cache`（接 #117）、README 版本區塊對齊 shell 3.20.2 / binary 3.20.0；`.mcp.json` / `plugin.json` / marketplace description 縮為短摘要（release history 移交 CHANGELOG）。
+
 ### Changed
 
 - **Plugin-scoped 安裝目錄（PsychQuant/macdoc#117）**：binary 與 sidecar 從共享 `~/bin/` 遷至 **plugin 層級**的 `.bin-cache/`（`<marketplace>/<plugin>/.bin-cache/`，即 version 目錄的上一層）— 跨 marketplace / 跨 plugin 碰撞 by construction 不可能，且跨 shell 版本持久（保留 #116 sidecar 短路，shell-only bump 不重下載；binary_version 變更才重下載）。舊 `~/bin` 副本不主動刪除（可能為使用者手動安裝），首次啟動 stderr 註記一次。
