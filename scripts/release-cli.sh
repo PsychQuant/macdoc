@@ -7,9 +7,9 @@
 #
 # Usage: scripts/release-cli.sh <version>    # e.g. scripts/release-cli.sh 0.6.0
 #
-# Pipeline: universal build → Developer ID codesign (hardened runtime +
+# Pipeline: arm64 release build → Developer ID codesign (hardened runtime +
 # timestamp) → PRE-UPLOAD SIGNATURE GATE → notarize (must be Accepted) →
-# universal check → sha256 → git tag → gh release with binary + .sha256.
+# arm64 arch check → sha256 → gh release (creates tag) with binary + .sha256.
 #
 # The gate exists because v3.20.0 of CheWordMCP shipped ad-hoc signed
 # (che-word-mcp#165): the marketplace wrappers verify the SAME requirement
