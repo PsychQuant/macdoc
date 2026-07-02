@@ -1,0 +1,7 @@
+{
+  "word": {
+    "type": "stdio",
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/che-word-mcp-wrapper.sh",
+    "description": "Word (.docx) MCP server — Swift-native OOXML manipulation, 218+ tools. Read/write paragraphs, runs, tables, hyperlinks, headers/footers, sections, styles, numbering, content controls (SDT), comments, footnotes/endnotes, equations, fields. v3.12.0: programmatic Track Changes (insert_text_as_revision / delete_text_as_revision / move_text_as_revision + as_revision flag on format_text / set_paragraph_format). Built on ooxml-swift v0.18.0. Office.js OOXML Roadmap P0 100% complete (PsychQuant/che-word-mcp#43)."
+  }
+}
