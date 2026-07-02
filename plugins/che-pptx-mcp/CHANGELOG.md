@@ -4,6 +4,12 @@ All notable changes to the che-pptx-mcp plugin shell will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-07-02
+
+### Changed
+
+- shell/binary 版本解耦（PsychQuant/macdoc#116）：新增 `binary_version` 欄位（=0.1.0）；wrapper 改為 binary_version-first 解析，key 存在但空值 fail-closed，key 缺席才 fallback `version`（backward compat）。
+
 ## [0.1.0] - 2026-07-02
 
 ### Added
