@@ -1,8 +1,8 @@
 {
   "name": "che-pdf-mcp",
   "description": "PDF 文件處理 MCP server — PDFKit 解析與文字提取、Vision OCR（原生 macOS）、圖片/區域擷取、亂碼區域偵測。 v0.1.0: 首次 marketplace 發布。",
-  "version": "0.1.2",
-  "binary_version": "0.1.0",
+  "version": "0.1.3",
+  "binary_version": "0.2.0",
   "author": {
     "name": "Che Cheng"
   }
