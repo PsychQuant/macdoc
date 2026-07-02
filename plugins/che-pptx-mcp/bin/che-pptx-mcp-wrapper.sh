@@ -24,15 +24,26 @@ set -u
 
 REPO="PsychQuant/che-pptx-mcp"
 BINARY_NAME="ChePPTXMCP"
-INSTALL_DIR="$HOME/bin"
-BINARY="$INSTALL_DIR/$BINARY_NAME"
-VERSION_FILE="$INSTALL_DIR/.${BINARY_NAME}.version"
 SCRIPT_ARGS=("$@")
 
 # Locate plugin root via wrapper's own path (more reliable than $CLAUDE_PLUGIN_ROOT
 # which isn't guaranteed in MCP spawn env). Wrapper lives at PLUGIN_ROOT/bin/*.sh.
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
+
+# Plugin-scoped install dir (#117): every marketplace x plugin x version gets
+# its own binary copy inside the plugin's own cache dir — cross-marketplace
+# same-name collisions are impossible by construction, and a plugin update
+# naturally recycles the cache (re-download passes the full verification
+# chain). The legacy shared ~/bin/<BinaryName> copy, if any, is left alone —
+# it may be a user's manual install.
+INSTALL_DIR="$PLUGIN_ROOT/.bin-cache"
+BINARY="$INSTALL_DIR/$BINARY_NAME"
+VERSION_FILE="$INSTALL_DIR/.${BINARY_NAME}.version"
+
+if [[ -x "$HOME/bin/$BINARY_NAME" ]] && [[ ! -x "$BINARY" ]]; then
+    echo "$BINARY_NAME: note — legacy copy at ~/bin/$BINARY_NAME is no longer used by this plugin (now plugin-scoped); left untouched" >&2
+fi
 
 verify_binary() {
     # Developer ID Application (marker OIDs) + Team OU pin. Runs on every
