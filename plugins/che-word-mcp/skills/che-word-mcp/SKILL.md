@@ -7,7 +7,7 @@ description: Use when working with Microsoft Word (.docx) documents — reading 
 
 A Swift-native MCP server for Microsoft Word (.docx) document manipulation. **242 tools** for reading, writing, and modifying Word documents without requiring Microsoft Word installation. Built on `ooxml-swift` v0.24.0.
 
-Office.js OOXML Roadmap P0 = **100% complete** ([PsychQuant/che-word-mcp#43](https://github.com/PsychQuant/che-word-mcp/issues/43)). Latest: v3.12.0 ships programmatic Track Changes generation.
+Office.js OOXML Roadmap P0 = **100% complete** ([PsychQuant/che-word-mcp#43](https://github.com/PsychQuant/che-word-mcp/issues/43)). Binary v3.20.0（242 tools）；programmatic Track Changes 自 v3.12.0 起提供。
 
 ## Two Modes of Operation
 
