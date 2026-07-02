@@ -10,7 +10,7 @@ description: |
 
 # macdoc — macOS 原生文件處理 CLI
 
-安裝位置：`~/bin/macdoc`（或 `/usr/local/bin/macdoc`）
+安裝位置：`~/bin/macdoc` — **plugin 自動安裝**（session-start hook 下載 signed release 並驗證 sha256 + Developer ID；arm64。Intel 從原始碼建置）
 原始碼：https://github.com/PsychQuant/macdoc
 
 ## 子命令總覽
