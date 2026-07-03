@@ -78,6 +78,8 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
 │   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
+├── cli/                       # CLI 實驗專案（預設 .gitignore；FastOCR 為 submodule）
+│   └── FastOCR/               # GLM-OCR PDF→Markdown CLI + 實驗 harness（submodule）
 └── reference/                 # 參考專案（.gitignore 忽略）
 ```
 
@@ -345,7 +347,7 @@ swift build
 
 主 repo 以兩種方式追蹤外部 repo：
 
-- **Submodule**（`.gitmodules`）：`mcp/` 下三個 MCP server。Clone 主 repo 時加 `--recurse-submodules` 會自動拉齊，或事後 `git submodule update --init --recursive`
+- **Submodule**（`.gitmodules`）：`mcp/` 下三個 MCP server + `cli/FastOCR`。Clone 主 repo 時加 `--recurse-submodules` 會自動拉齊，或事後 `git submodule update --init --recursive`
 - **Gitignore 忽略**（各自獨立管理）：`packages/` 下的 Swift 套件、`reference/`。重建環境時在對應目錄 `git clone` 即可
 
 | 目錄 | Git Remote | 說明 |
@@ -365,6 +367,7 @@ swift build
 | `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP（submodule） |
 | `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP（submodule） |
 | `mcp/che-pptx-mcp` | https://github.com/PsychQuant/che-pptx-mcp.git | PPTX MCP（submodule） |
+| `cli/FastOCR` | https://github.com/PsychQuant/FastOCR.git | GLM-OCR PDF→Markdown CLI + 實驗 harness（submodule） |
 | `reference/*` | 見 [`reference/README.md`](reference/README.md) | 外部參考 repo（docx-js、pandoc、mlx-swift-lm、swift-argument-parser）— clone-on-demand，只有 README 進版控 |
 
 ## Key Files
