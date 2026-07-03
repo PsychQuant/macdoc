@@ -136,6 +136,9 @@ test-files/
 reference/*
 !reference/README.md
 !reference/textutil-manpage.txt
+
+# Local CLI experiments (separate git repos, same pattern as packages/)
+cli/
 .spectra/
 openspec/.vector-search.db*
 
