@@ -138,7 +138,9 @@ reference/*
 !reference/textutil-manpage.txt
 
 # Local CLI experiments (separate git repos, same pattern as packages/)
-cli/
+# FastOCR graduated to a submodule (PsychQuant/FastOCR) — keep it un-ignored
+cli/*
+!cli/FastOCR
 .spectra/
 openspec/.vector-search.db*
 
