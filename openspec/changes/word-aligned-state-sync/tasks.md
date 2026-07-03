@@ -17,37 +17,37 @@ Implements **Decision 1: Generic XmlNode tree as the single internal representat
 
 Implements **Decision 4: Typed APIs as views, not as the model** and the modified `docx-container-parsing` and `docx-revision-parsing` requirements.
 
-- [ ] 2.1 Refactor `Paragraph` to satisfy **Decision 4: Typed APIs as views, not as the model**: getters read through the underlying `XmlNode`, setters route mutations to the (still-internal) op log
-- [ ] 2.2 [P] Refactor `Run` to be a tree-backed view (same shape as 2.1)
-- [ ] 2.3 [P] Refactor `Table`, `TableRow`, `TableCell` to be tree-backed views
-- [ ] 2.4 [P] Refactor `SectionProperties` to be a tree-backed view; verify the **multi-section sectPr preservation** requirement against `multi-section-thesis.docx`
-- [ ] 2.5 [P] Refactor `Settings` to be a tree-backed view; remove the `rawChildren: [String]` deprecation candidate; verify against `cjk-settings.docx`
-- [ ] 2.6 Update `DocxReader` to satisfy the **all parts preserved via XmlNode tree alongside typed views** requirement: load every part listed in `[Content_Types].xml` into the tree
-- [ ] 2.7 Update `DocxReader.parseBody` / `parseSettings` / `parseStyles` / `parseHeaders` / `parseFooters` / `parseFootnotes` / `parseEndnotes` / `parseComments` to satisfy the **reader does not silently drop element classes** requirement and the **container parts preserve unknown children identically to body** requirement
-- [ ] 2.8 Update `DocxReader.parseParagraph` to satisfy the **revision elements preserved via tree on round-trip** requirement and the **unknown revision children are preserved verbatim** requirement
-- [ ] 2.9 [P] Verify the **nested property-change revisions round-trip via tree** requirement against a fixture containing `<w:rPrChange>` and `<w:pPrChange>`
-- [ ] 2.10 Verify the **revision-source typed view backed by tree** requirement: `getRevisionsFull()` observable behavior remains identical
-- [ ] 2.11 Run the full che-word-mcp test suite (271 tests) against the new ooxml-swift; investigate every failure; expect zero observable behavior change in MCP tool output
-- [ ] 2.12 Tag and release `ooxml-swift v0.31.0`
+- [x] 2.1 Refactor `Paragraph` to satisfy **Decision 4: Typed APIs as views, not as the model**: getters read through the underlying `XmlNode`, setters route mutations to the (still-internal) op log
+- [x] 2.2 [P] Refactor `Run` to be a tree-backed view (same shape as 2.1)
+- [x] 2.3 [P] Refactor `Table`, `TableRow`, `TableCell` to be tree-backed views
+- [x] 2.4 [P] Refactor `SectionProperties` to be a tree-backed view; verify the **multi-section sectPr preservation** requirement against `multi-section-thesis.docx`
+- [x] 2.5 [P] Refactor `Settings` to be a tree-backed view; remove the `rawChildren: [String]` deprecation candidate; verify against `cjk-settings.docx`
+- [x] 2.6 Update `DocxReader` to satisfy the **all parts preserved via XmlNode tree alongside typed views** requirement: load every part listed in `[Content_Types].xml` into the tree
+- [x] 2.7 Update `DocxReader.parseBody` / `parseSettings` / `parseStyles` / `parseHeaders` / `parseFooters` / `parseFootnotes` / `parseEndnotes` / `parseComments` to satisfy the **reader does not silently drop element classes** requirement and the **container parts preserve unknown children identically to body** requirement
+- [x] 2.8 Update `DocxReader.parseParagraph` to satisfy the **revision elements preserved via tree on round-trip** requirement and the **unknown revision children are preserved verbatim** requirement
+- [x] 2.9 [P] Verify the **nested property-change revisions round-trip via tree** requirement against a fixture containing `<w:rPrChange>` and `<w:pPrChange>`
+- [x] 2.10 Verify the **revision-source typed view backed by tree** requirement: `getRevisionsFull()` observable behavior remains identical
+- [x] 2.11 Run the full che-word-mcp test suite (271 tests) against the new ooxml-swift; investigate every failure; expect zero observable behavior change in MCP tool output
+- [x] 2.12 Tag and release `ooxml-swift v0.31.0`
 
 ## 3. Phase 2 — Operation log persistence (target v0.32.0)
 
 Implements **Decision 2: Append-only operation log, persisted as JSONL sidecar**, **Decision 3: ID-based operations, never positional indices**, **Decision 5: Sidecar persistence, not in-document metadata**, and the `ooxml-operation-log` and `ooxml-operation-reducer` capabilities.
 
-- [ ] 3.1 Define the `Operation` enum covering the **operation taxonomy covers full OOXML mutation surface** requirement: element-level (`InsertParagraphAfter`, `InsertParagraphBefore`, `RemoveParagraph`, `SetText`, `SetParagraphStyle`, `InsertTable`, `RemoveTable`, `SetCellText`, `InsertRun`, `SetRunFormat`, `InsertBookmark`, `InsertComment`, `Undo`, `Redo`, `BatchBegin`, `BatchEnd`) and tree-node-level fallback (`InsertNode`, `RemoveNode`, `UpdateAttribute`, `MoveNode`)
-- [ ] 3.2 [P] Implement `ElementID` per the **ElementID derivation rules** requirement: priority chain `w14:paraId` → `w:id` → `r:id` → `w14:textId` → library UUID v4
-- [ ] 3.3 [P] Implement `OperationLog` covering the **append-only operation log** requirement: `append`, `entries`, immutability of appended ops; demonstrate **Decision 3: ID-based operations, never positional indices** by showing that two independent inserts commute
-- [ ] 3.4 [P] Cover the **operation IDs are unique and stable** requirement: every op gets a UUID v4; replaying the same log twice produces matching `op_id` per position
-- [ ] 3.5 [P] Cover the **source attribution for every operation** requirement: every appended op carries `source: "swift" | "word"`
-- [ ] 3.6 Implement JSONL serialization satisfying the **JSONL on-disk format** requirement: one self-contained JSON object per line with required fields
-- [ ] 3.7 [P] Cover the **forward-compatible log format** requirement: unknown `op_type` round-trips byte-equal; replay treats unknown ops as opaque
-- [ ] 3.8 Implement `OperationLog.batch(_:)` covering the **batch transactions for grouped mutations** requirement with atomic `BatchBegin` / `BatchEnd` markers
-- [ ] 3.9 Implement `OperationReducer.materialize(log:base:)` covering the **pure replay of operation log to tree** requirement and the **reducer is pure relative to its inputs** requirement (sandbox test traps any I/O)
-- [ ] 3.10 [P] Implement `OperationReducer.state(log:base:at:)` covering the **time-travel state snapshots** requirement (index and timestamp variants)
-- [ ] 3.11 [P] Implement the **undo operation reverses its target** requirement and the **redo reapplies an undone operation** requirement
-- [ ] 3.12 [P] Implement `OperationReducer.blame(log:elementID:)` covering the **blame returns the operation that last touched an element** requirement
-- [ ] 3.13 [P] Implement the **snapshot caching avoids full replay on every read** requirement: cache last-materialized tree + log length, replay tail on `state(at: .latest)`
-- [ ] 3.14 [P] Cover the **apply errors are reported, not swallowed** requirement: throw `ReducerError.elementNotFound(opID:elementID:)`
+- [x] 3.1 Define the `Operation` enum covering the **operation taxonomy covers full OOXML mutation surface** requirement: element-level (`InsertParagraphAfter`, `InsertParagraphBefore`, `RemoveParagraph`, `SetText`, `SetParagraphStyle`, `InsertTable`, `RemoveTable`, `SetCellText`, `InsertRun`, `SetRunFormat`, `InsertBookmark`, `InsertComment`, `Undo`, `Redo`, `BatchBegin`, `BatchEnd`) and tree-node-level fallback (`InsertNode`, `RemoveNode`, `UpdateAttribute`, `MoveNode`)
+- [x] 3.2 [P] Implement `ElementID` per the **ElementID derivation rules** requirement: priority chain `w14:paraId` → `w:id` → `r:id` → `w14:textId` → library UUID v4
+- [x] 3.3 [P] Implement `OperationLog` covering the **append-only operation log** requirement: `append`, `entries`, immutability of appended ops; demonstrate **Decision 3: ID-based operations, never positional indices** by showing that two independent inserts commute
+- [x] 3.4 [P] Cover the **operation IDs are unique and stable** requirement: every op gets a UUID v4; replaying the same log twice produces matching `op_id` per position
+- [x] 3.5 [P] Cover the **source attribution for every operation** requirement: every appended op carries `source: "swift" | "word"`
+- [x] 3.6 Implement JSONL serialization satisfying the **JSONL on-disk format** requirement: one self-contained JSON object per line with required fields
+- [x] 3.7 [P] Cover the **forward-compatible log format** requirement: unknown `op_type` round-trips byte-equal; replay treats unknown ops as opaque
+- [x] 3.8 Implement `OperationLog.batch(_:)` covering the **batch transactions for grouped mutations** requirement with atomic `BatchBegin` / `BatchEnd` markers
+- [x] 3.9 Implement `OperationReducer.materialize(log:base:)` covering the **pure replay of operation log to tree** requirement and the **reducer is pure relative to its inputs** requirement (sandbox test traps any I/O)
+- [x] 3.10 [P] Implement `OperationReducer.state(log:base:at:)` covering the **time-travel state snapshots** requirement (index and timestamp variants)
+- [x] 3.11 [P] Implement the **undo operation reverses its target** requirement and the **redo reapplies an undone operation** requirement
+- [x] 3.12 [P] Implement `OperationReducer.blame(log:elementID:)` covering the **blame returns the operation that last touched an element** requirement
+- [x] 3.13 [P] Implement the **snapshot caching avoids full replay on every read** requirement: cache last-materialized tree + log length, replay tail on `state(at: .latest)`
+- [x] 3.14 [P] Cover the **apply errors are reported, not swallowed** requirement: throw `ReducerError.elementNotFound(opID:elementID:)`
 - [ ] 3.15 Wire typed-view setters from Phase 1 to emit ops via the log instead of direct tree mutation; verify **Decision 4: Typed APIs as views, not as the model** end-to-end
 - [ ] 3.16 Implement sidecar file management satisfying **Decision 5: Sidecar persistence, not in-document metadata**: `<docx>.oplog.jsonl` + `<docx>.snapshot.json` written alongside the docx; nothing written into the docx
 - [ ] 3.17 Tag and release `ooxml-swift v0.32.0`
