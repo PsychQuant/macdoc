@@ -179,6 +179,8 @@ The Phase 4 script transcoder (`ooxml-script-transcode` capability — `ScriptEx
 - `docs/swift-as-document-source.md` — narrative DSL design rationale
 - `packages/ooxml-swift/Sources/WordDSLSwift/` — placeholder Swift files Phase 4 fills in
 
+**Taxonomy alignment note (#128, 2026-07-05)**: the operation wire format's single normative home is `ooxml-operation-log`; this change's `ooxml-operation-log` delta adds the authoring ops (`appendParagraph(in:)`, `setRuns`, `defineStyle`, `beginComponent`/`endComponent`, inline atoms) with OOXML-mirror (ECMA-376) naming per user decision on #128. `mdocx-grammar`'s SBE op names are references to that taxonomy (MODIFIED delta in this change normalizes them); `ooxml-script-transcode`'s pre-mdocx draft scenarios were rewritten to the mdocx surface. Phase 4 implementation consumes the canonical taxonomy only.
+
 **Phase numbering note**: Several artifacts written before `mdocx-syntax` archived (the now-canonical `mdocx-grammar` spec, Swift placeholder file headers, ad-hoc memory notes) refer to "Phase 7" as the DSL implementation phase. That is stale wording from an earlier 9-phase draft. Canonical phase numbering is the one in `tasks.md` of this change (Phase 0–5); the DSL implementation is **Phase 4 — Script transcoder, target v0.34.0**. References to "Phase 7" elsewhere should be read as "Phase 4 of word-aligned-state-sync."
 
 ## Risks / Trade-offs
