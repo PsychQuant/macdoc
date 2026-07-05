@@ -71,13 +71,13 @@ Implements **Decision 6: Word-import diff via structural element-identity matchi
 
 Spec-side consolidation shipped by the #128 PR (op-log delta + transcode scenario rewrite + mdocx-grammar MODIFIED delta). The tasks below are the ooxml-swift implementation side — additive only, per the "Authoring operations extend the taxonomy additively with OOXML-mirror naming" requirement.
 
-- [ ] 4b.1 Extend `Operation` enum with the authoring cases per the updated `ooxml-operation-log` delta: `appendParagraph(in:)`, `setRuns`, `defineStyle`, `beginComponent`/`endComponent`, `insertTab`/`insertBreak`/`insertNoBreakHyphen` (TDD; names + payload fields OOXML-mirror audited). **Verify**: enum cases compile; each constructs and pattern-matches.
+- [x] 4b.1 Extend `Operation` enum with the authoring cases per the updated `ooxml-operation-log` delta: `appendParagraph(in:)`, `setRuns`, `defineStyle`, `beginComponent`/`endComponent`, `insertTab`/`insertBreak`/`insertNoBreakHyphen` (TDD; names + payload fields OOXML-mirror audited). **Verify**: enum cases compile; each constructs and pattern-matches.
 
-- [ ] 4b.2 [P] JSONL codec cases for the new ops + forward-compat round-trip tests (unknown-op preservation unchanged). **Verify**: encode/decode round-trip per op; existing JSONL tests untouched and green.
+- [x] 4b.2 [P] JSONL codec cases for the new ops + forward-compat round-trip tests (unknown-op preservation unchanged). **Verify**: encode/decode round-trip per op; existing JSONL tests untouched and green.
 
-- [ ] 4b.3 [P] Reducer cases: `beginComponent`/`endComponent` as no-op markers (batch-marker pattern); `appendParagraph`/`setRuns`/`defineStyle`/inline atoms materialize per their spec scenarios incl. defineStyle idempotency. **Verify**: `swift test --filter OperationReducer` green with new cases.
+- [x] 4b.3 [P] Reducer cases: `beginComponent`/`endComponent` as no-op markers (batch-marker pattern); `appendParagraph`/`setRuns`/`defineStyle`/inline atoms materialize per their spec scenarios incl. defineStyle idempotency. **Verify**: `swift test --filter OperationReducer` green with new cases.
 
-- [ ] 4b.4 Tag and release `ooxml-swift v0.33.1` (additive; sidecar wire format backward-compatible). **Verify**: tag pushed; che-word-mcp suite green against it.
+- [x] 4b.4 Tag and release `ooxml-swift v0.33.1` (additive; sidecar wire format backward-compatible). **Verify**: tag pushed; che-word-mcp suite green against it.
 
 ## 5. Phase 4 — Script transcoder (target v0.34.0)
 
