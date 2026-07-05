@@ -48,9 +48,9 @@ Implements **Decision 2: Append-only operation log, persisted as JSONL sidecar**
 - [x] 3.12 [P] Implement `OperationReducer.blame(log:elementID:)` covering the **blame returns the operation that last touched an element** requirement
 - [x] 3.13 [P] Implement the **snapshot caching avoids full replay on every read** requirement: cache last-materialized tree + log length, replay tail on `state(at: .latest)`
 - [x] 3.14 [P] Cover the **apply errors are reported, not swallowed** requirement: throw `ReducerError.elementNotFound(opID:elementID:)`
-- [ ] 3.15 Wire typed-view setters from Phase 1 to emit ops via the log instead of direct tree mutation; verify **Decision 4: Typed APIs as views, not as the model** end-to-end
-- [ ] 3.16 Implement sidecar file management satisfying **Decision 5: Sidecar persistence, not in-document metadata**: `<docx>.oplog.jsonl` + `<docx>.snapshot.json` written alongside the docx; nothing written into the docx
-- [ ] 3.17 Tag and release `ooxml-swift v0.32.0`
+- [x] 3.15 Wire typed-view setters from Phase 1 to emit ops via the log instead of direct tree mutation; verify **Decision 4: Typed APIs as views, not as the model** end-to-end
+- [x] 3.16 Implement sidecar file management satisfying **Decision 5: Sidecar persistence, not in-document metadata**: `<docx>.oplog.jsonl` + `<docx>.snapshot.json` written alongside the docx; nothing written into the docx
+- [x] 3.17 Tag and release `ooxml-swift v0.32.0`
 
 ## 4. Phase 3 — Word-import diff and sync orchestration (target v0.33.0)
 
