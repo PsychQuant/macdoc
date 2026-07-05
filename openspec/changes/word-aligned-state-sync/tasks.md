@@ -67,6 +67,18 @@ Implements **Decision 6: Word-import diff via structural element-identity matchi
 - [x] 4.9 Run the rsid-only-no-edit fixture pair: the import diff must produce an empty op set (regression-pin **identity-noise normalization for diff comparison**)
 - [x] 4.10 Tag and release `ooxml-swift v0.33.0`
 
+## 4b. Phase 3.5 — Operation taxonomy alignment (#128, gates Phase 4)
+
+Spec-side consolidation shipped by the #128 PR (op-log delta + transcode scenario rewrite + mdocx-grammar MODIFIED delta). The tasks below are the ooxml-swift implementation side — additive only, per the "Authoring operations extend the taxonomy additively with OOXML-mirror naming" requirement.
+
+- [ ] 4b.1 Extend `Operation` enum with the authoring cases per the updated `ooxml-operation-log` delta: `appendParagraph(in:)`, `setRuns`, `defineStyle`, `beginComponent`/`endComponent`, `insertTab`/`insertBreak`/`insertNoBreakHyphen` (TDD; names + payload fields OOXML-mirror audited). **Verify**: enum cases compile; each constructs and pattern-matches.
+
+- [ ] 4b.2 [P] JSONL codec cases for the new ops + forward-compat round-trip tests (unknown-op preservation unchanged). **Verify**: encode/decode round-trip per op; existing JSONL tests untouched and green.
+
+- [ ] 4b.3 [P] Reducer cases: `beginComponent`/`endComponent` as no-op markers (batch-marker pattern); `appendParagraph`/`setRuns`/`defineStyle`/inline atoms materialize per their spec scenarios incl. defineStyle idempotency. **Verify**: `swift test --filter OperationReducer` green with new cases.
+
+- [ ] 4b.4 Tag and release `ooxml-swift v0.33.1` (additive; sidecar wire format backward-compatible). **Verify**: tag pushed; che-word-mcp suite green against it.
+
 ## 5. Phase 4 — Script transcoder (target v0.34.0)
 
 Implements the `ooxml-script-transcode` capability per Decision 9: Phase 4 script transcoder targets the `mdocx-grammar` contract. Output of `ScriptExporter` MUST conform to `openspec/specs/mdocx-grammar/spec.md`; input of `ScriptImporter` MUST accept exactly that surface. The 14 empty Swift files at `packages/ooxml-swift/Sources/WordDSLSwift/` (placeholders landed by `mdocx-syntax`) are the implementation targets.

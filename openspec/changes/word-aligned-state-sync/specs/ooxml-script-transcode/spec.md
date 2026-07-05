@@ -1,5 +1,11 @@
 ## ADDED Requirements
 
+> Scope note (#128): the operation wire format's normative home is
+> `ooxml-operation-log` — this spec references canonical op names and does
+> not restate their shapes. The script surface conforms to `mdocx-grammar`
+> (per design Decision 9); the pre-mdocx draft shapes formerly used in the
+> scenarios below (`Document.create()` / raw-string styles) are superseded.
+
 ### Requirement: Operation log to Swift script export
 
 The library SHALL provide `ScriptExporter.exportSwift(log:)` that emits a runnable Swift source file whose execution against an empty `OperationLog` reproduces the input log byte-equal.
@@ -8,7 +14,7 @@ The library SHALL provide `ScriptExporter.exportSwift(log:)` that emits a runnab
 
 - **GIVEN** an `OperationLog` containing operations
 - **WHEN** `exportSwift(log:)` runs
-- **THEN** the returned String compiles as a Swift source file with `import OOXMLSwift` and a top-level `func buildDocument() -> Document` that performs the operations
+- **THEN** the returned String compiles as a Swift source file with `import WordDSLSwift` and a top-level `let document = WordDocument { ... }` declaration conforming to `mdocx-grammar`, whose execution emits the operations
 
 #### Scenario: Round-trip log → script → log preserves operations
 
@@ -22,19 +28,19 @@ The library SHALL provide `ScriptImporter.parse(source:)` that reads a Swift sou
 
 #### Scenario: Hand-written script imports successfully
 
-- **GIVEN** a Swift script:
+- **GIVEN** a Swift script (mdocx-grammar canonical form):
   ```swift
-  import OOXMLSwift
-  func buildDocument() -> Document {
-      let doc = Document.create()
-      doc.body.appendParagraph("Title", style: "Heading1")
-      doc.body.appendParagraph("Body intro")
-      doc.body.appendTable(rows: 3, cols: 4)
-      return doc
+  import WordDSLSwift
+
+  let document = WordDocument {
+      Section(id: "main") {
+          Paragraph(id: "p-title", style: .heading1) { "Title" }
+          Paragraph(id: "p-intro") { "Body intro" }
+      }
   }
   ```
 - **WHEN** `ScriptImporter.parse(source:)` runs
-- **THEN** the returned log contains operations equivalent to `[CreateDocument, InsertParagraphAfter("Title", "Heading1"), InsertParagraphAfter("Body intro"), InsertTable(rows:3, cols:4)]`
+- **THEN** the returned log contains operations equivalent to `[defineStyle(heading1), appendParagraph(in: nil, "Title", styleId: "Heading1"), insertParagraphAfter(after: p-title, "Body intro")]` (canonical names per `ooxml-operation-log`)
 
 #### Scenario: Malformed script raises structured error
 
@@ -43,11 +49,11 @@ The library SHALL provide `ScriptImporter.parse(source:)` that reads a Swift sou
 
 ### Requirement: Build a docx end-to-end from a Swift script
 
-The library SHALL support construction of a complete docx file from a Swift script with no prior docx as input. `Document.create()` SHALL initialize an empty document; subsequent typed operations populate the document; `Document.save(to:)` writes the resulting docx.
+The library SHALL support construction of a complete docx file from a Swift script with no prior docx as input. An empty `WordDocument { }` declaration SHALL initialize an empty document; the script body populates it; `WordDocument.save(to:)` writes the resulting docx (atomic three-file write per `mdocx-grammar`).
 
 #### Scenario: Empty document save produces valid docx
 
-- **WHEN** `Document.create().save(to: url)` runs
+- **WHEN** `WordDocument { }.save(to: url)` runs
 - **THEN** the resulting `url` is a valid docx readable by Word: `[Content_Types].xml`, `_rels/.rels`, `word/_rels/document.xml.rels`, `word/document.xml` are all present and well-formed
 
 #### Scenario: Script-built docx round-trips byte-equal
