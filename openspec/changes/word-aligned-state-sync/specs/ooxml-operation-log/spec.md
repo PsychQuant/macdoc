@@ -132,9 +132,25 @@ This spec is the single normative home of the operation wire format. Other specs
 - **WHEN** a new operation targeting run content is added
 - **THEN** its name and payload reference the OOXML element vocabulary (`run` ↔ `<w:r>`, `tab` ↔ `<w:tab>`, `styleId` ↔ `<w:pStyle w:val>`), not invented synonyms
 
+##### Example: OOXML-mirror correspondence table
+
+| Op / payload field | OOXML anchor (ECMA-376 WordprocessingML) |
+| --- | --- |
+| `appendParagraph` / `insertParagraphAfter` target | `<w:p>` as child of `<w:body>` (or container) |
+| `paraId` (ParagraphPayload) | `w14:paraId` attribute |
+| `setRuns` | `<w:r>` children of `<w:p>` |
+| `bold` (RunPayload) | `<w:b>` (§17.3.2.1 "b (Bold)") |
+| `italic` (RunPayload) | `<w:i>` (§17.3.2.16, ECMA title "Italics"; field spelled `italic` for cross-payload consistency with the shipped `RunFormatPayload.italic`) |
+| `color` (RunPayload) | `<w:color w:val>` |
+| `styleId` | `<w:pStyle w:val>` reference / `<w:style w:styleId>` definition |
+| `insertTab` | `<w:tab/>` (§17.3.3.24) inside `<w:r>` |
+| `insertBreak` | `<w:br/>` (§17.3.3.1) inside `<w:r>` |
+| `insertNoBreakHyphen` | `<w:noBreakHyphen/>` (§17.3.3.18) inside `<w:r>` |
+| `beginComponent` / `endComponent` | (none — documented exception: op-log metadata) |
+
 ### Requirement: AppendParagraph anchors construction-order inserts
 
-The taxonomy SHALL include `appendParagraph(in: ElementID?, paragraph: ParagraphPayload)` appending a paragraph as the last block-level child of the container addressed by `in` (`nil` = the document body). This covers the authoring case where no preceding sibling exists yet; subsequent construction-order inserts SHALL use the existing `insertParagraphAfter(after:)` anchored on the previously emitted element. Addressing stays ID-based — no positional index parameter exists (per the "ID-based operations, never positional indices" requirement; `mdocx-grammar` example indices are derived display metadata, not addressing).
+The taxonomy SHALL include `appendParagraph(in: ElementID?, paragraph: ParagraphPayload)` appending a paragraph as the last block-level child of the container addressed by `in` (`nil` = the document body). This covers the authoring case where no preceding sibling exists yet; subsequent construction-order inserts SHALL use the existing `insertParagraphAfter(after:)` anchored on the previously emitted element. To carry the DSL's mandatory explicit identifiers (`mdocx-grammar` "Mandatory explicit identifiers on structural elements"), `ParagraphPayload` SHALL gain an optional `paraId` field (↔ `w14:paraId`); when present the reducer stamps it on the created `<w:p>`, when absent the existing opID-derived libraryUUID behavior applies unchanged. Addressing stays ID-based — no positional index parameter exists (per the "ID-based operations, never positional indices" requirement; `mdocx-grammar` example indices are derived display metadata, not addressing).
 
 #### Scenario: First paragraph in an empty body
 
@@ -144,7 +160,7 @@ The taxonomy SHALL include `appendParagraph(in: ElementID?, paragraph: Paragraph
 
 ### Requirement: SetRuns replaces inline content with typed run payloads
 
-The taxonomy SHALL include `setRuns(target: ElementID, runs: [RunPayload])` replacing the addressed paragraph's inline content. `RunPayload` formatting fields SHALL mirror `<w:rPr>` children: `bold` ↔ `<w:b>`, `italics` ↔ `<w:i>`, `color` ↔ `<w:color w:val>`.
+The taxonomy SHALL include `setRuns(target: ElementID, runs: [RunPayload])` replacing the addressed paragraph's inline content. The formatting fields SHALL be added to the existing `RunPayload` struct (which today carries only `text`) — NOT to the separate `RunFormatPayload` used by `setRunFormat` — as optionals: `bold` ↔ `<w:b>`, `italic` ↔ `<w:i>`, `color` ↔ `<w:color w:val>`. Spelling note: ECMA-376 titles `<w:i>` "Italics", but the field is spelled `italic` for cross-payload consistency with the shipped `RunFormatPayload.italic` (the OOXML anchor is the element `<w:i>` itself, which both spellings mirror).
 
 #### Scenario: Formatted runs round-trip through the log
 
@@ -171,7 +187,7 @@ The taxonomy SHALL include `beginComponent(type: String, id: ElementID)` / `endC
 
 ### Requirement: Inline atom ops mirror OOXML empty elements
 
-The taxonomy SHALL include `insertTab(in: ElementID)`, `insertBreak(in: ElementID)`, and `insertNoBreakHyphen(in: ElementID)` appending the corresponding empty inline element (`<w:tab/>`, `<w:br/>`, `<w:noBreakHyphen/>`) to the addressed run container in construction order. No index parameter (same ID-based rule as AppendParagraph).
+The taxonomy SHALL include `insertTab(in: ElementID)`, `insertBreak(in: ElementID)`, and `insertNoBreakHyphen(in: ElementID)` appending the corresponding empty inline element (`<w:tab/>`, `<w:br/>`, `<w:noBreakHyphen/>`) in construction order. `in:` SHALL address a **run** (`<w:r>`) — these atoms are only schema-valid inside `<w:r>`, never as direct children of `<w:p>`. When the DSL emits a standalone atom with no preceding run in the paragraph, the reducer SHALL synthesize an empty wrapping `<w:r>` first. No index parameter (same ID-based rule as AppendParagraph). Scope note: a bare `<w:br/>` is the text-wrapping line break; page/column breaks (`w:type="page|column"`) are out of scope until a future additive `type:` parameter.
 
 #### Scenario: Tab op appends w:tab
 

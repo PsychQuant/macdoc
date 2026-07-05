@@ -47,6 +47,8 @@ Tab stops (`Tab()`), line breaks (`Break()`), no-break hyphens (`NoBreakHyphen()
 
 | Source | Emitted op (canonical, per `ooxml-operation-log`) |
 | ------ | ------------------------------------------------- |
-| `Tab()` | `insertTab(in: <container-id>)` — appended in declaration order |
-| `Break()` | `insertBreak(in: <container-id>)` |
-| `NoBreakHyphen()` | `insertNoBreakHyphen(in: <container-id>)` |
+| `Tab()` | `insertTab(in: <run-id>)` — appended in declaration order |
+| `Break()` | `insertBreak(in: <run-id>)` |
+| `NoBreakHyphen()` | `insertNoBreakHyphen(in: <run-id>)` |
+
+`in:` addresses a run (`<w:r>`) — atoms are only schema-valid inside runs. A standalone atom with no preceding run in the paragraph causes the reducer to synthesize an empty wrapping `<w:r>` (rule pinned in `ooxml-operation-log`).
