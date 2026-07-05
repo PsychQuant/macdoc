@@ -56,16 +56,16 @@ Implements **Decision 2: Append-only operation log, persisted as JSONL sidecar**
 
 Implements **Decision 6: Word-import diff via structural element-identity matching** and **Decision 7: Conflict policy is opt-in and explicit**, and the `ooxml-word-sync` capability.
 
-- [ ] 4.1 Implement `SyncOrchestrator` covering the **SyncOrchestrator coordinates Word and Swift writers** requirement
-- [ ] 4.2 Implement `WordImport.diff(snapshot:current:)` covering the **Word-import diff via element identity matching** requirement; satisfies **Decision 6: Word-import diff via structural element-identity matching** end-to-end
-- [ ] 4.3 [P] Implement the **conflict detection on overlapping mutations** requirement: compute `ConflictReport` listing each conflicting `ElementID`
-- [ ] 4.4 Define `SyncPolicy` enum covering the **typed conflict policy** requirement (`.abortOnConflict`, `.swiftWins`, `.wordWins`, `.askUser(handler:)`); satisfies **Decision 7: Conflict policy is opt-in and explicit** end-to-end
-- [ ] 4.5 [P] Implement the **file watcher contract** requirement: mtime + SHA-256 polling at configurable interval (default 1s)
-- [ ] 4.6 [P] Implement the **Word file-lock interaction** requirement: detect `~$<filename>.docx` lock-file lifecycle; refuse Swift writes while lock present; trigger final import on lock removal
-- [ ] 4.7 Implement the **sidecar persistence of snapshot and log** requirement and the **bootstrap from existing docx** requirement (`SyncOrchestrator.bootstrapFromDocx(url:)` handles fresh / existing / stale-snapshot cases)
-- [ ] 4.8 Add Word-roundtrip integration test: open a fixture in Word (manual or scripted via AppleScript / `osascript`), edit one paragraph, save; assert the orchestrator captures the edit as a non-empty op set with `source: "word"`
-- [ ] 4.9 Run the rsid-only-no-edit fixture pair: the import diff must produce an empty op set (regression-pin **identity-noise normalization for diff comparison**)
-- [ ] 4.10 Tag and release `ooxml-swift v0.33.0`
+- [x] 4.1 Implement `SyncOrchestrator` covering the **SyncOrchestrator coordinates Word and Swift writers** requirement
+- [x] 4.2 Implement `WordImport.diff(snapshot:current:)` covering the **Word-import diff via element identity matching** requirement; satisfies **Decision 6: Word-import diff via structural element-identity matching** end-to-end
+- [x] 4.3 [P] Implement the **conflict detection on overlapping mutations** requirement: compute `ConflictReport` listing each conflicting `ElementID`
+- [x] 4.4 Define `SyncPolicy` enum covering the **typed conflict policy** requirement (`.abortOnConflict`, `.swiftWins`, `.wordWins`, `.askUser(handler:)`); satisfies **Decision 7: Conflict policy is opt-in and explicit** end-to-end
+- [x] 4.5 [P] Implement the **file watcher contract** requirement: mtime + SHA-256 polling at configurable interval (default 1s)
+- [x] 4.6 [P] Implement the **Word file-lock interaction** requirement: detect `~$<filename>.docx` lock-file lifecycle; refuse Swift writes while lock present; trigger final import on lock removal
+- [x] 4.7 Implement the **sidecar persistence of snapshot and log** requirement and the **bootstrap from existing docx** requirement (`SyncOrchestrator.bootstrapFromDocx(url:)` handles fresh / existing / stale-snapshot cases)
+- [x] 4.8 Add Word-roundtrip integration test: open a fixture in Word (manual or scripted via AppleScript / `osascript`), edit one paragraph, save; assert the orchestrator captures the edit as a non-empty op set with `source: "word"`
+- [x] 4.9 Run the rsid-only-no-edit fixture pair: the import diff must produce an empty op set (regression-pin **identity-noise normalization for diff comparison**)
+- [x] 4.10 Tag and release `ooxml-swift v0.33.0`
 
 ## 5. Phase 4 — Script transcoder (target v0.34.0)
 
