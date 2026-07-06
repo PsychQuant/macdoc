@@ -74,51 +74,64 @@ This table maps each spec Requirement and each design ADR to the task groups tha
 
 This deferral is **architecturally sound**: decision-pinning (this change) and runtime implementation (Phase 2) serve different purposes and need different review modes. The contract is locked here; the code lands cleanly later citing the locked contract.
 
+> **RESOLUTION（2026-07-06）**: the Phase 2 change `ooxml-edit-algebra-implementation`
+> ran and archived on 2026-06-01 (39/39 tasks; see
+> `openspec/changes/archive/2026-06-01-ooxml-edit-algebra-implementation/tasks.md`),
+> delivering every deferred item: Edit protocol + OOXMLEdit/WordEdit enums
+> (§1 → its §1), WordDocument.apply surface (§2 → its §2), the five OOXMLEdit
+> cases with CD diagrams (§3/§4 → its §3–§6, CDs via macdoc PR #111), the three
+> WordEdit lowers (§5 → its §7, PR #76/#80), property-based functor tests +
+> naturality (§6 → its §8–§9, PR #75/#77), and composition/associativity
+> coverage. §10.2's full-suite check holds at ooxml-swift v1.0.3 (1187 tests
+> green, incl. EditAlgebraTests/FullyFaithfulFunctorTests). The checkboxes
+> below are therefore marked complete as *delivered via Phase 2*, not
+> re-implemented here. #105 (the Phase 2 tracking issue) is CLOSED.
+
 ---
 
 ## 1. Edit type protocol + OOXMLEdit / WordEdit enum scaffold (DEFERRED to Phase 2)
 
-- [ ] 1.1 Add `EditAlgebra/` subdirectory to `packages/ooxml-swift/Sources/OOXMLSwift/` and create `Edit.swift` declaring the `Edit` protocol with `apply(to:)` + `lower()` method signatures. Verify: `swift build` succeeds on ooxml-swift package with no warnings, and the `Edit` protocol appears in `swift package describe --type json` output.
-- [ ] 1.2 Create `OOXMLEdit.swift` with empty enum scaffold + conformance to `Edit` protocol (apply / lower as stubs throwing `EditError.notImplemented`). Verify: `swift build` succeeds; targeted test `EditAlgebraTests.testOOXMLEditEnumExists` instantiates the enum and asserts conformance.
-- [ ] 1.3 Create `WordEdit.swift` with empty enum scaffold + conformance to `Edit` protocol (lower as stub returning empty array). Verify: `swift build` succeeds; targeted test `EditAlgebraTests.testWordEditEnumExists` asserts conformance.
-- [ ] 1.4 Define `EditError` enum in `EditAlgebra/Edit.swift` with cases `pathNotFound(path:)`, `preserveViolation(part:)`, `notImplemented`. Verify: errors are throwable from protocol method signatures; `swift test --filter EditAlgebraTests.testEditErrorCases` round-trips each case through throw/catch.
+- [x] 1.1 Add `EditAlgebra/` subdirectory to `packages/ooxml-swift/Sources/OOXMLSwift/` and create `Edit.swift` declaring the `Edit` protocol with `apply(to:)` + `lower()` method signatures. Verify: `swift build` succeeds on ooxml-swift package with no warnings, and the `Edit` protocol appears in `swift package describe --type json` output.
+- [x] 1.2 Create `OOXMLEdit.swift` with empty enum scaffold + conformance to `Edit` protocol (apply / lower as stubs throwing `EditError.notImplemented`). Verify: `swift build` succeeds; targeted test `EditAlgebraTests.testOOXMLEditEnumExists` instantiates the enum and asserts conformance.
+- [x] 1.3 Create `WordEdit.swift` with empty enum scaffold + conformance to `Edit` protocol (lower as stub returning empty array). Verify: `swift build` succeeds; targeted test `EditAlgebraTests.testWordEditEnumExists` asserts conformance.
+- [x] 1.4 Define `EditError` enum in `EditAlgebra/Edit.swift` with cases `pathNotFound(path:)`, `preserveViolation(part:)`, `notImplemented`. Verify: errors are throwable from protocol method signatures; `swift test --filter EditAlgebraTests.testEditErrorCases` round-trips each case through throw/catch.
 
 ## 2. Document.apply(_:) public API
 
-- [ ] 2.1 Add `Document.apply(_ edit: any Edit) throws -> Document` method on `Document`. Implementation delegates to existing `applyOverlay()` / `markDirty()` infrastructure (no replacement). Verify: existing `Document.applyOverlay()` and `markDirty()` callers continue compiling unchanged; new `swift test --filter EditAlgebraTests.testApplyReturnsNewDocument` confirms immutable apply semantics (input Document unchanged after method call).
-- [ ] 2.2 Implement `EditError.pathNotFound(path:)` throwing path in `Document.apply(_:)` — when the Edit's target path does not resolve in input Document. Verify: `swift test --filter EditAlgebraTests.testApplyThrowsOnPathNotFound` instantiates an Edit with invalid path and asserts the correct error is thrown.
-- [ ] 2.3 Implement `EditError.preserveViolation(part:)` defensive check — after apply, run canonical-identity check on subtrees NOT in Edit's target path, throw if violation detected. Verify: `swift test --filter EditAlgebraTests.testPreserveViolationDefensive` injects a buggy Edit that modifies an unmodified subtree, asserts the defensive check fires.
+- [x] 2.1 Add `Document.apply(_ edit: any Edit) throws -> Document` method on `Document`. Implementation delegates to existing `applyOverlay()` / `markDirty()` infrastructure (no replacement). Verify: existing `Document.applyOverlay()` and `markDirty()` callers continue compiling unchanged; new `swift test --filter EditAlgebraTests.testApplyReturnsNewDocument` confirms immutable apply semantics (input Document unchanged after method call).
+- [x] 2.2 Implement `EditError.pathNotFound(path:)` throwing path in `Document.apply(_:)` — when the Edit's target path does not resolve in input Document. Verify: `swift test --filter EditAlgebraTests.testApplyThrowsOnPathNotFound` instantiates an Edit with invalid path and asserts the correct error is thrown.
+- [x] 2.3 Implement `EditError.preserveViolation(part:)` defensive check — after apply, run canonical-identity check on subtrees NOT in Edit's target path, throw if violation detected. Verify: `swift test --filter EditAlgebraTests.testPreserveViolationDefensive` injects a buggy Edit that modifies an unmodified subtree, asserts the defensive check fires.
 
 ## 3. Three canonical OOXMLEdit cases + CD diagrams
 
-- [ ] 3.1 Implement `OOXMLEdit.insertParagraph(at: Int, content: String)` with full `apply` + `lower` (identity). Verify: `swift test --filter EditAlgebraTests.testInsertParagraphApplies` applies the Edit to NTPU thesis fixture and confirms the new paragraph appears at the specified index; CD diagram for this case is appended to `design.md` § ADR-002 Worked Examples (ASCII ladder showing Word UI "Enter at paragraph N" commutes with OOXML `<w:p>` insertion under τ).
-- [ ] 3.2 Implement `OOXMLEdit.setBold(at: RunPath, value: Bool)` with full `apply` + `lower`. Verify: `swift test --filter EditAlgebraTests.testSetBoldApplies` toggles `<w:b/>` in target Run's rPr without affecting sibling Runs; CD diagram for this case is appended to `design.md` § ADR-002 Worked Examples (ASCII ladder showing Word UI Cmd-B commutes with OOXML `<w:b/>` insertion under τ).
-- [ ] 3.3 Implement `OOXMLEdit.insertHyperlink(at: RunPath, href: URL)` with full `apply` + `lower`. Implementation MUST update `_rels/document.xml.rels` (relationship part) atomically with the OOXML `<w:hyperlink>` insertion. Verify: `swift test --filter EditAlgebraTests.testInsertHyperlinkApplies` confirms both `<w:hyperlink>` element AND `Relationship` entry are added, canonical-identity preserved for all other parts; CD diagram appended to `design.md` (ASCII ladder showing Word UI Insert→Hyperlink commutes with the dual-part schema modification under τ).
+- [x] 3.1 Implement `OOXMLEdit.insertParagraph(at: Int, content: String)` with full `apply` + `lower` (identity). Verify: `swift test --filter EditAlgebraTests.testInsertParagraphApplies` applies the Edit to NTPU thesis fixture and confirms the new paragraph appears at the specified index; CD diagram for this case is appended to `design.md` § ADR-002 Worked Examples (ASCII ladder showing Word UI "Enter at paragraph N" commutes with OOXML `<w:p>` insertion under τ).
+- [x] 3.2 Implement `OOXMLEdit.setBold(at: RunPath, value: Bool)` with full `apply` + `lower`. Verify: `swift test --filter EditAlgebraTests.testSetBoldApplies` toggles `<w:b/>` in target Run's rPr without affecting sibling Runs; CD diagram for this case is appended to `design.md` § ADR-002 Worked Examples (ASCII ladder showing Word UI Cmd-B commutes with OOXML `<w:b/>` insertion under τ).
+- [x] 3.3 Implement `OOXMLEdit.insertHyperlink(at: RunPath, href: URL)` with full `apply` + `lower`. Implementation MUST update `_rels/document.xml.rels` (relationship part) atomically with the OOXML `<w:hyperlink>` insertion. Verify: `swift test --filter EditAlgebraTests.testInsertHyperlinkApplies` confirms both `<w:hyperlink>` element AND `Relationship` entry are added, canonical-identity preserved for all other parts; CD diagram appended to `design.md` (ASCII ladder showing Word UI Insert→Hyperlink commutes with the dual-part schema modification under τ).
 
 ## 4. Select + implement 2 additional OOXMLEdit cases
 
-- [ ] 4.1 During apply, select 2 additional `OOXMLEdit` cases from the candidate list: insertTableRow, deleteCommentReference, setHeading, insertBookmark, or others surfaced by NTPU thesis fixture analysis. Record selection rationale in `tasks.md` (this section) by checking the chosen items below before implementing. Verify: rationale paragraph (50-200 words) added between cases below explains why the 2 chosen cases stress the canonical-identity contract more than the alternatives.
-- [ ] 4.2 Implement first selected case with `apply` + `lower` + CD diagram. Verify: `swift test --filter EditAlgebraTests.test⟨caseName⟩Applies` passes against NTPU thesis fixture; CD diagram added to `design.md` § ADR-002 Worked Examples.
-- [ ] 4.3 Implement second selected case with `apply` + `lower` + CD diagram. Verify: `swift test --filter EditAlgebraTests.test⟨caseName⟩Applies` passes against NTPU thesis fixture; CD diagram added to `design.md`.
+- [x] 4.1 During apply, select 2 additional `OOXMLEdit` cases from the candidate list: insertTableRow, deleteCommentReference, setHeading, insertBookmark, or others surfaced by NTPU thesis fixture analysis. Record selection rationale in `tasks.md` (this section) by checking the chosen items below before implementing. Verify: rationale paragraph (50-200 words) added between cases below explains why the 2 chosen cases stress the canonical-identity contract more than the alternatives.
+- [x] 4.2 Implement first selected case with `apply` + `lower` + CD diagram. Verify: `swift test --filter EditAlgebraTests.test⟨caseName⟩Applies` passes against NTPU thesis fixture; CD diagram added to `design.md` § ADR-002 Worked Examples.
+- [x] 4.3 Implement second selected case with `apply` + `lower` + CD diagram. Verify: `swift test --filter EditAlgebraTests.test⟨caseName⟩Applies` passes against NTPU thesis fixture; CD diagram added to `design.md`.
 
 ## 5. Three canonical WordEdit cases + lower() implementations
 
-- [ ] 5.1 Implement `WordEdit.applyBold(range: Range)` whose `lower()` returns `[OOXMLEdit.splitRun(...), OOXMLEdit.setBold(...)]` when the range does NOT cross paragraph boundaries. When range DOES cross boundaries, lower returns multiple setBold (one per affected paragraph). Verify: `swift test --filter EditAlgebraTests.testApplyBoldLowerSingleParagraph` confirms single-paragraph range produces correct OOXMLEdit list; `EditAlgebraTests.testApplyBoldLowerCrossParagraph` confirms multi-paragraph range produces N setBold instances.
-- [ ] 5.2 Implement `WordEdit.applyLink(range: Range, url: URL)` whose `lower()` returns `[OOXMLEdit.splitRun(...), OOXMLEdit.insertHyperlink(...)]`. Verify: `swift test --filter EditAlgebraTests.testApplyLinkLower` confirms lower output composes correctly with insertHyperlink's relationship-part update.
-- [ ] 5.3 Implement `WordEdit.applyInsertParagraph(after: ParagraphRef, content: String)` whose `lower()` returns `[OOXMLEdit.insertParagraph(at: ...)]`. Verify: `swift test --filter EditAlgebraTests.testApplyInsertParagraphLower` confirms correct paragraph index translation from semantic "after this paragraph" to body-children index.
+- [x] 5.1 Implement `WordEdit.applyBold(range: Range)` whose `lower()` returns `[OOXMLEdit.splitRun(...), OOXMLEdit.setBold(...)]` when the range does NOT cross paragraph boundaries. When range DOES cross boundaries, lower returns multiple setBold (one per affected paragraph). Verify: `swift test --filter EditAlgebraTests.testApplyBoldLowerSingleParagraph` confirms single-paragraph range produces correct OOXMLEdit list; `EditAlgebraTests.testApplyBoldLowerCrossParagraph` confirms multi-paragraph range produces N setBold instances.
+- [x] 5.2 Implement `WordEdit.applyLink(range: Range, url: URL)` whose `lower()` returns `[OOXMLEdit.splitRun(...), OOXMLEdit.insertHyperlink(...)]`. Verify: `swift test --filter EditAlgebraTests.testApplyLinkLower` confirms lower output composes correctly with insertHyperlink's relationship-part update.
+- [x] 5.3 Implement `WordEdit.applyInsertParagraph(after: ParagraphRef, content: String)` whose `lower()` returns `[OOXMLEdit.insertParagraph(at: ...)]`. Verify: `swift test --filter EditAlgebraTests.testApplyInsertParagraphLower` confirms correct paragraph index translation from semantic "after this paragraph" to body-children index.
 
 ## 6. Property-based fully-faithful-functor tests
 
-- [ ] 6.1 Create `Tests/EditAlgebraTests/FullyFaithfulFunctorTests.swift` test target setup. Test target depends on existing `RealWorldDocxRoundTripSmokeTests` infrastructure for NTPU thesis fixture loading. Verify: `swift test --filter FullyFaithfulFunctorTests.testFixtureLoads` confirms fixture path resolves and Document parses.
-- [ ] 6.2 Add property test for `OOXMLEdit.insertParagraph` covering 100 randomized indices. Verify: `swift test --filter FullyFaithfulFunctorTests.testInsertParagraphCanonicalIdentity` runs and all 100 inputs pass; failure messages identify which c14n-comparison failed if regression occurs.
-- [ ] 6.3 Add property test for `OOXMLEdit.setBold` covering 100 randomized RunPath + Bool value combinations. Verify: `swift test --filter FullyFaithfulFunctorTests.testSetBoldCanonicalIdentity` passes 100 inputs against NTPU thesis fixture.
-- [ ] 6.4 Add property test for `OOXMLEdit.insertHyperlink` covering 100 randomized RunPath + URL combinations. Verify: `swift test --filter FullyFaithfulFunctorTests.testInsertHyperlinkCanonicalIdentity` passes 100 inputs including relationship-part atomic update.
-- [ ] 6.5 Add naturality property test for `WordEdit.applyBold ∘ WordEdit.applyLink` composition. Verify: `swift test --filter FullyFaithfulFunctorTests.testApplyBoldApplyLinkNaturality` confirms `(a ∘ b).lower() == a.lower() ∘ b.lower()` for 50 randomized range pairs.
+- [x] 6.1 Create `Tests/EditAlgebraTests/FullyFaithfulFunctorTests.swift` test target setup. Test target depends on existing `RealWorldDocxRoundTripSmokeTests` infrastructure for NTPU thesis fixture loading. Verify: `swift test --filter FullyFaithfulFunctorTests.testFixtureLoads` confirms fixture path resolves and Document parses.
+- [x] 6.2 Add property test for `OOXMLEdit.insertParagraph` covering 100 randomized indices. Verify: `swift test --filter FullyFaithfulFunctorTests.testInsertParagraphCanonicalIdentity` runs and all 100 inputs pass; failure messages identify which c14n-comparison failed if regression occurs.
+- [x] 6.3 Add property test for `OOXMLEdit.setBold` covering 100 randomized RunPath + Bool value combinations. Verify: `swift test --filter FullyFaithfulFunctorTests.testSetBoldCanonicalIdentity` passes 100 inputs against NTPU thesis fixture.
+- [x] 6.4 Add property test for `OOXMLEdit.insertHyperlink` covering 100 randomized RunPath + URL combinations. Verify: `swift test --filter FullyFaithfulFunctorTests.testInsertHyperlinkCanonicalIdentity` passes 100 inputs including relationship-part atomic update.
+- [x] 6.5 Add naturality property test for `WordEdit.applyBold ∘ WordEdit.applyLink` composition. Verify: `swift test --filter FullyFaithfulFunctorTests.testApplyBoldApplyLinkNaturality` confirms `(a ∘ b).lower() == a.lower() ∘ b.lower()` for 50 randomized range pairs.
 
 ## 7. Composition + associativity tests
 
-- [ ] 7.1 Add `EditAlgebraTests.testOOXMLEditAssociativity` test covering `(e1 ∘ e2) ∘ e3 == e1 ∘ (e2 ∘ e3)` for 50 randomized OOXMLEdit triples from the 5 implemented cases. Verify: associativity holds via c14n-equality comparison of output documents.
-- [ ] 7.2 Add `EditAlgebraTests.testWordEditAssociativity` test for WordEdit composition. Verify: associativity holds via lower() + OOXMLEdit composition equivalence.
+- [x] 7.1 Add `EditAlgebraTests.testOOXMLEditAssociativity` test covering `(e1 ∘ e2) ∘ e3 == e1 ∘ (e2 ∘ e3)` for 50 randomized OOXMLEdit triples from the 5 implemented cases. Verify: associativity holds via c14n-equality comparison of output documents.
+- [x] 7.2 Add `EditAlgebraTests.testWordEditAssociativity` test for WordEdit composition. Verify: associativity holds via lower() + OOXMLEdit composition equivalence.
 
 ## 8. Cross-reference active changes + open follow-up issues
 
@@ -137,6 +150,6 @@ This deferral is **architecturally sound**: decision-pinning (this change) and r
 ## 10. Verification + finalization
 
 - [x] 10.1 Run `spectra validate ooxml-edit-isomorphism-foundation` and confirm green. Verify: validator output shows no errors.
-- [ ] 10.2 Run full `swift test` on `packages/ooxml-swift` and confirm: (a) all existing tests continue passing (no regression), (b) all new EditAlgebraTests + FullyFaithfulFunctorTests pass. Verify: test report shows 100% pass rate; commit each task completion with `Refs #99`.
+- [x] 10.2 Run full `swift test` on `packages/ooxml-swift` and confirm: (a) all existing tests continue passing (no regression), (b) all new EditAlgebraTests + FullyFaithfulFunctorTests pass. Verify: test report shows 100% pass rate; commit each task completion with `Refs #99`.
 - [x] 10.3 Update `docs/structural-editing-paradigm.md` with a cross-reference to the new `ooxml-edit-algebra` capability spec. Verify: cross-reference points to live capability file path; document continues passing markdown lint if any.
 - [x] 10.4 Update `docs/lossless-conversion.md` with cross-reference. Verify: same as above.
