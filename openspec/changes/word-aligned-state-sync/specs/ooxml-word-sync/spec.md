@@ -125,3 +125,30 @@ The orchestrator SHALL provide `SyncOrchestrator.bootstrapFromDocx(url:)` that i
 - **GIVEN** `report.docx`, `report.oplog.jsonl` (with prior history), and `report.snapshot.json` (from prior session) all exist
 - **WHEN** `bootstrapFromDocx(url:)` runs
 - **THEN** the orchestrator loads the existing log and snapshot; if the docx has changed since the snapshot's timestamp, an import diff is run to capture the intervening changes
+
+### Requirement: Sidecar persistence is opt-in（spec-frozen from design Q1）
+
+Sidecar files SHALL be written and read only through the explicit opt-in APIs（`WordDocument.saveWithSidecars(to:)` / `openWithSidecars(from:)` and the `SyncOrchestrator` bootstrap）. Plain `DocxWriter.write` / `DocxReader.read` SHALL NOT create, read, or modify sidecar files. Callers that never opt in never see sidecar files on disk.
+
+#### Scenario: plain IO never touches sidecars
+
+- **WHEN** a docx is read and written through the plain `DocxReader.read` / `DocxWriter.write` path
+- **THEN** no `.oplog.jsonl` or `.snapshot.json` file is created, read, or modified
+
+### Requirement: Word edit boundary is detected by content change, not save events（spec-frozen from design Q4）
+
+The sync layer SHALL detect Word-side changes exclusively from file content change — mtime fast-path confirmed by SHA-256 content hash（`DocxChangeDetector`）— and SHALL treat the `~$<name>.docx` owner-file lifecycle（`WordLock`）as the edit-session boundary signal. The sync layer SHALL NOT hook Word save events, AppleScript notifications, or autosave timers.
+
+#### Scenario: mtime-only touch is not an edit
+
+- **WHEN** the docx's mtime changes but its content hash is unchanged
+- **THEN** no Word-side change is reported
+
+### Requirement: Single-writer assumption for the op log（spec-frozen from design Q5）
+
+v1.0 SHALL assume a single Swift-side writer per docx: sidecar writes are atomic whole-file replaces and concurrent Swift writers are unsupported（last write wins — callers requiring multi-writer coordination must serialize externally）. The JSONL wire format（append-friendly lines, UUID `op_id` per entry）SHALL NOT be changed in ways that preclude a future multi-writer/CRDT extension（e.g., per-op vector clocks may be added as new optional envelope fields）.
+
+#### Scenario: wire format leaves room for v2 coordination fields
+
+- **WHEN** a future version adds a coordination field（e.g., `vclock`）to the line envelope
+- **THEN** v1.0 readers decode such lines via the forward-compat rule（unknown envelope fields ignored; unknown op_types preserved byte-equal）

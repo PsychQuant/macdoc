@@ -193,3 +193,12 @@ The taxonomy SHALL include `insertTab(in: ElementID)`, `insertBreak(in: ElementI
 
 - **WHEN** `insertTab(in: <run-id>)` replays
 - **THEN** the addressed `<w:r>` gains a trailing `<w:tab/>` child
+
+### Requirement: Bulk-mutation granularity uses the batch envelope（spec-frozen from design Q2）
+
+Fine-grained mutations SHALL remain one operation per change（e.g., one `updateAttribute` per attribute）. Bulk operations SHALL be expressed by wrapping the constituent ops in a `batchBegin(label:)` / `batchEnd` envelope — there is NO merged `BatchUpdate` payload op. Consumers（undo, sync, transcoder）treat the envelope as one logical unit while the wire stays uniformly per-op.
+
+#### Scenario: bulk reformat is one logical unit, many wire ops
+
+- **WHEN** a 100-run reformat is applied through a batch
+- **THEN** the log contains `batchBegin`, 100 individual ops, `batchEnd` — and undo of the batch reverts all 100 as one step

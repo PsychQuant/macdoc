@@ -87,3 +87,21 @@ The test suite SHALL include byte-equal round-trip tests against the following c
 
 - **WHEN** any fixture is read and written with no mutations
 - **THEN** the output bytes equal the input bytes for `word/document.xml`, `word/settings.xml`, `word/header*.xml`, `word/footer*.xml`, and `[Content_Types].xml`
+
+### Requirement: Mixed content is ordered children with explicit text nodes（spec-frozen from design Q3）
+
+`XmlNode` SHALL represent mixed content（e.g., `<w:r><w:t>foo</w:t><w:tab/><w:t>bar</w:t></w:r>`）as ordered children where text is an explicit text-kind node interleaved positionally with element children. Text SHALL NOT be stored as a leaf attribute of the parent element; serialization SHALL emit children strictly in stored order.
+
+#### Scenario: interleaved text and element children round-trip in order
+
+- **WHEN** a run containing text, an inline element, then more text is loaded and re-serialized
+- **THEN** the output preserves the exact child order and byte content
+
+### Requirement: rawChildren fields are bridge code removed in v1.0.0（spec-frozen from design Q6）
+
+The ad-hoc `rawChildren: [String]` fields on typed models（`Run`, `Paragraph`, `SectionProperties`, `Settings`, …）SHALL be treated as deprecated bridge code superseded by tree coverage. v1.0.0 SHALL remove the fields; the per-issue `Issue<N>RoundTripTests` that motivated them SHALL be retained as regression tests against the tree path.
+
+#### Scenario: removal keeps the round-trip guarantees
+
+- **WHEN** the `rawChildren` fields are removed in the v1.0.0 cleanup
+- **THEN** every `Issue<N>RoundTripTests` fixture still round-trips byte-equal through the tree path
