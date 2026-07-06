@@ -44,7 +44,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Package.swift              # CLI 的 Swift Package 定義
 ├── Sources/
 │   └── MacDocCLI/             # CLI 入口點
-│       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config + OCR + Docx 子命令群）
+│       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
 │       ├── MacDoc+Convert.swift # Convert 統一轉換入口（16 路由，textutil-compatible）
 │       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
 │       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
@@ -373,8 +373,9 @@ swift build
 ## Key Files
 
 ### macdoc
-- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config + OCR + Docx 子命令群）
+- `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
 - `Sources/MacDocCLI/MacDoc+Docx.swift` - `macdoc docx ...` 子命令（apply / plan / verify / diff —— manifest-driven .docx edit workflows，per openspec change `macdoc-docx-workflow-cli`，library 在 `packages/docx-workflow-swift`）
+- `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force]`（docx → `.mdocx.swift` 腳本反向轉換，word-aligned-state-sync Phase 4；有 oplog sidecar 時匯出現況 log，無 sidecar 時從 typed views 反向工程；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
 - `Sources/MacDocCLI/MacDoc+OCR.swift` - OCR 子命令（top-level `macdoc ocr`，單檔 GLM-OCR）
