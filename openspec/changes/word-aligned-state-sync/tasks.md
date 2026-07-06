@@ -96,9 +96,10 @@ Implements the `ooxml-script-transcode` capability per Decision 9: Phase 4 scrip
 
 Implements the final stage of **Decision 8: Migration is staged across `0.x → 1.0`**.
 
-- [ ] 6.1 Remove the typed-only legacy `DocxReader` paths superseded by tree IO; the tree path becomes the only read path
-- [ ] 6.2 [P] Remove the typed-only legacy `DocxWriter` paths; the tree path becomes the only write path
+- [x] 6.1 Remove the typed-only legacy `DocxReader` paths superseded by tree IO; the tree path becomes the only read path
+- [x] 6.2 [P] Remove the typed-only legacy `DocxWriter` paths; the tree path becomes the only write path
 - [ ] 6.3 [P] Remove the `rawChildren: [String]` ad-hoc fields from `Run`, `Paragraph`, `SectionProperties`, `Settings`; tree coverage subsumes them
+  > **2026-07-06 scoping note**: only `RunProperties.rawChildren` and `Hyperlink.rawChildren` exist in code (Paragraph/SectionProperties/Settings never grew the field). Removal experiment surfaced the real dependency: 16 direct-typed-mutation round-trip tests (Issue56R3Stack `*_RoundtripVariant`: acceptRevision / rejectRevision / insertComment / replaceText / bookmark-id calibration …) rely on the typed writer re-emitting dirty parts, and rawChildren is what keeps unknown `<w:rPr>` children alive on that path. Tree-first dirty writes (serialize the live tree) fix unknown-preservation for op-log mutations but silently drop direct typed mutations — the tree only stays fresh through the reducer. **6.3 therefore requires migrating that direct-mutation API surface to op-based implementations first** (per-API op mapping or part-level typed→tree materialization at mutation time). Sequenced as the first block of the remaining v1.0 surgery.
 - [ ] 6.4 Update CHANGELOG with the v0.30 → v1.0 migration narrative; document the `Document.body.children = [...]` direct-assignment removal as a migration note
 - [ ] 6.5 Run the full ooxml-swift + che-word-mcp + macdoc CLI test matrix against v1.0; confirm zero regressions
 - [x] 6.6 Address the **risks / trade-offs** section's "tree memory cost on large docs" risk: benchmark NTPU thesis fixture; report memory under 50 MB or document mitigation
