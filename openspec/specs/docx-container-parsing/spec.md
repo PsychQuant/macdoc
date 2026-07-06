@@ -5060,3 +5060,722 @@ code:
   - .remember/logs/autonomous/save-095103.log
   - .remember/logs/autonomous/save-052859.log
 -->
+
+---
+### Requirement: All parts preserved via XmlNode tree alongside typed views
+
+In addition to the existing typed-model coverage of named parts, `DocxReader.read(from:)` SHALL load every part listed in `[Content_Types].xml` into the underlying `XmlNode` tree provided by the `ooxml-tree-io` capability. Parts the typed model does not consume (e.g., `word/glossary/document.xml`, `word/customXml/*.xml`, `customXml/itemProps*.xml`) SHALL remain accessible via the tree and SHALL serialize byte-equal on round-trip when not modified.
+
+#### Scenario: Unknown part survives round-trip
+
+- **GIVEN** an input docx containing `customXml/item1.xml` and `customXml/itemProps1.xml` parts
+- **WHEN** `DocxReader.read(from:)` runs followed by `DocxWriter.write(document, to: out)` with no mutations
+- **THEN** the output docx contains `customXml/item1.xml` and `customXml/itemProps1.xml` byte-equal to the input
+
+#### Scenario: Unknown elements within known parts survive round-trip
+
+- **GIVEN** `word/document.xml` containing `<mc:AlternateContent>`, `<w:pict>`, `<w:hdrShapeDefaults>`, and `<w:rsids>` (none typed-modelled today)
+- **WHEN** the document is read and written with no mutations
+- **THEN** every such element appears byte-equal in the output `word/document.xml`
+
+
+<!-- @trace
+source: word-aligned-state-sync
+updated: 2026-07-06
+code:
+  - .remember/logs/autonomous/save-093124.log
+  - .remember/logs/autonomous/save-144618.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
+  - .remember/logs/autonomous/save-095118.log
+  - plugins/macdoc/hooks/hooks.json
+  - .remember/logs/autonomous/save-092917.log
+  - .remember/logs/autonomous/save-144617.log
+  - .remember/logs/autonomous/save-143020.log
+  - Sources/MacDocCLI/MacDoc+Word.swift
+  - .remember/logs/autonomous/save-133659.log
+  - .remember/logs/autonomous/save-130140.log
+  - .remember/logs/autonomous/save-050704.log
+  - .remember/logs/autonomous/save-093340.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-071551.log
+  - .remember/logs/autonomous/save-095142.log
+  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
+  - reference/README.md
+  - .remember/logs/autonomous/save-094041.log
+  - .remember/logs/autonomous/save-144433.log
+  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
+  - .remember/logs/autonomous/save-090944.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
+  - .remember/logs/autonomous/save-092853.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
+  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
+  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
+  - .remember/logs/autonomous/save-095040.log
+  - .remember/logs/autonomous/save-094804.log
+  - .remember/logs/autonomous/save-093223.log
+  - .remember/logs/autonomous/save-125453.log
+  - mcp/che-pdf-mcp
+  - .remember/logs/autonomous/save-070717.log
+  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-130011.log
+  - .remember/logs/autonomous/save-093300.log
+  - .remember/logs/autonomous/save-092705.log
+  - .remember/logs/autonomous/save-094627.log
+  - .claude-plugin/marketplace.json
+  - Package.swift
+  - .remember/logs/autonomous/save-053409.log
+  - plugins/che-pptx-mcp/README.md
+  - plugins/macdoc/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095621.log
+  - README.md
+  - .remember/logs/autonomous/save-093255.log
+  - docs/lossless-conversion.md
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
+  - Package.resolved
+  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-130300.log
+  - Sources/MacDocCLI/MacDoc+Docx.swift
+  - mcp/che-pptx-mcp
+  - .remember/logs/autonomous/save-091219.log
+  - .remember/logs/autonomous/save-093039.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
+  - packages/docx-workflow-swift/Package.swift
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-093030.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
+  - .remember/logs/autonomous/save-093138.log
+  - cli/FastOCR
+  - .remember/logs/autonomous/save-092657.log
+  - .remember/logs/autonomous/save-071130.log
+  - .remember/logs/autonomous/save-095539.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
+  - plugins/che-word-mcp/CLAUDE.md
+  - plugins/macdoc/skills/macdoc/SKILL.md
+  - .remember/logs/autonomous/save-095047.log
+  - plugins/che-word-mcp/README.md
+  - Tests/MacDocCLITests/CLITestHelper.swift
+  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
+  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
+  - plugins/che-word-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-125949.log
+  - plugins/che-word-mcp/.mcp.json
+  - .github/skills/spectra-drift/SKILL.md
+  - plugins/che-pdf-mcp/README.md
+  - docs/stale-triage-chain-2026-05-25.md
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-093312.log
+  - .remember/logs/autonomous/save-125924.log
+  - .remember/logs/autonomous/save-132950.log
+  - plugins/che-pdf-mcp/CHANGELOG.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
+  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
+  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
+  - .remember/logs/autonomous/save-092823.log
+  - .remember/logs/autonomous/save-093013.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-132859.log
+  - plugins/che-word-mcp/CHANGELOG.md
+  - Sources/MacDocCLI/MacDoc.swift
+  - .remember/logs/autonomous/save-130250.log
+  - .remember/logs/autonomous/save-092843.log
+  - .remember/logs/autonomous/save-094757.log
+  - .remember/logs/autonomous/save-095147.log
+  - .remember/logs/autonomous/save-125131.log
+  - .remember/logs/autonomous/save-143733.log
+  - plugins/macdoc/hooks/session-start.sh
+  - packages/docx-workflow-swift/CHANGELOG.md
+  - .remember/logs/autonomous/save-144132.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
+  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
+  - docs/swift-as-document-source.md
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-144827.log
+  - .remember/logs/autonomous/save-144003.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
+  - .remember/logs/autonomous/save-092931.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-093149.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
+  - plugins/che-pptx-mcp/.mcp.json
+  - .remember/logs/autonomous/save-144334.log
+  - .remember/logs/autonomous/save-095049.log
+  - .remember/logs/autonomous/save-143318.log
+  - scripts/release-cli.sh
+  - .remember/logs/autonomous/save-143856.log
+  - CLAUDE.md
+  - .remember/logs/autonomous/save-144708.log
+  - Tests/MacDocCLITests/Fixtures/README.md
+  - .remember/logs/autonomous/save-092901.log
+  - .remember/logs/autonomous/save-095546.log
+  - .gitmodules
+  - .remember/logs/autonomous/save-094953.log
+  - .remember/logs/autonomous/save-143013.log
+  - .remember/logs/autonomous/save-092944.log
+  - .remember/logs/autonomous/save-090656.log
+  - packages/docx-workflow-swift/README.md
+  - plugins/che-pptx-mcp/CHANGELOG.md
+  - .remember/logs/autonomous/save-051714.log
+  - plugins/che-pdf-mcp/.mcp.json
+  - .remember/logs/autonomous/save-093825.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
+  - plugins/macdoc/CHANGELOG.md
+  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
+  - .remember/logs/autonomous/save-091107.log
+  - docs/edit-algebra-cd-discipline.md
+  - docs/structural-editing-paradigm.md
+  - .remember/logs/autonomous/save-143140.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-131902.log
+  - .github/prompts/spectra-drift.prompt.md
+  - .remember/logs/autonomous/save-071148.log
+  - .remember/logs/autonomous/save-050705.log
+  - docs/docx-libraries-comparison.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
+  - docs/stale-triage-chain-batch2-2026-05-25.md
+  - .remember/logs/autonomous/save-144550.log
+  - .remember/logs/autonomous/save-143700.log
+-->
+
+---
+### Requirement: Reader does not silently drop element classes
+
+`DocxReader.parseBody`, `DocxReader.parseSettings`, `DocxReader.parseStyles`, `DocxReader.parseHeaders`, `DocxReader.parseFooters`, `DocxReader.parseFootnotes`, and `DocxReader.parseEndnotes` SHALL NOT discard XML elements they do not type-model. Unrecognized children SHALL flow through to the underlying `XmlNode` tree and remain available for serialization.
+
+#### Scenario: parseSettings retains all settings.xml children
+
+- **GIVEN** `word/settings.xml` containing `<w:zoom>`, `<w:bordersDoNotSurroundHeader>`, `<w:characterSpacingControl>`, `<w:hdrShapeDefaults>`, `<w:footnotePr>`, `<w:endnotePr>`, `<w:compat>`, `<w:rsids>`, `<w:mathPr>`, `<w:themeFontLang>`
+- **WHEN** the document is read and written with no mutations
+- **THEN** all of the above elements appear in the output `word/settings.xml` byte-equal to the input
+
+##### Example: settings.xml round-trip preservation
+
+- **GIVEN** an input `word/settings.xml` of 19,083 bytes
+- **WHEN** the document round-trips through `DocxReader.read` + `DocxWriter.write` with no edits
+- **THEN** the output `word/settings.xml` is byte-equal to the input (no shrinkage, no element drop)
+
+
+<!-- @trace
+source: word-aligned-state-sync
+updated: 2026-07-06
+code:
+  - .remember/logs/autonomous/save-093124.log
+  - .remember/logs/autonomous/save-144618.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
+  - .remember/logs/autonomous/save-095118.log
+  - plugins/macdoc/hooks/hooks.json
+  - .remember/logs/autonomous/save-092917.log
+  - .remember/logs/autonomous/save-144617.log
+  - .remember/logs/autonomous/save-143020.log
+  - Sources/MacDocCLI/MacDoc+Word.swift
+  - .remember/logs/autonomous/save-133659.log
+  - .remember/logs/autonomous/save-130140.log
+  - .remember/logs/autonomous/save-050704.log
+  - .remember/logs/autonomous/save-093340.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-071551.log
+  - .remember/logs/autonomous/save-095142.log
+  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
+  - reference/README.md
+  - .remember/logs/autonomous/save-094041.log
+  - .remember/logs/autonomous/save-144433.log
+  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
+  - .remember/logs/autonomous/save-090944.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
+  - .remember/logs/autonomous/save-092853.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
+  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
+  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
+  - .remember/logs/autonomous/save-095040.log
+  - .remember/logs/autonomous/save-094804.log
+  - .remember/logs/autonomous/save-093223.log
+  - .remember/logs/autonomous/save-125453.log
+  - mcp/che-pdf-mcp
+  - .remember/logs/autonomous/save-070717.log
+  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-130011.log
+  - .remember/logs/autonomous/save-093300.log
+  - .remember/logs/autonomous/save-092705.log
+  - .remember/logs/autonomous/save-094627.log
+  - .claude-plugin/marketplace.json
+  - Package.swift
+  - .remember/logs/autonomous/save-053409.log
+  - plugins/che-pptx-mcp/README.md
+  - plugins/macdoc/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095621.log
+  - README.md
+  - .remember/logs/autonomous/save-093255.log
+  - docs/lossless-conversion.md
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
+  - Package.resolved
+  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-130300.log
+  - Sources/MacDocCLI/MacDoc+Docx.swift
+  - mcp/che-pptx-mcp
+  - .remember/logs/autonomous/save-091219.log
+  - .remember/logs/autonomous/save-093039.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
+  - packages/docx-workflow-swift/Package.swift
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-093030.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
+  - .remember/logs/autonomous/save-093138.log
+  - cli/FastOCR
+  - .remember/logs/autonomous/save-092657.log
+  - .remember/logs/autonomous/save-071130.log
+  - .remember/logs/autonomous/save-095539.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
+  - plugins/che-word-mcp/CLAUDE.md
+  - plugins/macdoc/skills/macdoc/SKILL.md
+  - .remember/logs/autonomous/save-095047.log
+  - plugins/che-word-mcp/README.md
+  - Tests/MacDocCLITests/CLITestHelper.swift
+  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
+  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
+  - plugins/che-word-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-125949.log
+  - plugins/che-word-mcp/.mcp.json
+  - .github/skills/spectra-drift/SKILL.md
+  - plugins/che-pdf-mcp/README.md
+  - docs/stale-triage-chain-2026-05-25.md
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-093312.log
+  - .remember/logs/autonomous/save-125924.log
+  - .remember/logs/autonomous/save-132950.log
+  - plugins/che-pdf-mcp/CHANGELOG.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
+  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
+  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
+  - .remember/logs/autonomous/save-092823.log
+  - .remember/logs/autonomous/save-093013.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-132859.log
+  - plugins/che-word-mcp/CHANGELOG.md
+  - Sources/MacDocCLI/MacDoc.swift
+  - .remember/logs/autonomous/save-130250.log
+  - .remember/logs/autonomous/save-092843.log
+  - .remember/logs/autonomous/save-094757.log
+  - .remember/logs/autonomous/save-095147.log
+  - .remember/logs/autonomous/save-125131.log
+  - .remember/logs/autonomous/save-143733.log
+  - plugins/macdoc/hooks/session-start.sh
+  - packages/docx-workflow-swift/CHANGELOG.md
+  - .remember/logs/autonomous/save-144132.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
+  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
+  - docs/swift-as-document-source.md
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-144827.log
+  - .remember/logs/autonomous/save-144003.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
+  - .remember/logs/autonomous/save-092931.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-093149.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
+  - plugins/che-pptx-mcp/.mcp.json
+  - .remember/logs/autonomous/save-144334.log
+  - .remember/logs/autonomous/save-095049.log
+  - .remember/logs/autonomous/save-143318.log
+  - scripts/release-cli.sh
+  - .remember/logs/autonomous/save-143856.log
+  - CLAUDE.md
+  - .remember/logs/autonomous/save-144708.log
+  - Tests/MacDocCLITests/Fixtures/README.md
+  - .remember/logs/autonomous/save-092901.log
+  - .remember/logs/autonomous/save-095546.log
+  - .gitmodules
+  - .remember/logs/autonomous/save-094953.log
+  - .remember/logs/autonomous/save-143013.log
+  - .remember/logs/autonomous/save-092944.log
+  - .remember/logs/autonomous/save-090656.log
+  - packages/docx-workflow-swift/README.md
+  - plugins/che-pptx-mcp/CHANGELOG.md
+  - .remember/logs/autonomous/save-051714.log
+  - plugins/che-pdf-mcp/.mcp.json
+  - .remember/logs/autonomous/save-093825.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
+  - plugins/macdoc/CHANGELOG.md
+  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
+  - .remember/logs/autonomous/save-091107.log
+  - docs/edit-algebra-cd-discipline.md
+  - docs/structural-editing-paradigm.md
+  - .remember/logs/autonomous/save-143140.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-131902.log
+  - .github/prompts/spectra-drift.prompt.md
+  - .remember/logs/autonomous/save-071148.log
+  - .remember/logs/autonomous/save-050705.log
+  - docs/docx-libraries-comparison.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
+  - docs/stale-triage-chain-batch2-2026-05-25.md
+  - .remember/logs/autonomous/save-144550.log
+  - .remember/logs/autonomous/save-143700.log
+-->
+
+---
+### Requirement: Multi-section sectPr preservation
+
+`DocxReader.parseBody` SHALL preserve every `<w:sectPr>` element at its original position in the body, including section-break sectPrs nested inside `<w:p><w:pPr>` and the final body-end sectPr. The typed `Document.body.sections` view SHALL reflect every section; the underlying tree SHALL retain every `<w:sectPr>` byte-equal on no-op round-trip.
+
+#### Scenario: Three-section thesis round-trips
+
+- **GIVEN** a docx with three `<w:sectPr>` elements (front matter / body / cover, each carrying its own `<w:headerReference>` and `<w:footerReference>`)
+- **WHEN** the document is read and written with no mutations
+- **THEN** the output contains three `<w:sectPr>` elements at the same positions, each retaining all `<w:headerReference>`, `<w:footerReference>`, `<w:pgSz>`, `<w:pgMar>`, `<w:pgNumType>`, `<w:titlePg>`, `<w:cols>`, and `<w:docGrid>` children byte-equal to the input
+
+
+<!-- @trace
+source: word-aligned-state-sync
+updated: 2026-07-06
+code:
+  - .remember/logs/autonomous/save-093124.log
+  - .remember/logs/autonomous/save-144618.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
+  - .remember/logs/autonomous/save-095118.log
+  - plugins/macdoc/hooks/hooks.json
+  - .remember/logs/autonomous/save-092917.log
+  - .remember/logs/autonomous/save-144617.log
+  - .remember/logs/autonomous/save-143020.log
+  - Sources/MacDocCLI/MacDoc+Word.swift
+  - .remember/logs/autonomous/save-133659.log
+  - .remember/logs/autonomous/save-130140.log
+  - .remember/logs/autonomous/save-050704.log
+  - .remember/logs/autonomous/save-093340.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-071551.log
+  - .remember/logs/autonomous/save-095142.log
+  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
+  - reference/README.md
+  - .remember/logs/autonomous/save-094041.log
+  - .remember/logs/autonomous/save-144433.log
+  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
+  - .remember/logs/autonomous/save-090944.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
+  - .remember/logs/autonomous/save-092853.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
+  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
+  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
+  - .remember/logs/autonomous/save-095040.log
+  - .remember/logs/autonomous/save-094804.log
+  - .remember/logs/autonomous/save-093223.log
+  - .remember/logs/autonomous/save-125453.log
+  - mcp/che-pdf-mcp
+  - .remember/logs/autonomous/save-070717.log
+  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-130011.log
+  - .remember/logs/autonomous/save-093300.log
+  - .remember/logs/autonomous/save-092705.log
+  - .remember/logs/autonomous/save-094627.log
+  - .claude-plugin/marketplace.json
+  - Package.swift
+  - .remember/logs/autonomous/save-053409.log
+  - plugins/che-pptx-mcp/README.md
+  - plugins/macdoc/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095621.log
+  - README.md
+  - .remember/logs/autonomous/save-093255.log
+  - docs/lossless-conversion.md
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
+  - Package.resolved
+  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-130300.log
+  - Sources/MacDocCLI/MacDoc+Docx.swift
+  - mcp/che-pptx-mcp
+  - .remember/logs/autonomous/save-091219.log
+  - .remember/logs/autonomous/save-093039.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
+  - packages/docx-workflow-swift/Package.swift
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-093030.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
+  - .remember/logs/autonomous/save-093138.log
+  - cli/FastOCR
+  - .remember/logs/autonomous/save-092657.log
+  - .remember/logs/autonomous/save-071130.log
+  - .remember/logs/autonomous/save-095539.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
+  - plugins/che-word-mcp/CLAUDE.md
+  - plugins/macdoc/skills/macdoc/SKILL.md
+  - .remember/logs/autonomous/save-095047.log
+  - plugins/che-word-mcp/README.md
+  - Tests/MacDocCLITests/CLITestHelper.swift
+  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
+  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
+  - plugins/che-word-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-125949.log
+  - plugins/che-word-mcp/.mcp.json
+  - .github/skills/spectra-drift/SKILL.md
+  - plugins/che-pdf-mcp/README.md
+  - docs/stale-triage-chain-2026-05-25.md
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-093312.log
+  - .remember/logs/autonomous/save-125924.log
+  - .remember/logs/autonomous/save-132950.log
+  - plugins/che-pdf-mcp/CHANGELOG.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
+  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
+  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
+  - .remember/logs/autonomous/save-092823.log
+  - .remember/logs/autonomous/save-093013.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-132859.log
+  - plugins/che-word-mcp/CHANGELOG.md
+  - Sources/MacDocCLI/MacDoc.swift
+  - .remember/logs/autonomous/save-130250.log
+  - .remember/logs/autonomous/save-092843.log
+  - .remember/logs/autonomous/save-094757.log
+  - .remember/logs/autonomous/save-095147.log
+  - .remember/logs/autonomous/save-125131.log
+  - .remember/logs/autonomous/save-143733.log
+  - plugins/macdoc/hooks/session-start.sh
+  - packages/docx-workflow-swift/CHANGELOG.md
+  - .remember/logs/autonomous/save-144132.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
+  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
+  - docs/swift-as-document-source.md
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-144827.log
+  - .remember/logs/autonomous/save-144003.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
+  - .remember/logs/autonomous/save-092931.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-093149.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
+  - plugins/che-pptx-mcp/.mcp.json
+  - .remember/logs/autonomous/save-144334.log
+  - .remember/logs/autonomous/save-095049.log
+  - .remember/logs/autonomous/save-143318.log
+  - scripts/release-cli.sh
+  - .remember/logs/autonomous/save-143856.log
+  - CLAUDE.md
+  - .remember/logs/autonomous/save-144708.log
+  - Tests/MacDocCLITests/Fixtures/README.md
+  - .remember/logs/autonomous/save-092901.log
+  - .remember/logs/autonomous/save-095546.log
+  - .gitmodules
+  - .remember/logs/autonomous/save-094953.log
+  - .remember/logs/autonomous/save-143013.log
+  - .remember/logs/autonomous/save-092944.log
+  - .remember/logs/autonomous/save-090656.log
+  - packages/docx-workflow-swift/README.md
+  - plugins/che-pptx-mcp/CHANGELOG.md
+  - .remember/logs/autonomous/save-051714.log
+  - plugins/che-pdf-mcp/.mcp.json
+  - .remember/logs/autonomous/save-093825.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
+  - plugins/macdoc/CHANGELOG.md
+  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
+  - .remember/logs/autonomous/save-091107.log
+  - docs/edit-algebra-cd-discipline.md
+  - docs/structural-editing-paradigm.md
+  - .remember/logs/autonomous/save-143140.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-131902.log
+  - .github/prompts/spectra-drift.prompt.md
+  - .remember/logs/autonomous/save-071148.log
+  - .remember/logs/autonomous/save-050705.log
+  - docs/docx-libraries-comparison.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
+  - docs/stale-triage-chain-batch2-2026-05-25.md
+  - .remember/logs/autonomous/save-144550.log
+  - .remember/logs/autonomous/save-143700.log
+-->
+
+---
+### Requirement: Container parts preserve unknown children identically to body
+
+`DocxReader.parseHeaders`, `DocxReader.parseFooters`, `DocxReader.parseFootnotes`, `DocxReader.parseEndnotes`, and `DocxReader.parseComments` SHALL apply the same preservation rule as the body: unrecognized children flow into the tree and round-trip byte-equal when untouched.
+
+#### Scenario: Header VML survives round-trip
+
+- **GIVEN** `word/header1.xml` contains `<w:pict>` carrying VML watermark XML
+- **WHEN** the document is read and written with no mutations
+- **THEN** `word/header1.xml` in the output contains the same `<w:pict>` element byte-equal to the input
+
+<!-- @trace
+source: word-aligned-state-sync
+updated: 2026-07-06
+code:
+  - .remember/logs/autonomous/save-093124.log
+  - .remember/logs/autonomous/save-144618.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
+  - .remember/logs/autonomous/save-095118.log
+  - plugins/macdoc/hooks/hooks.json
+  - .remember/logs/autonomous/save-092917.log
+  - .remember/logs/autonomous/save-144617.log
+  - .remember/logs/autonomous/save-143020.log
+  - Sources/MacDocCLI/MacDoc+Word.swift
+  - .remember/logs/autonomous/save-133659.log
+  - .remember/logs/autonomous/save-130140.log
+  - .remember/logs/autonomous/save-050704.log
+  - .remember/logs/autonomous/save-093340.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-071551.log
+  - .remember/logs/autonomous/save-095142.log
+  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
+  - reference/README.md
+  - .remember/logs/autonomous/save-094041.log
+  - .remember/logs/autonomous/save-144433.log
+  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
+  - .remember/logs/autonomous/save-090944.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
+  - .remember/logs/autonomous/save-092853.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
+  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
+  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
+  - .remember/logs/autonomous/save-095040.log
+  - .remember/logs/autonomous/save-094804.log
+  - .remember/logs/autonomous/save-093223.log
+  - .remember/logs/autonomous/save-125453.log
+  - mcp/che-pdf-mcp
+  - .remember/logs/autonomous/save-070717.log
+  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-130011.log
+  - .remember/logs/autonomous/save-093300.log
+  - .remember/logs/autonomous/save-092705.log
+  - .remember/logs/autonomous/save-094627.log
+  - .claude-plugin/marketplace.json
+  - Package.swift
+  - .remember/logs/autonomous/save-053409.log
+  - plugins/che-pptx-mcp/README.md
+  - plugins/macdoc/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095621.log
+  - README.md
+  - .remember/logs/autonomous/save-093255.log
+  - docs/lossless-conversion.md
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
+  - Package.resolved
+  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-130300.log
+  - Sources/MacDocCLI/MacDoc+Docx.swift
+  - mcp/che-pptx-mcp
+  - .remember/logs/autonomous/save-091219.log
+  - .remember/logs/autonomous/save-093039.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
+  - packages/docx-workflow-swift/Package.swift
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-093030.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
+  - .remember/logs/autonomous/save-093138.log
+  - cli/FastOCR
+  - .remember/logs/autonomous/save-092657.log
+  - .remember/logs/autonomous/save-071130.log
+  - .remember/logs/autonomous/save-095539.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
+  - plugins/che-word-mcp/CLAUDE.md
+  - plugins/macdoc/skills/macdoc/SKILL.md
+  - .remember/logs/autonomous/save-095047.log
+  - plugins/che-word-mcp/README.md
+  - Tests/MacDocCLITests/CLITestHelper.swift
+  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
+  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
+  - plugins/che-word-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-125949.log
+  - plugins/che-word-mcp/.mcp.json
+  - .github/skills/spectra-drift/SKILL.md
+  - plugins/che-pdf-mcp/README.md
+  - docs/stale-triage-chain-2026-05-25.md
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-093312.log
+  - .remember/logs/autonomous/save-125924.log
+  - .remember/logs/autonomous/save-132950.log
+  - plugins/che-pdf-mcp/CHANGELOG.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
+  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
+  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
+  - .remember/logs/autonomous/save-092823.log
+  - .remember/logs/autonomous/save-093013.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-132859.log
+  - plugins/che-word-mcp/CHANGELOG.md
+  - Sources/MacDocCLI/MacDoc.swift
+  - .remember/logs/autonomous/save-130250.log
+  - .remember/logs/autonomous/save-092843.log
+  - .remember/logs/autonomous/save-094757.log
+  - .remember/logs/autonomous/save-095147.log
+  - .remember/logs/autonomous/save-125131.log
+  - .remember/logs/autonomous/save-143733.log
+  - plugins/macdoc/hooks/session-start.sh
+  - packages/docx-workflow-swift/CHANGELOG.md
+  - .remember/logs/autonomous/save-144132.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
+  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
+  - docs/swift-as-document-source.md
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-144827.log
+  - .remember/logs/autonomous/save-144003.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
+  - .remember/logs/autonomous/save-092931.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-093149.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
+  - plugins/che-pptx-mcp/.mcp.json
+  - .remember/logs/autonomous/save-144334.log
+  - .remember/logs/autonomous/save-095049.log
+  - .remember/logs/autonomous/save-143318.log
+  - scripts/release-cli.sh
+  - .remember/logs/autonomous/save-143856.log
+  - CLAUDE.md
+  - .remember/logs/autonomous/save-144708.log
+  - Tests/MacDocCLITests/Fixtures/README.md
+  - .remember/logs/autonomous/save-092901.log
+  - .remember/logs/autonomous/save-095546.log
+  - .gitmodules
+  - .remember/logs/autonomous/save-094953.log
+  - .remember/logs/autonomous/save-143013.log
+  - .remember/logs/autonomous/save-092944.log
+  - .remember/logs/autonomous/save-090656.log
+  - packages/docx-workflow-swift/README.md
+  - plugins/che-pptx-mcp/CHANGELOG.md
+  - .remember/logs/autonomous/save-051714.log
+  - plugins/che-pdf-mcp/.mcp.json
+  - .remember/logs/autonomous/save-093825.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
+  - plugins/macdoc/CHANGELOG.md
+  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
+  - .remember/logs/autonomous/save-091107.log
+  - docs/edit-algebra-cd-discipline.md
+  - docs/structural-editing-paradigm.md
+  - .remember/logs/autonomous/save-143140.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-131902.log
+  - .github/prompts/spectra-drift.prompt.md
+  - .remember/logs/autonomous/save-071148.log
+  - .remember/logs/autonomous/save-050705.log
+  - docs/docx-libraries-comparison.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
+  - docs/stale-triage-chain-batch2-2026-05-25.md
+  - .remember/logs/autonomous/save-144550.log
+  - .remember/logs/autonomous/save-143700.log
+-->
