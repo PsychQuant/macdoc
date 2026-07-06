@@ -59,7 +59,7 @@
 
 - [x] 9.1 Update `CONVERSIONS.md` with Note → HTML row in the cross matrix
 - [x] 9.2 Update `README.md` with `macdoc convert --to html file.note` usage examples
-- [ ] 9.3 Add tests: ZIP extraction, plist parsing, stroke decoding, timeline decoding, HTML output structure
+- [x] 9.3 Add tests: ZIP extraction, plist parsing, stroke decoding, timeline decoding, HTML output structure — pipeline coverage in note-to-html-swift (5 tests: ZIP/plist via synthesized .note + HTML structure/themes) + binary decoder units in note-core-swift (9 tests: strokes/timeline)
 
 ## 10. Layer 3 Package Structure Verification
 
