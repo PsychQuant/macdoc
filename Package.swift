@@ -40,12 +40,16 @@ let package = Package(
         // design.md "Out of scope"). Re-add when a CLI target imports
         // WordBuilderSwift.
         .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
+        // Direct dependency for `macdoc word reverse` (script transcoder:
+        // ScriptExporter / SidecarStore / DocxReader live in OOXMLSwift).
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.34.0"),
     ],
     targets: [
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
+                .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
                 .product(name: "PDFToMD", package: "PDFToMD"),
                 .product(name: "WordToHTML", package: "WordToHTML"),

@@ -89,8 +89,8 @@ Implements the `ooxml-script-transcode` capability per Decision 9: Phase 4 scrip
 - [x] 5.4 [P] Implement the **stable script formatting for diff readability** requirement: deterministic indent, predictable line ordering, deterministic comment placement; verify "add one operation → one git-diff hunk" property
 - [ ] 5.5 [P] Cover the **script export covers all operation types in the log** requirement, including the unknown-op_type forward-compat case; structural element types covered MUST include `mdocx-grammar` Requirements "Table grammar mirrors OOXML three-layer structure", "Lists use Paragraph with numPr reference, not nested containers", "Hyperlinks are containers with target enum", "Bookmarks default to container with paired-marker escape hatch", "Style references via typed enum with define-on-first-use", and "Component-aware op log via BeginComponent and EndComponent"
 - [x] 5.6 Round-trip integration test: log → script → log produces equivalent operations (same `op_type` and `payload` per position; `op_id` and `timestamp` may regenerate); script → log → script idempotency holds for the canonical form (per `mdocx-grammar` Requirement "Reverse CLI shape — macdoc word reverse" once that CLI surface lands)
-- [ ] 5.7 Implement the `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force]` CLI surface required by `mdocx-grammar` Requirement "Reverse CLI shape — macdoc word reverse"
-- [ ] 5.8 Tag and release `ooxml-swift v0.34.0`
+- [x] 5.7 Implement the `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force]` CLI surface required by `mdocx-grammar` Requirement "Reverse CLI shape — macdoc word reverse"
+- [x] 5.8 Tag and release `ooxml-swift v0.34.0`
 
 ## 6. Phase 5 — Migration cleanup (target v1.0.0)
 
