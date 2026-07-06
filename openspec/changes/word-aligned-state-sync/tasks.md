@@ -101,10 +101,10 @@ Implements the final stage of **Decision 8: Migration is staged across `0.x → 
 - [ ] 6.3 [P] Remove the `rawChildren: [String]` ad-hoc fields from `Run`, `Paragraph`, `SectionProperties`, `Settings`; tree coverage subsumes them
 - [ ] 6.4 Update CHANGELOG with the v0.30 → v1.0 migration narrative; document the `Document.body.children = [...]` direct-assignment removal as a migration note
 - [ ] 6.5 Run the full ooxml-swift + che-word-mcp + macdoc CLI test matrix against v1.0; confirm zero regressions
-- [ ] 6.6 Address the **risks / trade-offs** section's "tree memory cost on large docs" risk: benchmark NTPU thesis fixture; report memory under 50 MB or document mitigation
-- [ ] 6.7 [P] Address the typed-view performance regression risk: benchmark che-word-mcp `get_paragraphs` on 200-paragraph fixture pre/post; document numbers
+- [x] 6.6 Address the **risks / trade-offs** section's "tree memory cost on large docs" risk: benchmark NTPU thesis fixture; report memory under 50 MB or document mitigation
+- [x] 6.7 [P] Address the typed-view performance regression risk: benchmark che-word-mcp `get_paragraphs` on 200-paragraph fixture pre/post; document numbers
 - [ ] 6.8 Address the **migration plan** rollback documentation: each release tag is independently downgradable; document downgrade matrix
-- [ ] 6.9 Resolve **open questions** (sidecar opt-in default, op log granularity for fine mutations, mixed-content representation, file-watcher boundary heuristic, single-writer assumption, ad-hoc rawChildren bridge code) — convert each from "working answer" to spec-frozen decision in the corresponding capability spec
+- [x] 6.9 Resolve **open questions** (sidecar opt-in default, op log granularity for fine mutations, mixed-content representation, file-watcher boundary heuristic, single-writer assumption, ad-hoc rawChildren bridge code) — convert each from "working answer" to spec-frozen decision in the corresponding capability spec
 - [ ] 6.10 Tag and release `ooxml-swift v1.0.0`
 
 ## 7. Cross-cutting verification
