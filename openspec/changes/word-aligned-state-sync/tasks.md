@@ -110,9 +110,9 @@ Implements the final stage of **Decision 8: Migration is staged across `0.x → 
 
 ## 7. Cross-cutting verification
 
-- [ ] 7.1 Independent 6-AI verify (5 Claude reviewers + Codex gpt-5.5 xhigh) on the v0.30.0 release per the project's verify-gate protocol
-- [ ] 7.2 [P] Independent 6-AI verify on v0.31.0
-- [ ] 7.3 [P] Independent 6-AI verify on v0.32.0
-- [ ] 7.4 [P] Independent 6-AI verify on v0.33.0
-- [ ] 7.5 [P] Independent 6-AI verify on v0.34.0
-- [ ] 7.6 Independent 6-AI verify on v1.0.0 (final architectural sign-off)
+- [x] 7.1 Independent 6-AI verify (5 Claude reviewers + Codex gpt-5.5 xhigh) on the v0.30.0 release per the project's verify-gate protocol
+- [x] 7.2 [P] Independent 6-AI verify on v0.31.0
+- [x] 7.3 [P] Independent 6-AI verify on v0.32.0
+- [x] 7.4 [P] Independent 6-AI verify on v0.33.0
+- [x] 7.5 [P] Independent 6-AI verify on v0.34.0
+- [x] 7.6 Independent 6-AI verify on v1.0.0 (final architectural sign-off)
