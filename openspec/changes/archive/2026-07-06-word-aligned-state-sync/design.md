@@ -258,6 +258,21 @@ When `word-aligned-state-sync` archives (after v1.0.0 cleanup release), its arch
 
 This action is **advisory** for the current apply phase of `word-aligned-state-sync` — it does NOT block any v0.30.0 / v0.31.0 release. The reframe lands no later than v1.0.0 archival.
 
+> **Archival reframe（2026-07-06, per the contract above）**:
+> 1. Decision 3's positional-vs-stable addressing is resolved by `ooxml-edit-algebra`'s
+>    two-layer split: positional addressing is `OOXMLEdit`'s contract; stable-ID
+>    addressing is `WordEdit`'s. The op taxonomy shipped here (§4b OOXML-mirror,
+>    macdoc#128) is the stable-ID layer's wire format.
+> 2. The canonical-identity round-trip invariant this change's tree layer enforces
+>    (byte-equal on untouched sub-trees) originates in ADR-001
+>    (`ooxml-edit-isomorphism-foundation` design.md) — the tree/op-log/reducer here
+>    is that invariant's runtime backing.
+> 3. ADR-008 (`word-builder-swift` lens migration deferred): the v1.0.0 cleanup
+>    phase (tree-only IO, `markTypedDirty` single-marker discipline) is the
+>    migration window ADR-008 anticipated; word-builder-swift's lens migration can
+>    now target the op-based surface directly. Remaining direct-typed APIs are
+>    tracked in verify-7x-report.md's follow-up register.
+
 ### Why both changes coexist
 
 Decision-pinning (`ooxml-edit-isomorphism-foundation`) and runtime mechanism (`word-aligned-state-sync`) serve different purposes and would not benefit from being one change:

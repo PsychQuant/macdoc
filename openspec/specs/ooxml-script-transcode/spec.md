@@ -1,283 +1,26 @@
-# docx-revision-parsing Specification
+# ooxml-script-transcode Specification
 
 ## Purpose
 
-Defines the expected revision-type coverage of `DocxReader.parseParagraph` for body paragraphs — which OOXML revision elements are parsed into the public `Revision` model and how unknown elements are surfaced to callers. Scoped to the top-level paragraph switch (direct children of `<w:p>`); nested property-change revisions (`<w:rPrChange>`, `<w:pPrChange>`) and container paragraphs (headers, footers, footnotes, endnotes) extend this capability in a follow-up change.
+TBD - created by archiving change 'word-aligned-state-sync'. Update Purpose after archive.
 
 ## Requirements
 
-### Requirement: DocxReader parses w:ins insertion revisions
+### Requirement: Operation log to Swift script export
 
-`DocxReader.parseParagraph` SHALL emit a `Revision` with `type == .insertion` for every `<w:ins>` element appearing as a direct child of a paragraph (`<w:p>`). The emitted revision SHALL carry:
+The library SHALL provide `ScriptExporter.exportSwift(log:)` that emits a runnable Swift source file whose execution against an empty `OperationLog` reproduces the input log byte-equal.
 
-- `id`: the integer value of the `w:id` attribute (or 0 if missing / non-numeric)
-- `type`: `.insertion`
-- `author`: the string value of the `w:author` attribute (or `"Unknown"` if missing)
-- `date`: the ISO8601-parsed `w:date` attribute (or the current date if missing / unparseable)
-- `originalText`: `nil`
-- `newText`: concatenated text of all nested `<w:r>` children's runs
+#### Scenario: Exported script is runnable Swift
 
-#### Scenario: Insertion with text content emits revision
+- **GIVEN** an `OperationLog` containing operations
+- **WHEN** `exportSwift(log:)` runs
+- **THEN** the returned String compiles as a Swift source file with `import WordDSLSwift` and a top-level `let document = WordDocument { ... }` declaration conforming to `mdocx-grammar`, whose execution emits the operations
 
-- **WHEN** a paragraph XML contains `<w:ins w:id="1" w:author="Alice" w:date="2026-04-16T10:00:00Z"><w:r><w:t>hello</w:t></w:r></w:ins>`
-- **THEN** `paragraph.revisions` contains exactly one `Revision` with `id == 1`, `type == .insertion`, `author == "Alice"`, `newText == "hello"`, `originalText == nil`
+#### Scenario: Round-trip log → script → log preserves operations
 
-#### Scenario: Insertion with empty content emits no revision
-
-- **WHEN** a `<w:ins>` element has no nested `<w:r>` children, or its children produce no text
-- **THEN** no `Revision` is appended for that element
-
-<!-- @trace
-source: docx-reader-top-level-revisions
-updated: 2026-04-16
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: DocxReader parses w:del deletion revisions
-
-`DocxReader.parseParagraph` SHALL emit a `Revision` with `type == .deletion` for every `<w:del>` element appearing as a direct child of a paragraph (`<w:p>`). The emitted revision SHALL carry:
-
-- `id`: the integer value of the `w:id` attribute (or 0 if missing)
-- `type`: `.deletion`
-- `author`: the string value of the `w:author` attribute (or `"Unknown"` if missing)
-- `date`: the ISO8601-parsed `w:date` attribute (or the current date if missing)
-- `originalText`: concatenated text of all nested `<w:r><w:delText>` children
-- `newText`: `nil`
-
-#### Scenario: Deletion with delText emits revision
-
-- **WHEN** a paragraph XML contains `<w:del w:id="2" w:author="Bob" w:date="2026-04-16T11:00:00Z"><w:r><w:delText>removed</w:delText></w:r></w:del>`
-- **THEN** `paragraph.revisions` contains a `Revision` with `type == .deletion`, `author == "Bob"`, `originalText == "removed"`, `newText == nil`
-
-#### Scenario: Deletion with empty content emits no revision
-
-- **WHEN** a `<w:del>` element has no nested `<w:r><w:delText>` or the delText elements are empty
-- **THEN** no `Revision` is appended for that element
-
-<!-- @trace
-source: docx-reader-top-level-revisions
-updated: 2026-04-16
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: DocxReader parses w:moveFrom revisions
-
-`DocxReader.parseParagraph` SHALL emit a `Revision` with `type == .moveFrom` for every `<w:moveFrom>` element appearing as a direct child of a paragraph (`<w:p>`). The emitted revision SHALL carry:
-
-- `id`: the integer value of the `w:id` attribute (or 0 if missing)
-- `type`: `.moveFrom`
-- `author`: the string value of the `w:author` attribute (or `"Unknown"` if missing)
-- `date`: the ISO8601-parsed `w:date` attribute (or the current date if missing)
-- `originalText`: concatenated text of all nested `<w:r>` children (representing the text that was moved out)
-- `newText`: `nil`
-
-The nested `<w:r>` children SHALL also be appended to `paragraph.runs` so document text extraction includes the moved-from content in its original position.
-
-#### Scenario: moveFrom with text content emits revision
-
-- **WHEN** a paragraph XML contains `<w:moveFrom w:id="3" w:author="Alice" w:date="2026-04-16T12:00:00Z"><w:r><w:t>moved source</w:t></w:r></w:moveFrom>`
-- **THEN** `paragraph.revisions` contains a `Revision` with `id == 3`, `type == .moveFrom`, `author == "Alice"`, `originalText == "moved source"`, `newText == nil`
-
-#### Scenario: moveFrom with multiple runs concatenates text
-
-- **WHEN** `<w:moveFrom>` contains two `<w:r><w:t>` children with text `"first "` and `"second"`
-- **THEN** the emitted `Revision.originalText` equals `"first second"`
-
-<!-- @trace
-source: docx-reader-top-level-revisions
-updated: 2026-04-16
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: DocxReader parses w:moveTo revisions
-
-`DocxReader.parseParagraph` SHALL emit a `Revision` with `type == .moveTo` for every `<w:moveTo>` element appearing as a direct child of a paragraph (`<w:p>`). The emitted revision SHALL carry:
-
-- `id`: the integer value of the `w:id` attribute (or 0 if missing)
-- `type`: `.moveTo`
-- `author`: the string value of the `w:author` attribute (or `"Unknown"` if missing)
-- `date`: the ISO8601-parsed `w:date` attribute (or the current date if missing)
-- `originalText`: `nil`
-- `newText`: concatenated text of all nested `<w:r>` children (representing the text that was moved in)
-
-The nested `<w:r>` children SHALL also be appended to `paragraph.runs` so document text extraction includes the moved-to content.
-
-#### Scenario: moveTo with text content emits revision
-
-- **WHEN** a paragraph XML contains `<w:moveTo w:id="4" w:author="Alice" w:date="2026-04-16T12:00:00Z"><w:r><w:t>moved destination</w:t></w:r></w:moveTo>`
-- **THEN** `paragraph.revisions` contains a `Revision` with `id == 4`, `type == .moveTo`, `author == "Alice"`, `newText == "moved destination"`, `originalText == nil`
-
-#### Scenario: moveTo and moveFrom pair share revision id
-
-- **WHEN** a document has `<w:moveFrom w:id="5" .../>` in one paragraph and `<w:moveTo w:id="5" .../>` in another
-- **THEN** two separate `Revision` objects are emitted (one per paragraph) both with `id == 5`, allowing callers to correlate source and destination by id
-
-<!-- @trace
-source: docx-reader-top-level-revisions
-updated: 2026-04-16
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: DocxReader surfaces unknown paragraph elements via debug logging
-
-`DocxReader` SHALL expose a public static `debugLoggingEnabled: Bool` flag (default `false`). When `true`, `DocxReader.parseParagraph` SHALL write a single line to `FileHandle.standardError` for each direct child of `<w:p>` whose local name is not one of `r`, `ins`, `del`, `moveFrom`, `moveTo`, `commentRangeStart`, `commentRangeEnd`, `commentReference`, `pPr`, `bookmarkStart`, `bookmarkEnd`, `hyperlink`, `fldSimple`, `sdt`.
-
-The log line format SHALL be: `"DocxReader.parseParagraph: skipped unknown element <localName>\n"`.
-
-When the flag is `false` (default), no output is produced and parsing performance is unchanged (the guard SHALL be evaluated before any string interpolation).
-
-#### Scenario: Default flag value produces no logs
-
-- **WHEN** `DocxReader.debugLoggingEnabled` is left at its default `false` and a paragraph contains an unknown element
-- **THEN** nothing is written to stderr and parsing completes normally with the unknown element silently skipped
-
-#### Scenario: Enabled flag emits one line per unknown element
-
-- **WHEN** a test sets `DocxReader.debugLoggingEnabled = true` and parses a paragraph containing a `<w:customElement/>` child
-- **THEN** exactly one line `"DocxReader.parseParagraph: skipped unknown element customElement\n"` is written to stderr
-
-#### Scenario: Known elements produce no log output when flag enabled
-
-- **WHEN** the flag is `true` and a paragraph contains only `<w:r>`, `<w:ins>`, or other recognized elements
-- **THEN** no log lines are emitted
-
-<!-- @trace
-source: docx-reader-top-level-revisions
-updated: 2026-04-16
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: Revision aggregation preserves revision order
-
-The `WordDocument.revisions` array populated during `DocxReader.read` SHALL contain all `Revision` objects emitted from body paragraphs in document order (the paragraph index assigned to each revision SHALL match the `body.children` enumeration order of its source paragraph).
-
-#### Scenario: Revisions in document order
-
-- **WHEN** a document has two paragraphs — paragraph 0 contains an insertion, paragraph 2 contains a moveFrom — and the document is read via `DocxReader.read(from:)`
-- **THEN** `document.revisions.revisions` contains two entries: the insertion with `paragraphIndex == 0` first, the moveFrom with `paragraphIndex == 2` second
-
-#### Scenario: Multiple revisions in same paragraph preserve child order
-
-- **WHEN** a single paragraph contains `<w:ins>` followed by `<w:moveTo>`
-- **THEN** `paragraph.revisions` lists the insertion before the moveTo, and both carry the same `paragraphIndex`
-
-<!-- @trace
-source: docx-reader-top-level-revisions
-updated: 2026-04-16
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: Revision accept/reject SHALL find mixed-content wrappers across all document parts
-
-When `Document.acceptRevision(id:)` or `Document.rejectRevision(id:)` is invoked for a revision whose `isMixedContentWrapper` flag is true, the helper SHALL walk every part-rooted paragraph collection — body (including nested tables and content-control children), every header, every footer, every footnote, every endnote — to locate the corresponding `unrecognizedChildren` entry whose opening tag matches the revision id. The helper SHALL return the originating part key (e.g., `word/document.xml`, `word/header1.xml`, `word/footnotes.xml`) so the caller can mark the correct part dirty.
-
-If the helper cannot locate a matching `unrecognizedChildren` entry in any part, the caller SHALL throw `RevisionError.notFound(id)` instead of silently removing the typed `Revision` and returning success. The prior R3 behavior of removing the typed entry, marking `word/document.xml` dirty, and returning without finding the wrapper is forbidden because it produces ghost revisions on reload.
-
-#### Scenario: acceptRevision on header-paragraph mixed-content wrapper unwraps in header part
-
-- **GIVEN** a document whose `word/header1.xml` contains a paragraph with `<w:ins w:id="9" w:author="Bob"><w:hyperlink r:id="rId2"><w:r><w:t>head-link</w:t></w:r></w:hyperlink></w:ins>` and that revision was propagated to `document.revisions.revisions` with `isMixedContentWrapper == true`
-- **WHEN** `document.acceptRevision(id: 9)` is invoked and the document is written back via `DocxWriter` then re-read via `DocxReader`
-- **THEN** the re-read document's `word/header1.xml` paragraph contains the inner `<w:hyperlink>` content WITHOUT the `<w:ins>` wrapper
-- **AND** `document.revisions.revisions` no longer contains a Revision with id == 9
-- **AND** `document.modifiedParts` after acceptance includes `word/header1.xml` (not `word/document.xml`)
-
-#### Scenario: rejectRevision on footnote mixed-content wrapper removes from footnotes part
-
-- **GIVEN** a document whose `word/footnotes.xml` contains a paragraph with `<w:del w:id="11" w:author="Bob"><w:hyperlink r:id="rId3"><w:r><w:t>doomed</w:t></w:r></w:hyperlink></w:del>`
-- **WHEN** `document.rejectRevision(id: 11)` is invoked, the document is round-tripped through `DocxWriter` then `DocxReader`
-- **THEN** the re-read document's footnote paragraph does NOT contain `<w:del w:id="11"` and does NOT contain the inner hyperlink (deletion rejected restores deleted content; here `w:del` rejected means content stays but for a deletion-rejected wrapper unwrap behavior, see R3 spec — this scenario tests the wrapper is removed from the correct part)
-- **AND** `document.revisions.revisions` no longer contains a Revision with id == 11
-- **AND** `document.modifiedParts` after rejection includes `word/footnotes.xml`
-
-#### Scenario: acceptRevision on missing wrapper raises notFound
-
-- **GIVEN** a document where `document.revisions.revisions` contains a `Revision` with id == 99 but no paragraph in any part has a matching `unrecognizedChildren` entry whose opening tag contains `w:id="99"`
-- **WHEN** `document.acceptRevision(id: 99)` is invoked
-- **THEN** the call throws `RevisionError.notFound(99)`
-- **AND** `document.revisions.revisions` is NOT mutated
-- **AND** `document.modifiedParts` is NOT mutated
-
----
-### Requirement: DocxReader SHALL propagate typed Revisions from block-level SDT children into document.revisions.revisions
-
-When `DocxReader.read()` post-processes paragraphs to populate `document.revisions.revisions` from per-paragraph `revisions` arrays, the post-processor SHALL recurse into every `BodyChild.contentControl` to visit the content control's child paragraphs and tables, propagating any typed `Revision` entries found there. The R3-NEW-4 behavior of `case .contentControl: break` (skipping the recursion) is forbidden because it makes block-level SDT-wrapped revisions invisible to MCP `accept_revision` (the lookup `revisions.firstIndex(where: $0.id == id)` returns nil → throws notFound for revisions that physically exist in the model's per-paragraph storage).
-
-#### Scenario: Block-level SDT-wrapped revision surfaces in document.revisions.revisions
-
-- **GIVEN** source XML with `<w:sdt><w:sdtContent><w:p><w:ins w:id="13"><w:hyperlink><w:r><w:t>x</w:t></w:r></w:hyperlink></w:ins></w:p></w:sdtContent></w:sdt>` as a body-level structured document tag
-- **WHEN** `DocxReader.read()` parses the document
-- **THEN** `document.revisions.revisions` contains a `Revision` with `id == 13`, `type == .insertion`, `isMixedContentWrapper == true`
-- **AND** `document.acceptRevision(id: 13)` does NOT throw `notFound`
-- **AND** after acceptance + roundtrip, the SDT's inner paragraph contains the unwrapped hyperlink without the `<w:ins>` wrapper
-
-<!-- @trace
-source: che-word-mcp-issue-56-r4-stack-completion
-updated: 2026-04-26
-code:
-  - packages/ooxml-swift/Sources/OOXMLSwift/Models/Document.swift
-  - packages/ooxml-swift/Sources/OOXMLSwift/IO/DocxReader.swift
--->
-
----
-### Requirement: Mixed-content revision wrappers SHALL populate both raw and typed representations
-
-When `DocxReader.parseParagraph` encounters a revision wrapper element (`<w:ins>`, `<w:del>`, `<w:moveFrom>`, or `<w:moveTo>`) that has at least one direct child element other than `<w:r>` (e.g., a nested `<w:hyperlink>`, a nested `<w:sdt>`, a nested bookmark marker), the parser SHALL:
-
-1. Append the wrapper's verbatim XML string to `paragraph.unrecognizedChildren` for byte-equivalent emit (the existing P0-7 behavior).
-2. ALSO append a `Revision` entry to `paragraph.revisions` with `id`, `type`, `author`, and `date` populated from the wrapper's attributes. `originalText` and `newText` SHALL be the concatenated text of all `<w:r>` descendants of the wrapper (best-effort plain-text extraction). This `Revision` entry SHALL carry a marker (e.g., `isMixedContentWrapper: Bool == true`) indicating that mutation operations on this entry must coordinate with `unrecognizedChildren` to maintain consistency.
-
-`Document.acceptRevision` and `Document.rejectRevision` SHALL detect mixed-content wrapper revisions (via the marker) and, in addition to removing the typed `Revision` entry, strip the corresponding raw entry from `unrecognizedChildren` (or unwrap the inner content into the surrounding paragraph for `accept`).
-
-#### Scenario: w:ins wrapping a hyperlink populates both representations
-
-- **GIVEN** source paragraph XML containing `<w:ins w:id="5" w:author="Alice" w:date="2026-04-25T10:00:00Z"><w:hyperlink r:id="rId1"><w:r><w:t>linked</w:t></w:r></w:hyperlink></w:ins>`
-- **WHEN** the paragraph is parsed by `DocxReader`
-- **THEN** `paragraph.unrecognizedChildren` contains exactly one entry whose XML string starts with `<w:ins w:id="5"` and ends with `</w:ins>`
-- **AND** `paragraph.revisions` contains exactly one `Revision` with `id == 5`, `type == .insertion`, `author == "Alice"`, `newText == "linked"`
-
-#### Scenario: acceptRevision on mixed-content wrapper unwraps inner content
-
-- **GIVEN** a paragraph with one mixed-content `<w:ins>` revision (id=5) wrapping a hyperlink, captured per the previous scenario
-- **WHEN** `document.acceptRevision(id: 5)` is invoked and the document is re-emitted
-- **THEN** the emitted XML contains the inner `<w:hyperlink>` content WITHOUT the `<w:ins>` wrapper
-- **AND** `paragraph.revisions` no longer contains a Revision with id == 5
-- **AND** `paragraph.unrecognizedChildren` no longer contains the `<w:ins>` raw entry
-
-#### Scenario: rejectRevision on mixed-content insertion removes the entire wrapper and content
-
-- **GIVEN** the same starting state as the acceptRevision scenario
-- **WHEN** `document.rejectRevision(id: 5)` is invoked and the document is re-emitted
-- **THEN** the emitted XML does NOT contain `<w:ins w:id="5"` and does NOT contain the inner hyperlink
-- **AND** `paragraph.revisions` no longer contains a Revision with id == 5
-- **AND** `paragraph.unrecognizedChildren` no longer contains the `<w:ins>` raw entry
-
-<!-- @trace
-source: che-word-mcp-issue-56-r3-stack-completion
-updated: 2026-04-27
--->
-
----
-### Requirement: Revision elements preserved via tree on round-trip
-
-`DocxReader.parseParagraph` SHALL parse known revision elements (`<w:ins>`, `<w:del>`, `<w:moveFrom>`, `<w:moveTo>`, `<w:rPrChange>`, `<w:pPrChange>`) into typed `Revision` accessors AND retain the underlying `XmlNode` representation. Round-trip with no mutations SHALL produce byte-equal revision markup in the output.
-
-#### Scenario: Revision metadata survives round-trip
-
-- **GIVEN** a paragraph containing `<w:ins w:id="42" w:author="Alice" w:date="2026-05-04T10:00:00Z"><w:r>...</w:r></w:ins>`
-- **WHEN** the document is read and written with no mutations
-- **THEN** the output contains the same `<w:ins>` element byte-equal to the input, including `w:id`, `w:author`, and `w:date` attributes
+- **GIVEN** an input `OperationLog L`
+- **WHEN** `L'` is reconstructed from `ScriptImporter.parse(ScriptExporter.exportSwift(log: L))`
+- **THEN** every operation in `L'` matches the corresponding operation in `L` for `op_type`, `payload`, and `source` fields (`op_id` and `timestamp` may differ since they regenerate)
 
 
 <!-- @trace
@@ -446,193 +189,30 @@ code:
 -->
 
 ---
-### Requirement: Unknown revision children are preserved verbatim
+### Requirement: Swift script to operation log import
 
-`DocxReader.parseParagraph` SHALL NOT surface unknown revision children as opaque `unknown` sentinel placeholders. Unknown children SHALL pass through to the `XmlNode` tree and round-trip byte-equal.
+The library SHALL provide `ScriptImporter.parse(source:)` that reads a Swift source string conforming to the exporter's grammar and returns the equivalent `OperationLog`.
 
-#### Scenario: w16 revision extension is preserved
+#### Scenario: Hand-written script imports successfully
 
-- **GIVEN** a paragraph containing `<w16cid:commentsExtensible w16cid:durableId="123ABC"/>` (a future Word revision-extension namespace)
-- **WHEN** the document is read and written with no mutations
-- **THEN** the output contains the same `<w16cid:commentsExtensible>` element byte-equal to the input
-- **AND** no typed model surfaces an `unknown` revision sentinel for this element
+- **GIVEN** a Swift script (mdocx-grammar canonical form):
+  ```swift
+  import WordDSLSwift
 
+  let document = WordDocument {
+      Section(id: "main") {
+          Paragraph(id: "p-title", style: .heading1) { "Title" }
+          Paragraph(id: "p-intro") { "Body intro" }
+      }
+  }
+  ```
+- **WHEN** `ScriptImporter.parse(source:)` runs
+- **THEN** the returned log contains operations equivalent to `[defineStyle(heading1), appendParagraph(in: nil, "Title", styleId: "Heading1"), insertParagraphAfter(after: p-title, "Body intro")]` (canonical names per `ooxml-operation-log`)
 
-<!-- @trace
-source: word-aligned-state-sync
-updated: 2026-07-06
-code:
-  - .remember/logs/autonomous/save-093124.log
-  - .remember/logs/autonomous/save-144618.log
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
-  - .remember/logs/autonomous/save-095118.log
-  - plugins/macdoc/hooks/hooks.json
-  - .remember/logs/autonomous/save-092917.log
-  - .remember/logs/autonomous/save-144617.log
-  - .remember/logs/autonomous/save-143020.log
-  - Sources/MacDocCLI/MacDoc+Word.swift
-  - .remember/logs/autonomous/save-133659.log
-  - .remember/logs/autonomous/save-130140.log
-  - .remember/logs/autonomous/save-050704.log
-  - .remember/logs/autonomous/save-093340.log
-  - mcp/che-word-mcp
-  - .remember/logs/autonomous/save-071551.log
-  - .remember/logs/autonomous/save-095142.log
-  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
-  - reference/README.md
-  - .remember/logs/autonomous/save-094041.log
-  - .remember/logs/autonomous/save-144433.log
-  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
-  - .remember/logs/autonomous/save-090944.log
-  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
-  - .remember/logs/autonomous/save-092853.log
-  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
-  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
-  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
-  - .remember/logs/autonomous/save-095040.log
-  - .remember/logs/autonomous/save-094804.log
-  - .remember/logs/autonomous/save-093223.log
-  - .remember/logs/autonomous/save-125453.log
-  - mcp/che-pdf-mcp
-  - .remember/logs/autonomous/save-070717.log
-  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
-  - .remember/logs/autonomous/save-130011.log
-  - .remember/logs/autonomous/save-093300.log
-  - .remember/logs/autonomous/save-092705.log
-  - .remember/logs/autonomous/save-094627.log
-  - .claude-plugin/marketplace.json
-  - Package.swift
-  - .remember/logs/autonomous/save-053409.log
-  - plugins/che-pptx-mcp/README.md
-  - plugins/macdoc/.claude-plugin/plugin.json
-  - .remember/logs/autonomous/save-092804.log
-  - .remember/logs/autonomous/save-095621.log
-  - README.md
-  - .remember/logs/autonomous/save-093255.log
-  - docs/lossless-conversion.md
-  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
-  - Package.resolved
-  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
-  - .remember/logs/autonomous/save-091137.log
-  - .remember/logs/autonomous/save-130300.log
-  - Sources/MacDocCLI/MacDoc+Docx.swift
-  - mcp/che-pptx-mcp
-  - .remember/logs/autonomous/save-091219.log
-  - .remember/logs/autonomous/save-093039.log
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
-  - packages/docx-workflow-swift/Package.swift
-  - .github/PULL_REQUEST_TEMPLATE.md
-  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
-  - .remember/logs/autonomous/save-143628.log
-  - .remember/logs/autonomous/save-093030.log
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
-  - .remember/logs/autonomous/save-093138.log
-  - cli/FastOCR
-  - .remember/logs/autonomous/save-092657.log
-  - .remember/logs/autonomous/save-071130.log
-  - .remember/logs/autonomous/save-095539.log
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
-  - plugins/che-word-mcp/CLAUDE.md
-  - plugins/macdoc/skills/macdoc/SKILL.md
-  - .remember/logs/autonomous/save-095047.log
-  - plugins/che-word-mcp/README.md
-  - Tests/MacDocCLITests/CLITestHelper.swift
-  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
-  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
-  - plugins/che-word-mcp/.claude-plugin/plugin.json
-  - .remember/logs/autonomous/save-125949.log
-  - plugins/che-word-mcp/.mcp.json
-  - .github/skills/spectra-drift/SKILL.md
-  - plugins/che-pdf-mcp/README.md
-  - docs/stale-triage-chain-2026-05-25.md
-  - .remember/logs/autonomous/save-092636.log
-  - .remember/logs/autonomous/save-093312.log
-  - .remember/logs/autonomous/save-125924.log
-  - .remember/logs/autonomous/save-132950.log
-  - plugins/che-pdf-mcp/CHANGELOG.md
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
-  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
-  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
-  - .remember/logs/autonomous/save-092823.log
-  - .remember/logs/autonomous/save-093013.log
-  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
-  - .remember/logs/autonomous/save-093007.log
-  - .remember/logs/autonomous/save-132859.log
-  - plugins/che-word-mcp/CHANGELOG.md
-  - Sources/MacDocCLI/MacDoc.swift
-  - .remember/logs/autonomous/save-130250.log
-  - .remember/logs/autonomous/save-092843.log
-  - .remember/logs/autonomous/save-094757.log
-  - .remember/logs/autonomous/save-095147.log
-  - .remember/logs/autonomous/save-125131.log
-  - .remember/logs/autonomous/save-143733.log
-  - plugins/macdoc/hooks/session-start.sh
-  - packages/docx-workflow-swift/CHANGELOG.md
-  - .remember/logs/autonomous/save-144132.log
-  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
-  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
-  - docs/swift-as-document-source.md
-  - .remember/logs/autonomous/save-095059.log
-  - .remember/logs/autonomous/save-144827.log
-  - .remember/logs/autonomous/save-144003.log
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
-  - .remember/logs/autonomous/save-092931.log
-  - .remember/logs/autonomous/save-095037.log
-  - .remember/logs/autonomous/save-093149.log
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
-  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
-  - plugins/che-pptx-mcp/.mcp.json
-  - .remember/logs/autonomous/save-144334.log
-  - .remember/logs/autonomous/save-095049.log
-  - .remember/logs/autonomous/save-143318.log
-  - scripts/release-cli.sh
-  - .remember/logs/autonomous/save-143856.log
-  - CLAUDE.md
-  - .remember/logs/autonomous/save-144708.log
-  - Tests/MacDocCLITests/Fixtures/README.md
-  - .remember/logs/autonomous/save-092901.log
-  - .remember/logs/autonomous/save-095546.log
-  - .gitmodules
-  - .remember/logs/autonomous/save-094953.log
-  - .remember/logs/autonomous/save-143013.log
-  - .remember/logs/autonomous/save-092944.log
-  - .remember/logs/autonomous/save-090656.log
-  - packages/docx-workflow-swift/README.md
-  - plugins/che-pptx-mcp/CHANGELOG.md
-  - .remember/logs/autonomous/save-051714.log
-  - plugins/che-pdf-mcp/.mcp.json
-  - .remember/logs/autonomous/save-093825.log
-  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
-  - plugins/macdoc/CHANGELOG.md
-  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
-  - .remember/logs/autonomous/save-091107.log
-  - docs/edit-algebra-cd-discipline.md
-  - docs/structural-editing-paradigm.md
-  - .remember/logs/autonomous/save-143140.log
-  - .remember/logs/autonomous/save-144448.log
-  - .remember/logs/autonomous/save-131902.log
-  - .github/prompts/spectra-drift.prompt.md
-  - .remember/logs/autonomous/save-071148.log
-  - .remember/logs/autonomous/save-050705.log
-  - docs/docx-libraries-comparison.md
-  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
-  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
-  - docs/stale-triage-chain-batch2-2026-05-25.md
-  - .remember/logs/autonomous/save-144550.log
-  - .remember/logs/autonomous/save-143700.log
--->
+#### Scenario: Malformed script raises structured error
 
----
-### Requirement: Nested property-change revisions round-trip via tree
-
-Nested property-change revisions (`<w:rPrChange>` inside `<w:rPr>`, `<w:pPrChange>` inside `<w:pPr>`) SHALL round-trip byte-equal when unmodified, regardless of whether the typed `Revision` view exposes them.
-
-#### Scenario: rPrChange survives round-trip
-
-- **GIVEN** a run with `<w:rPr><w:rPrChange w:id="7" w:author="Alice"><w:rPr><w:b/></w:rPr></w:rPrChange></w:rPr>`
-- **WHEN** the document is read and written with no mutations
-- **THEN** the output contains the `<w:rPrChange>` element byte-equal to the input including its nested `<w:rPr>` snapshot
+- **WHEN** the import receives a Swift source that does not conform to the exporter grammar (e.g., contains arbitrary side-effecting code)
+- **THEN** `ScriptImporter.parse` throws `TranscodeError.unsupportedSyntax(line:column:reason:)` with a precise location
 
 
 <!-- @trace
@@ -801,15 +381,374 @@ code:
 -->
 
 ---
-### Requirement: Revision-source typed view backed by tree
+### Requirement: Build a docx end-to-end from a Swift script
 
-The existing `Revision.source` enum and `getRevisionsFull()` API SHALL continue to disambiguate where each revision originated (body vs. header vs. footer vs. footnote vs. endnote vs. comment). Their backing storage moves to the `XmlNode` tree; observable behavior of the typed API is unchanged.
+The library SHALL support construction of a complete docx file from a Swift script with no prior docx as input. An empty `WordDocument { }` declaration SHALL initialize an empty document; the script body populates it; `WordDocument.save(to:)` writes the resulting docx (atomic three-file write per `mdocx-grammar`).
 
-#### Scenario: Revisions report container source after the change
+#### Scenario: Empty document save produces valid docx
 
-- **GIVEN** a docx with revisions in body, header1, and footnote1
-- **WHEN** `getRevisionsFull()` is called
-- **THEN** the returned revisions carry `source` enum values matching their containers (`.body`, `.header(id: 1)`, `.footnote(id: 1)`) — identical observable behavior to the pre-change implementation
+- **WHEN** `WordDocument { }.save(to: url)` runs
+- **THEN** the resulting `url` is a valid docx readable by Word: `[Content_Types].xml`, `_rels/.rels`, `word/_rels/document.xml.rels`, `word/document.xml` are all present and well-formed
+
+#### Scenario: Script-built docx round-trips byte-equal
+
+- **GIVEN** a Swift script that builds a docx and saves to `script_output.docx`
+- **WHEN** the docx is opened in Word, saved without edits, and re-read by ooxml-swift
+- **THEN** the re-read content matches the original script's output for every typed view (no Word-side rejection, no schema warnings)
+
+
+<!-- @trace
+source: word-aligned-state-sync
+updated: 2026-07-06
+code:
+  - .remember/logs/autonomous/save-093124.log
+  - .remember/logs/autonomous/save-144618.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
+  - .remember/logs/autonomous/save-095118.log
+  - plugins/macdoc/hooks/hooks.json
+  - .remember/logs/autonomous/save-092917.log
+  - .remember/logs/autonomous/save-144617.log
+  - .remember/logs/autonomous/save-143020.log
+  - Sources/MacDocCLI/MacDoc+Word.swift
+  - .remember/logs/autonomous/save-133659.log
+  - .remember/logs/autonomous/save-130140.log
+  - .remember/logs/autonomous/save-050704.log
+  - .remember/logs/autonomous/save-093340.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-071551.log
+  - .remember/logs/autonomous/save-095142.log
+  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
+  - reference/README.md
+  - .remember/logs/autonomous/save-094041.log
+  - .remember/logs/autonomous/save-144433.log
+  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
+  - .remember/logs/autonomous/save-090944.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
+  - .remember/logs/autonomous/save-092853.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
+  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
+  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
+  - .remember/logs/autonomous/save-095040.log
+  - .remember/logs/autonomous/save-094804.log
+  - .remember/logs/autonomous/save-093223.log
+  - .remember/logs/autonomous/save-125453.log
+  - mcp/che-pdf-mcp
+  - .remember/logs/autonomous/save-070717.log
+  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-130011.log
+  - .remember/logs/autonomous/save-093300.log
+  - .remember/logs/autonomous/save-092705.log
+  - .remember/logs/autonomous/save-094627.log
+  - .claude-plugin/marketplace.json
+  - Package.swift
+  - .remember/logs/autonomous/save-053409.log
+  - plugins/che-pptx-mcp/README.md
+  - plugins/macdoc/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095621.log
+  - README.md
+  - .remember/logs/autonomous/save-093255.log
+  - docs/lossless-conversion.md
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
+  - Package.resolved
+  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-130300.log
+  - Sources/MacDocCLI/MacDoc+Docx.swift
+  - mcp/che-pptx-mcp
+  - .remember/logs/autonomous/save-091219.log
+  - .remember/logs/autonomous/save-093039.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
+  - packages/docx-workflow-swift/Package.swift
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-093030.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
+  - .remember/logs/autonomous/save-093138.log
+  - cli/FastOCR
+  - .remember/logs/autonomous/save-092657.log
+  - .remember/logs/autonomous/save-071130.log
+  - .remember/logs/autonomous/save-095539.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
+  - plugins/che-word-mcp/CLAUDE.md
+  - plugins/macdoc/skills/macdoc/SKILL.md
+  - .remember/logs/autonomous/save-095047.log
+  - plugins/che-word-mcp/README.md
+  - Tests/MacDocCLITests/CLITestHelper.swift
+  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
+  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
+  - plugins/che-word-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-125949.log
+  - plugins/che-word-mcp/.mcp.json
+  - .github/skills/spectra-drift/SKILL.md
+  - plugins/che-pdf-mcp/README.md
+  - docs/stale-triage-chain-2026-05-25.md
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-093312.log
+  - .remember/logs/autonomous/save-125924.log
+  - .remember/logs/autonomous/save-132950.log
+  - plugins/che-pdf-mcp/CHANGELOG.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
+  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
+  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
+  - .remember/logs/autonomous/save-092823.log
+  - .remember/logs/autonomous/save-093013.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-132859.log
+  - plugins/che-word-mcp/CHANGELOG.md
+  - Sources/MacDocCLI/MacDoc.swift
+  - .remember/logs/autonomous/save-130250.log
+  - .remember/logs/autonomous/save-092843.log
+  - .remember/logs/autonomous/save-094757.log
+  - .remember/logs/autonomous/save-095147.log
+  - .remember/logs/autonomous/save-125131.log
+  - .remember/logs/autonomous/save-143733.log
+  - plugins/macdoc/hooks/session-start.sh
+  - packages/docx-workflow-swift/CHANGELOG.md
+  - .remember/logs/autonomous/save-144132.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
+  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
+  - docs/swift-as-document-source.md
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-144827.log
+  - .remember/logs/autonomous/save-144003.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
+  - .remember/logs/autonomous/save-092931.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-093149.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
+  - plugins/che-pptx-mcp/.mcp.json
+  - .remember/logs/autonomous/save-144334.log
+  - .remember/logs/autonomous/save-095049.log
+  - .remember/logs/autonomous/save-143318.log
+  - scripts/release-cli.sh
+  - .remember/logs/autonomous/save-143856.log
+  - CLAUDE.md
+  - .remember/logs/autonomous/save-144708.log
+  - Tests/MacDocCLITests/Fixtures/README.md
+  - .remember/logs/autonomous/save-092901.log
+  - .remember/logs/autonomous/save-095546.log
+  - .gitmodules
+  - .remember/logs/autonomous/save-094953.log
+  - .remember/logs/autonomous/save-143013.log
+  - .remember/logs/autonomous/save-092944.log
+  - .remember/logs/autonomous/save-090656.log
+  - packages/docx-workflow-swift/README.md
+  - plugins/che-pptx-mcp/CHANGELOG.md
+  - .remember/logs/autonomous/save-051714.log
+  - plugins/che-pdf-mcp/.mcp.json
+  - .remember/logs/autonomous/save-093825.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
+  - plugins/macdoc/CHANGELOG.md
+  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
+  - .remember/logs/autonomous/save-091107.log
+  - docs/edit-algebra-cd-discipline.md
+  - docs/structural-editing-paradigm.md
+  - .remember/logs/autonomous/save-143140.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-131902.log
+  - .github/prompts/spectra-drift.prompt.md
+  - .remember/logs/autonomous/save-071148.log
+  - .remember/logs/autonomous/save-050705.log
+  - docs/docx-libraries-comparison.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
+  - docs/stale-triage-chain-batch2-2026-05-25.md
+  - .remember/logs/autonomous/save-144550.log
+  - .remember/logs/autonomous/save-143700.log
+-->
+
+---
+### Requirement: Stable script formatting for diff readability
+
+The exported Swift script SHALL use a stable, deterministic formatting (consistent indentation, predictable line ordering, deterministic comment placement) so that two logs differing by one operation produce scripts that differ by one localized hunk in `git diff`.
+
+#### Scenario: Adding one operation produces one-hunk diff
+
+- **GIVEN** logs `L1` of length N and `L2 = L1 + [op_new]` of length N+1
+- **WHEN** `exportSwift(L1)` and `exportSwift(L2)` are diffed
+- **THEN** the diff contains exactly one inserted block corresponding to `op_new`; no other lines change
+
+
+<!-- @trace
+source: word-aligned-state-sync
+updated: 2026-07-06
+code:
+  - .remember/logs/autonomous/save-093124.log
+  - .remember/logs/autonomous/save-144618.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
+  - .remember/logs/autonomous/save-095118.log
+  - plugins/macdoc/hooks/hooks.json
+  - .remember/logs/autonomous/save-092917.log
+  - .remember/logs/autonomous/save-144617.log
+  - .remember/logs/autonomous/save-143020.log
+  - Sources/MacDocCLI/MacDoc+Word.swift
+  - .remember/logs/autonomous/save-133659.log
+  - .remember/logs/autonomous/save-130140.log
+  - .remember/logs/autonomous/save-050704.log
+  - .remember/logs/autonomous/save-093340.log
+  - mcp/che-word-mcp
+  - .remember/logs/autonomous/save-071551.log
+  - .remember/logs/autonomous/save-095142.log
+  - plugins/che-pdf-mcp/bin/che-pdf-mcp-wrapper.sh
+  - reference/README.md
+  - .remember/logs/autonomous/save-094041.log
+  - .remember/logs/autonomous/save-144433.log
+  - packages/pdf-to-docx-swift/Sources/PDFToDOCX/PDFToDOCXConverter.swift
+  - .remember/logs/autonomous/save-090944.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
+  - .remember/logs/autonomous/save-092853.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGeneratorTests.swift
+  - Tests/MacDocCLITests/MacDocDocxIntegrationTests.swift
+  - plugins/che-pptx-mcp/bin/che-pptx-mcp-wrapper.sh
+  - .remember/logs/autonomous/save-095040.log
+  - .remember/logs/autonomous/save-094804.log
+  - .remember/logs/autonomous/save-093223.log
+  - .remember/logs/autonomous/save-125453.log
+  - mcp/che-pdf-mcp
+  - .remember/logs/autonomous/save-070717.log
+  - plugins/che-pptx-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-130011.log
+  - .remember/logs/autonomous/save-093300.log
+  - .remember/logs/autonomous/save-092705.log
+  - .remember/logs/autonomous/save-094627.log
+  - .claude-plugin/marketplace.json
+  - Package.swift
+  - .remember/logs/autonomous/save-053409.log
+  - plugins/che-pptx-mcp/README.md
+  - plugins/macdoc/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-092804.log
+  - .remember/logs/autonomous/save-095621.log
+  - README.md
+  - .remember/logs/autonomous/save-093255.log
+  - docs/lossless-conversion.md
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
+  - Package.resolved
+  - packages/md-to-word-swift/Sources/MDToWord/MarkdownToWordConverter.swift
+  - .remember/logs/autonomous/save-091137.log
+  - .remember/logs/autonomous/save-130300.log
+  - Sources/MacDocCLI/MacDoc+Docx.swift
+  - mcp/che-pptx-mcp
+  - .remember/logs/autonomous/save-091219.log
+  - .remember/logs/autonomous/save-093039.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
+  - packages/docx-workflow-swift/Package.swift
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
+  - .remember/logs/autonomous/save-143628.log
+  - .remember/logs/autonomous/save-093030.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
+  - .remember/logs/autonomous/save-093138.log
+  - cli/FastOCR
+  - .remember/logs/autonomous/save-092657.log
+  - .remember/logs/autonomous/save-071130.log
+  - .remember/logs/autonomous/save-095539.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
+  - plugins/che-word-mcp/CLAUDE.md
+  - plugins/macdoc/skills/macdoc/SKILL.md
+  - .remember/logs/autonomous/save-095047.log
+  - plugins/che-word-mcp/README.md
+  - Tests/MacDocCLITests/CLITestHelper.swift
+  - Tests/MacDocCLITests/NoteHTMLConvertTests.swift
+  - plugins/che-pdf-mcp/skills/che-pdf-mcp/SKILL.md
+  - plugins/che-word-mcp/.claude-plugin/plugin.json
+  - .remember/logs/autonomous/save-125949.log
+  - plugins/che-word-mcp/.mcp.json
+  - .github/skills/spectra-drift/SKILL.md
+  - plugins/che-pdf-mcp/README.md
+  - docs/stale-triage-chain-2026-05-25.md
+  - .remember/logs/autonomous/save-092636.log
+  - .remember/logs/autonomous/save-093312.log
+  - .remember/logs/autonomous/save-125924.log
+  - .remember/logs/autonomous/save-132950.log
+  - plugins/che-pdf-mcp/CHANGELOG.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
+  - plugins/che-word-mcp/bin/che-word-mcp-wrapper.sh
+  - packages/word-to-html-swift/Sources/WordToHTML/WordHTMLConverter.swift
+  - .remember/logs/autonomous/save-092823.log
+  - .remember/logs/autonomous/save-093013.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
+  - .remember/logs/autonomous/save-093007.log
+  - .remember/logs/autonomous/save-132859.log
+  - plugins/che-word-mcp/CHANGELOG.md
+  - Sources/MacDocCLI/MacDoc.swift
+  - .remember/logs/autonomous/save-130250.log
+  - .remember/logs/autonomous/save-092843.log
+  - .remember/logs/autonomous/save-094757.log
+  - .remember/logs/autonomous/save-095147.log
+  - .remember/logs/autonomous/save-125131.log
+  - .remember/logs/autonomous/save-143733.log
+  - plugins/macdoc/hooks/session-start.sh
+  - packages/docx-workflow-swift/CHANGELOG.md
+  - .remember/logs/autonomous/save-144132.log
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
+  - plugins/che-pdf-mcp/.claude-plugin/plugin.json
+  - docs/swift-as-document-source.md
+  - .remember/logs/autonomous/save-095059.log
+  - .remember/logs/autonomous/save-144827.log
+  - .remember/logs/autonomous/save-144003.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
+  - .remember/logs/autonomous/save-092931.log
+  - .remember/logs/autonomous/save-095037.log
+  - .remember/logs/autonomous/save-093149.log
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
+  - plugins/che-pptx-mcp/.mcp.json
+  - .remember/logs/autonomous/save-144334.log
+  - .remember/logs/autonomous/save-095049.log
+  - .remember/logs/autonomous/save-143318.log
+  - scripts/release-cli.sh
+  - .remember/logs/autonomous/save-143856.log
+  - CLAUDE.md
+  - .remember/logs/autonomous/save-144708.log
+  - Tests/MacDocCLITests/Fixtures/README.md
+  - .remember/logs/autonomous/save-092901.log
+  - .remember/logs/autonomous/save-095546.log
+  - .gitmodules
+  - .remember/logs/autonomous/save-094953.log
+  - .remember/logs/autonomous/save-143013.log
+  - .remember/logs/autonomous/save-092944.log
+  - .remember/logs/autonomous/save-090656.log
+  - packages/docx-workflow-swift/README.md
+  - plugins/che-pptx-mcp/CHANGELOG.md
+  - .remember/logs/autonomous/save-051714.log
+  - plugins/che-pdf-mcp/.mcp.json
+  - .remember/logs/autonomous/save-093825.log
+  - Tests/MacDocCLITests/Fixtures/NoteFixtureGenerator.swift
+  - plugins/macdoc/CHANGELOG.md
+  - plugins/che-word-mcp/skills/che-word-mcp/SKILL.md
+  - .remember/logs/autonomous/save-091107.log
+  - docs/edit-algebra-cd-discipline.md
+  - docs/structural-editing-paradigm.md
+  - .remember/logs/autonomous/save-143140.log
+  - .remember/logs/autonomous/save-144448.log
+  - .remember/logs/autonomous/save-131902.log
+  - .github/prompts/spectra-drift.prompt.md
+  - .remember/logs/autonomous/save-071148.log
+  - .remember/logs/autonomous/save-050705.log
+  - docs/docx-libraries-comparison.md
+  - packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
+  - packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
+  - docs/stale-triage-chain-batch2-2026-05-25.md
+  - .remember/logs/autonomous/save-144550.log
+  - .remember/logs/autonomous/save-143700.log
+-->
+
+---
+### Requirement: Script export covers all operation types in the log
+
+The exporter SHALL produce a Swift representation for every operation type defined by `ooxml-operation-log`. When an unknown future op_type is encountered, the exporter SHALL emit a comment marker and the raw JSON payload, preserving forward compatibility.
+
+#### Scenario: Unknown op_type round-trips via raw form
+
+- **GIVEN** a log containing an operation with `op_type: "future_op_v2"` not recognized by the current exporter
+- **WHEN** `exportSwift(log:)` runs and the result is parsed back via `ScriptImporter.parse`
+- **THEN** the unknown operation reappears in the resulting log byte-equal in its `payload` field
 
 <!-- @trace
 source: word-aligned-state-sync
