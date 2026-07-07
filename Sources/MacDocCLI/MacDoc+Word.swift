@@ -46,6 +46,12 @@ extension MacDoc.Word {
         @Flag(help: "覆寫既有的輸出檔案")
         var force = false
 
+        // Default false so presence toggles it on — swift-argument-parser's
+        // default-true `@Flag` can never become false (the flag would be a
+        // no-op). Report is opt-in; no report unless --coverage is passed.
+        @Flag(help: "印出 per-part DSL/raw 覆蓋率報告（dual-track coverage metric）")
+        var coverage = false
+
         func run() throws {
             let inputURL = try validatedInputURL(input)
             let outputURL = URL(fileURLWithPath: toMdocx)
@@ -69,6 +75,34 @@ extension MacDoc.Word {
             let source = ScriptExporter.exportSwift(log: log)
             try source.write(to: outputURL, atomically: true, encoding: .utf8)
             FileHandle.standardError.write(Data("已寫入: \(toMdocx)\n".utf8))
+
+            if coverage {
+                try Self.reportCoverage(for: inputURL)
+            }
+        }
+
+        /// Prints the dual-track coverage report to stdout: per-part DSL/raw
+        /// split + aggregate %. Phase A carries every part on the raw channel
+        /// (no part is fully DSL-representable yet), so the honest baseline is
+        /// all-raw → 0% DSL. `dslParts` populates as later phases lift content
+        /// classes from raw to DSL, and the metric climbs off zero.
+        static func reportCoverage(for url: URL) throws {
+            let parts = try RawPartChannel.readAllParts(from: url)
+            let report = RawPartChannel.partLevelCoverage(parts: parts, dslParts: [])
+            var lines = ["=== Coverage report: \(url.lastPathComponent) ==="]
+            for part in report.parts {
+                let channel = part.dslBytes > 0 ? "dsl" : "raw"
+                let pad = String(repeating: " ", count: max(1, 34 - part.partPath.count))
+                lines.append("\(part.partPath)\(pad)\(channel)  \(part.totalBytes) B   "
+                    + "DSL \(String(format: "%.1f", part.coverageRatio * 100))%")
+            }
+            lines.append(String(
+                format: "--- Aggregate: %.1f%% DSL (%d / %d XML bytes across %d parts) ---",
+                report.aggregateRatio * 100,
+                report.aggregateDSLBytes,
+                report.aggregateTotalBytes,
+                report.parts.count))
+            print(lines.joined(separator: "\n"))
         }
 
         /// Builds an authoring log from the docx typed views (no oplog input).

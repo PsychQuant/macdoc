@@ -375,7 +375,7 @@ swift build
 ### macdoc
 - `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
 - `Sources/MacDocCLI/MacDoc+Docx.swift` - `macdoc docx ...` 子命令（apply / plan / verify / diff —— manifest-driven .docx edit workflows，per openspec change `macdoc-docx-workflow-cli`，library 在 `packages/docx-workflow-swift`）
-- `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force]`（docx → `.mdocx.swift` 腳本反向轉換，word-aligned-state-sync Phase 4；有 oplog sidecar 時匯出現況 log，無 sidecar 時從 typed views 反向工程；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）
+- `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force] [--coverage]`（docx → `.mdocx.swift` 腳本反向轉換，word-aligned-state-sync Phase 4；有 oplog sidecar 時匯出現況 log，無 sidecar 時從 typed views 反向工程；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）。`--coverage`（format-alignment-engine Phase A #130）印出 dual-track 覆蓋率報告：每個 part 的 DSL/raw split + aggregate %，用 ooxml-swift 1.1.0 的 `RawPartChannel.partLevelCoverage`；Phase A 全走 raw channel（byte-equal floor）→ 誠實 0% DSL baseline，隨後續 phase 的 extraction 爬升
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
 - `Sources/MacDocCLI/MacDoc+OCR.swift` - OCR 子命令（top-level `macdoc ocr`，單檔 GLM-OCR）

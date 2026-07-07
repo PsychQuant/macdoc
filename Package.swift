@@ -42,7 +42,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
         // Direct dependency for `macdoc word reverse` (script transcoder:
         // ScriptExporter / SidecarStore / DocxReader live in OOXMLSwift).
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.34.0"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "1.1.0"),
     ],
     targets: [
         .executableTarget(
@@ -76,6 +76,9 @@ let package = Package(
             name: "MacDocCLITests",
             dependencies: [
                 .product(name: "NoteCore", package: "note-core-swift"),
+                // Authoring API for building synthetic docx fixtures in tests
+                // (WordReverseCoverageTests → emptyAuthoringDocument).
+                .product(name: "OOXMLSwift", package: "ooxml-swift"),
             ]
         ),
     ]
