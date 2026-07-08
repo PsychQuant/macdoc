@@ -42,6 +42,18 @@ headline 為 aggregate）。Stage B（全 part-set byte-equal)自 Phase A 起在
   nodes、未支援元素）；其他可能值如 `table`（非 canonical 形表格）、
   `hyperlink`、`byte-mismatch`（extraction 成功但 trial 重建 bytes 不等）。
 
+## Visual diff 實測（2026-07-08，task 4.3 gated harness）
+
+| Scenario | 結果 | 數值 |
+|----------|------|------|
+| identical documents pass（reference vs byte-equal rebuild）| PASSED | 全頁 pixel ratio = 0.0 |
+| layout drift is caught（去掉兩欄 sectPr）| PASSED | page 1 ratio 0.1107 ≫ threshold 0.005，具名頁碼 |
+
+跑法：`RUN_WORD_INTEGRATION=1 swift test --filter VisualDiffTests`（需 Microsoft
+Word）。注意 **`~/.cache/ooxml-swift-visual-diff` 目錄不可刪除**——sandbox 版
+Word 的資料夾存取授權（Grant Access）綁在這個固定路徑上；刪除重建會重新
+觸發阻塞式授權對話框，需再人工按一次「允許」。
+
 ## 重現方式
 
 ```bash
