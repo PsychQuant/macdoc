@@ -38,9 +38,14 @@ final class WordReverseCoverageTests: XCTestCase {
         let docx = tmp.appendingPathComponent("sample.docx")
         try makeSyntheticDocx(at: docx)
 
+        // Explicit paragraphs-only path — the mode that carries no
+        // byte-equal DSL claim, so the report is honestly all-raw (Phase A
+        // baseline semantics). The full-fidelity default's nonzero coverage
+        // is pinned by WordReverseFullFidelityTests (Phase C task 3.1).
         let out = tmp.appendingPathComponent("sample.mdocx.swift")
         let result = try CLITestHelper.run(
-            ["word", "reverse", docx.path, "--to-mdocx", out.path, "--coverage"])
+            ["word", "reverse", docx.path, "--to-mdocx", out.path,
+             "--coverage", "--paragraphs-only"])
         XCTAssertEqual(result.exitCode, 0, "reverse --coverage failed: \(result.stderr)")
 
         let stdout = result.stdout
@@ -49,9 +54,9 @@ final class WordReverseCoverageTests: XCTestCase {
         XCTAssertTrue(stdout.contains("DSL"), "missing DSL column:\n\(stdout)")
         XCTAssertNotNil(stdout.range(of: #"Aggregate:\s*[0-9.]+% DSL"#, options: .regularExpression),
                         "missing parsable aggregate line:\n\(stdout)")
-        // Phase A baseline: reverse carries all parts on the raw channel → 0% DSL.
+        // Paragraphs-only carries no byte-equal DSL claim → all-raw → 0%.
         XCTAssertNotNil(stdout.range(of: #"Aggregate:\s*0\.0% DSL"#, options: .regularExpression),
-                        "Phase A must report 0.0% DSL baseline:\n\(stdout)")
+                        "paragraphs-only must report the all-raw 0.0% baseline:\n\(stdout)")
     }
 
     /// Without --coverage, no report is printed — pins the default-false flag

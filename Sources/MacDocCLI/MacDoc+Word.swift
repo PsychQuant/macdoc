@@ -52,6 +52,21 @@ extension MacDoc.Word {
         @Flag(help: "印出 per-part DSL/raw 覆蓋率報告（dual-track coverage metric）")
         var coverage = false
 
+        // format-alignment-engine Phase C (task 3.1): full-fidelity
+        // (all-parts, byte-equal floor) is the DEFAULT; this opts out to the
+        // old paragraphs-only reverse (text + styleId, no sibling parts).
+        @Flag(name: .customLong("paragraphs-only"),
+              help: "只反向工程段落（舊行為）；預設為 full-fidelity 全 parts byte-equal 腳本")
+        var paragraphsOnly = false
+
+        // format-alignment-engine Phase D (task 4.1): named content slots —
+        // strict mode, explicit designation only (no inference).
+        @Option(name: .customLong("slot"),
+                help: ArgumentHelp(
+                    "具名內容 slot：<name>=<paragraph-id>（可重複）。指定段落的文字成為腳本的 Swift 函式參數，其餘內容逐字重建",
+                    valueName: "name=paraId"))
+        var slots: [String] = []
+
         func run() throws {
             let inputURL = try validatedInputURL(input)
             let outputURL = URL(fileURLWithPath: toMdocx)
@@ -61,6 +76,7 @@ extension MacDoc.Word {
             }
 
             let log: OperationLog
+            var dslParts: Set<String> = []
             if let sidecarLog = try SidecarStore.loadLog(alongside: inputURL) {
                 log = sidecarLog
                 FileHandle.standardError.write(Data(
@@ -68,27 +84,52 @@ extension MacDoc.Word {
             } else if fromOplog {
                 throw ValidationError(
                     "找不到 oplog sidecar: \(SidecarStore.oplogURL(for: inputURL).path)")
-            } else {
+            } else if paragraphsOnly {
                 log = try Self.reverseEngineer(from: inputURL)
+            } else {
+                // Full-fidelity default (Phase C): all parts ride the script —
+                // raw channel floor + typed DSL upgrades where byte-equal
+                // permits (ReverseExtractor's trial-rebuild gate).
+                let parts = try RawPartChannel.readAllParts(from: inputURL)
+                let result = try ReverseExtractor.reverse(parts: parts)
+                log = result.log
+                dslParts = result.dslParts
             }
 
-            let source = ScriptExporter.exportSwift(log: log)
+            // Parse --slot name=paraId designations (strict: malformed
+            // designations fail loudly, never degrade silently).
+            var designations: [SlotDesignation] = []
+            for raw in slots {
+                let pieces = raw.split(separator: "=", maxSplits: 1)
+                guard pieces.count == 2, !pieces[0].isEmpty, !pieces[1].isEmpty else {
+                    throw ValidationError("無效的 slot 指定: \(raw)（格式為 <name>=<paragraph-id>）")
+                }
+                designations.append(SlotDesignation(
+                    name: String(pieces[0]), paraId: String(pieces[1])))
+            }
+
+            let source: String
+            do {
+                source = try ScriptExporter.exportSwift(log: log, slots: designations)
+            } catch let TranscodeError.slotDesignationFailure(name, reason) {
+                throw ValidationError("slot「\(name)」無法建立: \(reason)")
+            }
             try source.write(to: outputURL, atomically: true, encoding: .utf8)
             FileHandle.standardError.write(Data("已寫入: \(toMdocx)\n".utf8))
 
             if coverage {
-                try Self.reportCoverage(for: inputURL)
+                try Self.reportCoverage(for: inputURL, dslParts: dslParts)
             }
         }
 
         /// Prints the dual-track coverage report to stdout: per-part DSL/raw
-        /// split + aggregate %. Phase A carries every part on the raw channel
-        /// (no part is fully DSL-representable yet), so the honest baseline is
-        /// all-raw → 0% DSL. `dslParts` populates as later phases lift content
-        /// classes from raw to DSL, and the metric climbs off zero.
-        static func reportCoverage(for url: URL) throws {
+        /// split + aggregate %. `dslParts` comes from the full-fidelity
+        /// reverse (parts whose typed rebuild proved byte-equal); sidecar and
+        /// paragraphs-only paths report all-raw — those modes carry no
+        /// byte-equal DSL claim.
+        static func reportCoverage(for url: URL, dslParts: Set<String> = []) throws {
             let parts = try RawPartChannel.readAllParts(from: url)
-            let report = RawPartChannel.partLevelCoverage(parts: parts, dslParts: [])
+            let report = RawPartChannel.partLevelCoverage(parts: parts, dslParts: dslParts)
             var lines = ["=== Coverage report: \(url.lastPathComponent) ==="]
             for part in report.parts {
                 let channel = part.dslBytes > 0 ? "dsl" : "raw"
