@@ -1,0 +1,38 @@
+> **Structure**: three phases, measurement-first — the form-gap report (Phase 1) is the work queue for everything after it (design Decision 1). Hard ordering: measure before extending vocabulary, vocabulary before acceptance.
+> **Traceability**: each task tags the spec requirement it satisfies («Title») and the governing design decision (Decision N).
+
+## 1. Phase 1 — Form-gap measurement
+
+- [x] 1.1 Extend `ReverseExtractor` bail records: `Unsupported` carries the XML path to the first offending node/attribute; `Result` gains `formGaps: [FormGap]` (`partPath` / `xmlPath` / `contentClass`), empty on upgrade. Unit tests: bail on a known-unsupported attribute names its path; upgraded document reports no gaps. → satisfies «Form-gap measurement names the first offending form» · Decision 1 (form-gap report is the work queue, not documentation). Verify: FormGapReportTests green; existing ReverseExtractorTests unchanged.
+- [x] 1.2 Gated measurement run: env-gated test prints the form-gap report for 90_template_ja and thesis-fixture (byte counts and paths only, never content); record both initial reports in docs/format-alignment-baselines.md. Answer design Q1 (any element outside five-layer vocabulary in principle?) and Q2 (exact rsid field set) from the report — if Q1 is yes, STOP and escalate the scope decision to the user before Phase 2. → satisfies «Form-gap measurement names the first offending form» · Decision 1 (form-gap report is the work queue, not documentation). Verify: report reproducible via MACDOC_TEMPLATE_DIR-gated test; baselines doc updated; Q1/Q2 answers written into this file as a comment under this task.
+
+<!-- word-canonical-forms task 1.2 measurement answers (2026-07-09):
+  Q2 (rsid field set): from the survey — paragraph/run rsid = w:rsidR, w:rsidRDefault,
+     w:rsidRPr, w:rsidP; sectPr rsid = w:rsidSect; (thesis-only, out of scope: w:rsidTr).
+     Plus adjacent attrs 90_template_ja needs: font-theme (asciiTheme/hAnsiTheme/
+     eastAsiaTheme/hint/hAnsi), ind firstLineChars/hangingChars, sectPr docGrid
+     (type/linePitch), w14:textId, w:code/id/name, xml:space, root namespace cloud
+     (~30 xmlns:* + mc:Ignorable), rPr companions bCs/iCs/szCs.
+
+  Q1 (element outside five-layer vocab?): YES-with-nuance → ESCALATED to user before
+     Phase 2. 90_template_ja needs bookmarkStart/bookmarkEnd + proofErr, which are
+     INLINE-INTERLEAVED markers sitting between <w:r> siblings — they break the current
+     "paragraph = pPr + runs" model. Not "impossible in principle" (unlike thesis's
+     drawing/oMath/fldChar), but they require a structural extension (inline-passthrough
+     markers) beyond the proposal's scoped attribute/companion-level technical direction.
+     Because the per-part upgrade gate is all-or-nothing, 90_template_ja's document.xml
+     CANNOT reach the DSL channel until bookmarks + proofErr are handled. User scope
+     decision required — see conversation escalation at task 1.2. -->
+
+## 2. Phase 2 — Root, rsid, and xml:space vocabulary
+
+- [x] 2.1 `setDocumentRoot` op: `RootAttribute {prefix, localName, value}` order-significant array, JSONL codec (`setDocumentRoot` / `attributes`), reducer wholesale attribute replacement on the root element (absent op = default root unchanged), routing to word/document.xml, operation taxonomy pins 35 → 36 (OperationLogTests + ScriptTranscodeTests). Extraction emits the op first when the reference root differs from the authoring default. → satisfies «Word-form payload additive extensions» + «Document root stamping replaces attributes wholesale» · Decision 2 (document root rides a typed op, not a carryPart special case). Verify: wire round-trip order-preserved per spec scenario; absent-op default-root scenario pinned; a root-parameterized synthetic source passes the trial-rebuild gate.
+- [x] 2.2 rsid payload fields (exact set per task 1.2's Q2 answer) on `ParagraphPayload`/`RunPayload`, reducer attribute stamping in the measured Word order, extraction recognition feeding the existing trial gate. Old-sidecar decode test + field-for-field wire round-trip test. → satisfies «Word-form payload additive extensions» + «Word-canonical form vocabulary» (rsid scenario) · Decision 3 (rsid fields are opaque strings, stamped in Word's attribute order). Verify: rsid round-trip scenario byte-equal; UpgradeClassGuardTests gains the rsid class entry.
+- [x] 2.3 [P] `RunPayload.preserveSpace` ↔ `xml:space="preserve"` on `<w:t>`: payload flag, reducer stamping, extraction recognition. → satisfies «Word-form payload additive extensions» · Decision 4 (long-tail vocabulary lands one class at a time behind the existing gate). Verify: a leading/trailing-space run round-trips byte-equal; guard-test entry added.
+- [x] 2.4 Inline-passthrough markers (added task 1.2 user scope decision): paragraph inline content becomes an ordered run|marker sequence; `bookmarkStart`/`bookmarkEnd`/`proofErr` (and future self-contained leaf/paired markers) are carried verbatim as opaque inline nodes in position, stamped back byte-exact by the reducer. New op/field decided at impl behind the trial gate. Non-run wrappers (hyperlink) and unbounded structures (drawing/oMath/fldChar/sdt) stay out. → satisfies «Word-form payload additive extensions» + «Word-canonical form vocabulary» · Decision 6 (inline-interleaved markers ride an opaque passthrough op). Verify: a paragraph with interleaved bookmarkStart/proofErr/run round-trips byte-equal; UpgradeClassGuardTests gains the inline-marker class; existing paragraph tests unchanged.
+
+## 3. Phase 3 — Long-tail vocabulary and real-template acceptance
+
+- [x] 3.1 Long-tail loop driven by the shrinking form-gap report on 90_template_ja: land each remaining rPr/pPr/sectPr class Phase-B-style (additive payload field → schema-order reducer stamping → extraction recognition → UpgradeClassGuardTests entry), re-running the gated report after each class until document.xml upgrades. A class the serializer cannot reproduce byte-equal stays raw and is recorded in the baselines doc as residual. → satisfies «Word-canonical form vocabulary» · Decision 4 (long-tail vocabulary lands one class at a time behind the existing gate). Verify: gated report for 90_template_ja reaches zero gaps (or documented residuals with user sign-off); every landed class pinned in UpgradeClassGuardTests; full suite green.
+- [x] 3.2 `RealTemplateUpgradeTests` (env-gated acceptance, design Decision 5 two-track): (a) 90_template_ja upgrades — `dslParts` contains word/document.xml and per-part coverage for it is 100%; (b) slotted script with designated title/body executes with new content — non-slot parts byte-equal, styles and section layout intact; (c) thesis-fixture no-regress — still Stage B green raw fallback. → satisfies «Content slots work on upgraded real templates» + «Word-canonical form vocabulary» (real-template scenario) · Decision 5 (acceptance is two-track per #131 Clarity Surface row 1). Verify: suite passes with and without MACDOC_TEMPLATE_DIR (loud skip on CI).
+- [x] 3.3 [P] Close-out: update docs/format-alignment-baselines.md with post-change measured coverage for all four fixtures + residual form-gap list; update CLAUDE.md `word reverse` description (real-template DSL coverage note); release ooxml-swift v1.4.0 per migration plan and bump macdoc's dependency (run swift package clean in macdoc after the bump — payload struct layouts change). → satisfies «Word-canonical form vocabulary» (documentation trace) · Migration plan. Verify: macdoc full suite green on v1.4.0; `macdoc word reverse --coverage` on the real template shows document.xml on the dsl channel.

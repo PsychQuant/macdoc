@@ -12,6 +12,22 @@ bytes ÷ 全部 XML bytes**（Q1 working answer：分母為所有 XML parts、
 headline 為 aggregate）。Stage B（全 part-set byte-equal)自 Phase A 起在
 所有 fixture 上恆綠 — coverage 反映的是「理解了多少」，不是「對不對」。
 
+## Form-gap survey（2026-07-09，word-canonical-forms task 1.2）
+
+`WordCanonicalMeasurementTests`（env-gated）對真實文件做 document.xml 全詞彙 survey，比對現行 extractor 支援集，列出「不支援 form」= Phase 2/3 的工作佇列（僅列 form 名稱，不含內容）。升級 gate 是 **per-part 全有全無**：document.xml 只要有一個不支援 form，整個 part 留 raw（0%）。
+
+**90_template_ja.docx**（13 parts / 134,050 bytes / document.xml DSL: false）
+- first form-gap：`paragraph-attrs @ w:p[0]/@w14:textId`
+- 不支援元素（8）：`bCs, iCs, szCs`（rPr companion，trivial）、`docGrid, type`（sectPr child，trivial）、**`bookmarkStart, bookmarkEnd, proofErr`（inline 交錯標記，結構性）**
+- 不支援屬性（52）：root namespace 雲（~30 個 `xmlns:*` + `mc:Ignorable`）、rsid 家族（`w:rsidR/rsidRDefault/rsidRPr/rsidP/rsidSect`）、font theme（`w:asciiTheme/hAnsiTheme/eastAsiaTheme/hint/hAnsi`）、`xml:space`、`w14:textId`、`w:firstLineChars/hangingChars/linePitch/code/id/name`
+
+**thesis-fixture.docx**（39 parts / 1,746,868 bytes / document.xml DSL: false）
+- 不支援元素（153）：含 `drawing, oMath, textbox, sdt, AlternateContent, fldChar, hyperlink, pict, graphic` 等——大量結構性複雜內容，**遠超本 change scope，僅作 no-regress sanity**（Non-Goal）
+
+### Phase 2 後（2.1-2.4 落地）的 gap 前移
+
+90_template_ja 的 first form-gap 從 `w:p[0]/@w14:textId`（Phase 1 基線）前移到 `w:p[0]/w:pPr/w:rPr`——段落屬性 / rsid / inline marker 已通過，卡在 **pPr 內嵌的段落標記 rPr**（paragraph-mark run properties）。3.1 長尾接手：pPr/rPr 結構 + 它連帶要求的 run-property 詞彙（bCs/iCs/szCs、rFonts asciiTheme/hAnsiTheme/eastAsiaTheme/hint/hAnsi、ind firstLineChars/hangingChars）。thesis-fixture 前移到 `w:pPr/w:snapToGrid`（同屬 pPr 長尾，但其 document 另有大量 out-of-scope 結構）。
+
 ## 量測值（2026-07-08，Phase A→D 實測）
 
 | Fixture | 性質 | XML parts | XML bytes | Phase A | Phase B–D | Raw classes（殘留） |
@@ -41,6 +57,41 @@ headline 為 aggregate）。Stage B（全 part-set byte-equal)自 Phase A 起在
   document.xml 含 typed 詞彙之外的形（foreign root attrs、空白 text
   nodes、未支援元素）；其他可能值如 `table`（非 canonical 形表格）、
   `hyperlink`、`byte-mismatch`（extraction 成功但 trial 重建 bytes 不等）。
+
+## 量測值（2026-07-09，word-canonical-forms #131 完成後）
+
+ooxml-swift v1.4.0 落地 Word-canonical 詞彙（root namespace 雲、rsid 家族、
+`xml:space`、inline passthrough markers、pPr/rPr 長尾、docGrid/section-type/
+pgSz、CRLF prolog）。真實 Word 文件的 document.xml 首次從 raw floor 升級到
+typed DSL channel。
+
+| Fixture | 性質 | document.xml channel | doc.xml per-part | aggregate | 變化 |
+|---------|------|----------------------|------------------|-----------|------|
+| synthetic five-layer | authoring-built | dsl | — | **57.5%** | 不變（本 change 針對 Word-authored） |
+| synthetic CJK template | 手寫 XML fixture | raw | 0% | **0.0%** | 不變（residual：`non-element-content`） |
+| `90_template_ja.docx` | 真實日文學術 template（env-gated） | **dsl** | **100.0%** | **53.5%**（71,771 / 134,050） | **0.0% → 53.5%** ✅ |
+| `thesis-fixture.docx` | 真實論文（out-of-scope） | raw | 0% | **0.0%** | 不變（no-regress） |
+
+**Headline**：`90_template_ja` 的 document.xml 由 0% → **100%**（aggregate
+0% → 53.5%）。document.xml 是最大的單一 part（71,771 bytes），其位元組全部
+經 typed DSL channel 重建且 Stage B byte-equal。`--slot` 在此 template 上端到端
+可用（op-level slot：raw-form 格式化段落的 `setRuns` run text 可被 call-site 值
+替換，其餘位元組不變）。
+
+### 殘留 form-gap（sign-off）
+
+- **`90_template_ja` 的 46.5% raw 餘量 = sibling parts**（`styles.xml` 32,778 B、
+  `settings.xml` 7,928 B、`theme1.xml` 7,084 B、`fontTable.xml`、
+  `endnotes/footnotes.xml`、`docProps/*`、rels、`[Content_Types].xml`）。這些
+  非 document.xml 的 parts 尚無 typed 表示，於 raw channel 逐字搬運
+  （`sibling-part` class）。屬本 change scope 之外（#131 只鎖定 document.xml
+  的 Word-canonical 詞彙），Stage B 仍恆綠。
+- **synthetic CJK template 停在 0%**：residual `non-element-content` —— 手寫
+  XML fixture 在 element 之間有 extractor 尚無法逐字重現的 non-element 內容
+  （縮排空白），留 raw。honest 0%，非退化。
+- **thesis-fixture 停在 0%**：document.xml 含大量 out-of-scope 結構
+  （`drawing`/`oMath`/`sdt`/`textbox`/`fldChar`/`hyperlink`/`AlternateContent`
+  …），遠超 #131 scope，僅作 no-regress sanity（Non-Goal）。
 
 ## Visual diff 實測（2026-07-08，task 4.3 gated harness）
 
