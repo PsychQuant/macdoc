@@ -93,6 +93,49 @@ typed DSL channel。
   （`drawing`/`oMath`/`sdt`/`textbox`/`fldChar`/`hyperlink`/`AlternateContent`
   …），遠超 #131 scope，僅作 no-regress sanity（Non-Goal）。
 
+## Render semantics（2026-07-10，render-effect-semantics 第三層）
+
+第一、二層證明的是**忠實再序列化**（byte-equal），不是**理解渲染效果**。
+第三層把「理解設定 X」操作化：能預測改動 X 的可量測渲染後果，且 gated
+perturbation probe 對照真實 Word 渲染驗證通過。理解台帳在
+[docs/render-effect-registry.md](render-effect-registry.md)（no probe, no
+claim；probe 沒過就誠實標 `unverified`，不放寬容差）。
+
+**Registry snapshot（2026-07-10，Word 16.110.3）：7 verified / 0 unverified**
+
+| # | 欄位 | 預測 | 實測 |
+|---|------|------|------|
+| 1 | `docGridLinePitch` 360→480 | Δpitch +6.0 pt | Δ 6.96 pt（絕對 pitch ≈ 名目 ×1.16）|
+| 2 | `spacingBefore` 0→240 | Δgap +12.0 pt | Δ 12.0 pt 精確 |
+| 3 | `spacingAfter` 0→240 | Δgap +12.0 pt | Δ 12.0 pt 精確 |
+| 4 | `spacingLine` auto 240→360 | pitch ×1.5 | ratio 1.507 |
+| 5 | `indentFirstLineChars` 0→100 | 首行右移 ≈ 字級 pt | Δ 10.5 pt 精確 |
+| 6 | `sizeHalfPoints` 21→42 | pitch ×2 | ratio 2.0 精確 |
+| 7 | margins +567 twips | 頁框不變；首行下移 28.35 pt | 頁框不變；Δy 28.32 pt |
+
+**Probe 賺到的理解**（byte-equal gate 永遠看不到的行為，詳見 registry）：
+Word 對相鄰 before/after spacing 取 **max 而非相加**；docGrid `lines` 的
+絕對 pitch ≈ 名目 ×1.16；A4 頁框被量化為 595.2×841.92 pt（非 595.3×841.9）。
+
+**Slot 渲染驗收**（scenario (d)，雙 gate `RUN_WORD_INTEGRATION=1` +
+`MACDOC_TEMPLATE_DIR`）：90_template_ja 換入等長 sentinel 後——頁數相等、
+每頁頁框相等、被替換頁 median line pitch 在容差內、未動頁 pixel ratio
+0.00043 ≪ threshold 0.005。投稿文件工作流自此有渲染層保證。
+
+跑法：
+
+```bash
+# 幾何量測（無 Word、無 gate）
+cd packages/ooxml-swift && swift test --filter RenderGeometryTests
+
+# Perturbation probes（維護者機器）
+RUN_WORD_INTEGRATION=1 swift test --filter RenderEffectProbeTests
+
+# Slot 渲染驗收（雙 gate）
+RUN_WORD_INTEGRATION=1 MACDOC_TEMPLATE_DIR=<dir> \
+  swift test --filter RealTemplateUpgradeTests
+```
+
 ## Visual diff 實測（2026-07-08，task 4.3 gated harness）
 
 | Scenario | 結果 | 數值 |
