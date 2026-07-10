@@ -1,5 +1,8 @@
 # Format-Alignment Coverage Baselines
 
+> 方法學（三層階梯：複製 → 合法序列化 → 渲染理解）見
+> [word-imitation-methodology.md](word-imitation-methodology.md)；本文件只記量測值。
+
 format-alignment-engine（#130）的 dual-track 驗收基線紀錄（Decision 2：raw
 channel 是 byte-equal floor，DSL coverage 是 imitation-ability score；
 Decision 5：真實 template 走 `MACDOC_TEMPLATE_DIR` env-gate，一個合成
