@@ -76,7 +76,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 │   ├── surya-swift/           # Layer 1: OCR 文字辨識
 │   └── pdf-to-latex-swift/    # PDF → LaTeX pipeline（簡化: GLM-OCR + Phase 2）
 ├── mcp/                       # MCP 工具（各自獨立 git repo，.gitignore 忽略）
-│   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（145 工具）
+│   ├── che-word-mcp/          # Layer 4: Word 文件處理 MCP（245 工具）
 │   └── che-pdf-mcp/           # Layer 4: PDF 文件處理 MCP（25 工具）
 ├── cli/                       # CLI 實驗專案（預設 .gitignore；FastOCR 為 submodule）
 │   └── FastOCR/               # GLM-OCR PDF→Markdown CLI + 實驗 harness（submodule）
@@ -261,11 +261,11 @@ swift package clean && swift build
 - **Config**：AI 後端設定管理
 - **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
 
-#### che-word-mcp（145 工具）
+#### che-word-mcp（245 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
-- **功能**：OOXML 讀寫（段落、表格、清單、圖片、樣式）+ Markdown 匯出
+- **功能**：OOXML 讀寫（段落、表格、清單、圖片、樣式）+ Markdown 匯出 + 腳本管線（`export_script` / `get_script_coverage` / `execute_script`——與 `macdoc word reverse` 同一條 ooxml-swift transcoder code path，byte-equal parity 由共享 library 結構保證，見 Spectra change `che-word-mcp-script-pipeline-parity`）
 - **依賴**：ooxml-swift + word-to-md-swift
-- **架構**：單一 Server.swift（~9100 行）
+- **架構**：Server.swift（~16,000 行）+ satellite tool 檔（MarkdownExportTools / ReadbackTools / ScriptPipelineTools）
 - **Binary**：`.build/release/CheWordMCP`
 
 ### che-pdf-mcp（25 工具）
