@@ -35,10 +35,26 @@ enum CLITestHelper {
 
     /// 執行 macdoc 指令
     static func run(_ arguments: [String], timeout: TimeInterval = 30) throws -> CLIResult {
+        try runProcess(
+            executableURL: URL(fileURLWithPath: binaryPath),
+            arguments: arguments,
+            currentDirectory: repoRoot,
+            timeout: timeout)
+    }
+
+    /// Runs an arbitrary executable with a timeout, returning its captured
+    /// output. Extracted from `run` so the timeout path is testable against a
+    /// deterministically-slow command (macdoc#133).
+    static func runProcess(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectory: URL?,
+        timeout: TimeInterval
+    ) throws -> CLIResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: binaryPath)
+        process.executableURL = executableURL
         process.arguments = arguments
-        process.currentDirectoryURL = repoRoot
+        process.currentDirectoryURL = currentDirectory
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -56,8 +72,17 @@ enum CLITestHelper {
             process.terminate()
         }
 
+        // Drain the pipes first (readDataToEndOfFile blocks until the write
+        // ends close on process death — deadlock-safe), THEN reap the child.
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+
+        // macdoc#133: terminate() only sends SIGTERM (async). Reading
+        // terminationStatus before the process is reaped throws
+        // NSInvalidArgumentException ("task still running") and crashes the
+        // whole test process. waitUntilExit() reaps it — safe on both the
+        // normal-exit and the timeout-terminate paths.
+        process.waitUntilExit()
 
         return CLIResult(
             exitCode: process.terminationStatus,
