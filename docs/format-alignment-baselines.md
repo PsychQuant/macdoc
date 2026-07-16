@@ -161,6 +161,6 @@ macdoc word reverse file.docx --to-mdocx /tmp/out.mdocx.swift --coverage
 cd packages/ooxml-swift && swift test --filter FormatAlignmentAcceptanceTests
 
 # 真實 template（維護者機器）
-MACDOC_TEMPLATE_DIR=~/Academic/projects/active/sample_size_planning/article2_impossibility_of_rule_of_thumb/docs \
+MACDOC_TEMPLATE_DIR=<path-to-private-templates> \
   swift test --filter FormatAlignmentAcceptanceTests
 ```
