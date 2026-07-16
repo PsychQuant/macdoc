@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change 'che-word-mcp-script-pipeline-parity'. Update Purpose after archive.
+The script-pipeline MCP tools of che-word-mcp (export_script / get_script_coverage / execute_script): MCP-surface parity with the macdoc word-reverse CLI, guaranteed structurally by riding the same ooxml-swift transcoder entry points and guarded by a two-layer parity test suite.
 
 ## Requirements
 
@@ -26,21 +26,9 @@ che-word-mcp SHALL provide an `export_script` tool that converts a docx to a ful
 source: che-word-mcp-script-pipeline-parity
 updated: 2026-07-16
 code:
-  - .agents/skills/spectra-audit/SKILL.md
-  - .agents/skills/spectra-ask/SKILL.md
-  - .agents/skills/spectra-commit/SKILL.md
-  - .agents/skills/spectra-archive/SKILL.md
-  - .agents/skills/umbrella-open/SKILL.md
-  - cli/FastOCR
-  - .codex/hooks.json
-  - .agents/skills/spectra-propose/SKILL.md
-  - .agents/skills/spectra-ingest/SKILL.md
-  - .agents/skills/spectra-discuss/SKILL.md
-  - .agents/skills/spectra-drift/SKILL.md
-  - .agents/skills/spectra-debug/SKILL.md
-  - .agents/skills/spectra-analyze/SKILL.md
-  - .agents/skills/spectra-apply/SKILL.md
-  - .agents/skills/spectra-verify/SKILL.md
+  - mcp/che-word-mcp/Sources/CheWordMCP/ScriptPipelineTools.swift
+  - mcp/che-word-mcp/Sources/CheWordMCP/Server.swift
+  - mcp/che-word-mcp/Tests/CheWordMCPTests/ScriptPipelineParityTests.swift
 -->
 
 ---
@@ -59,21 +47,9 @@ che-word-mcp SHALL provide a `get_script_coverage` tool returning the dual-track
 source: che-word-mcp-script-pipeline-parity
 updated: 2026-07-16
 code:
-  - .agents/skills/spectra-audit/SKILL.md
-  - .agents/skills/spectra-ask/SKILL.md
-  - .agents/skills/spectra-commit/SKILL.md
-  - .agents/skills/spectra-archive/SKILL.md
-  - .agents/skills/umbrella-open/SKILL.md
-  - cli/FastOCR
-  - .codex/hooks.json
-  - .agents/skills/spectra-propose/SKILL.md
-  - .agents/skills/spectra-ingest/SKILL.md
-  - .agents/skills/spectra-discuss/SKILL.md
-  - .agents/skills/spectra-drift/SKILL.md
-  - .agents/skills/spectra-debug/SKILL.md
-  - .agents/skills/spectra-analyze/SKILL.md
-  - .agents/skills/spectra-apply/SKILL.md
-  - .agents/skills/spectra-verify/SKILL.md
+  - mcp/che-word-mcp/Sources/CheWordMCP/ScriptPipelineTools.swift
+  - mcp/che-word-mcp/Sources/CheWordMCP/Server.swift
+  - mcp/che-word-mcp/Tests/CheWordMCPTests/ScriptPipelineParityTests.swift
 -->
 
 ---
@@ -98,21 +74,9 @@ che-word-mcp SHALL provide an `execute_script` tool that parses a `.mdocx.swift`
 source: che-word-mcp-script-pipeline-parity
 updated: 2026-07-16
 code:
-  - .agents/skills/spectra-audit/SKILL.md
-  - .agents/skills/spectra-ask/SKILL.md
-  - .agents/skills/spectra-commit/SKILL.md
-  - .agents/skills/spectra-archive/SKILL.md
-  - .agents/skills/umbrella-open/SKILL.md
-  - cli/FastOCR
-  - .codex/hooks.json
-  - .agents/skills/spectra-propose/SKILL.md
-  - .agents/skills/spectra-ingest/SKILL.md
-  - .agents/skills/spectra-discuss/SKILL.md
-  - .agents/skills/spectra-drift/SKILL.md
-  - .agents/skills/spectra-debug/SKILL.md
-  - .agents/skills/spectra-analyze/SKILL.md
-  - .agents/skills/spectra-apply/SKILL.md
-  - .agents/skills/spectra-verify/SKILL.md
+  - mcp/che-word-mcp/Sources/CheWordMCP/ScriptPipelineTools.swift
+  - mcp/che-word-mcp/Sources/CheWordMCP/Server.swift
+  - mcp/che-word-mcp/Tests/CheWordMCPTests/ScriptPipelineParityTests.swift
 -->
 
 ---
@@ -134,19 +98,7 @@ The test suite SHALL guard MCP/CLI parity at two layers. Layer 1 (ungated, CI-ru
 source: che-word-mcp-script-pipeline-parity
 updated: 2026-07-16
 code:
-  - .agents/skills/spectra-audit/SKILL.md
-  - .agents/skills/spectra-ask/SKILL.md
-  - .agents/skills/spectra-commit/SKILL.md
-  - .agents/skills/spectra-archive/SKILL.md
-  - .agents/skills/umbrella-open/SKILL.md
-  - cli/FastOCR
-  - .codex/hooks.json
-  - .agents/skills/spectra-propose/SKILL.md
-  - .agents/skills/spectra-ingest/SKILL.md
-  - .agents/skills/spectra-discuss/SKILL.md
-  - .agents/skills/spectra-drift/SKILL.md
-  - .agents/skills/spectra-debug/SKILL.md
-  - .agents/skills/spectra-analyze/SKILL.md
-  - .agents/skills/spectra-apply/SKILL.md
-  - .agents/skills/spectra-verify/SKILL.md
+  - mcp/che-word-mcp/Sources/CheWordMCP/ScriptPipelineTools.swift
+  - mcp/che-word-mcp/Sources/CheWordMCP/Server.swift
+  - mcp/che-word-mcp/Tests/CheWordMCPTests/ScriptPipelineParityTests.swift
 -->
