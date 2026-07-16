@@ -409,7 +409,7 @@ swift build
 - `Sources/OOXMLSwift/Models/SemanticAnnotation.swift` - 語義標註定義
 
 ### che-word-mcp
-- `Sources/CheWordMCP/Server.swift` - MCP 伺服器主體（145 工具）
+- `Sources/CheWordMCP/Server.swift` - MCP 伺服器主體（245 工具；script-pipeline handlers 在 ScriptPipelineTools.swift）
 - `Package.swift` - 依賴 ooxml-swift + word-to-md-swift
 
 ### che-pdf-mcp
