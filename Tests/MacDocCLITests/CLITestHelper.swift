@@ -73,7 +73,12 @@ enum CLITestHelper {
         }
 
         // Drain the pipes first (readDataToEndOfFile blocks until the write
-        // ends close on process death — deadlock-safe), THEN reap the child.
+        // ends close on process death), THEN reap the child. Draining before
+        // waitUntilExit avoids the classic deadlock where the child blocks on
+        // a full pipe while we block on wait — though it is not absolute: a
+        // child that ignores SIGTERM, or grandchildren inheriting the pipe
+        // FDs, can still keep it open (a general pipe-capture limitation, not
+        // specific to the timeout path).
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
 
