@@ -11,6 +11,7 @@ git clone https://github.com/python-openxml/python-docx.git
 git clone https://github.com/ml-explore/mlx-swift-lm.git
 git clone https://github.com/jgm/pandoc.git
 git clone https://github.com/apple/swift-argument-parser.git
+git clone --depth 1 https://github.com/genspark-ai/genoffice.git   # 43M,只讀 source 不需要 history
 # textutil-manpage.txt 已在版控中
 ```
 
@@ -22,6 +23,7 @@ git clone https://github.com/apple/swift-argument-parser.git
 | `python-docx/` | git repo | https://github.com/python-openxml/python-docx | Python + lxml 的 OOXML 函式庫。**典範:tree-backed wrapper**——每個 `Document` / `Paragraph` / `Run` 包一個 lxml `_Element`,typed accessor 讀寫該 element。`word-aligned-state-sync` 的 Phase 1 (typed views as tree projections) 直接對照它。詳見 `docs/docx-libraries-comparison.md` |
 | `mlx-swift-lm/` | git repo | https://github.com/ml-explore/mlx-swift-lm | Apple MLX Swift LLM runtime。`pdf-to-latex-swift` Phase 1 的 local GLM-OCR backend 用它載模型 |
 | `pandoc/` | git repo | https://github.com/jgm/pandoc | Haskell 文件轉換工具。macdoc 不依賴 pandoc,純粹參考它怎麼處理邊界情況(複雜 table、field、footnote 跨段落) |
+| `genoffice/` | git repo (shallow) | https://github.com/genspark-ai/genoffice | Genspark 的 AI-native office suite(Electron GUI)。**不是競品**——它沒有 MCP / CLI / public API,AI 綁自家雲端帳號;但 `packages/` 下的 engine 是純 TS、無 Electron 依賴,是**唯一同時涵蓋 docx + xlsx + pptx + pdf 的現代開源對照組**。看三件事:xlsx 缺口、patch-narrowly round-trip、pptx 功能廣度。Apache-2.0(`ee/` 另授權) |
 | `swift-argument-parser/` | git repo | https://github.com/apple/swift-argument-parser | Apple 官方 CLI 解析器。`macdoc` CLI 已是使用者,這裡留一份方便查 source-level 行為(尤其是 subcommand dispatch、ExitCode) |
 | `textutil-manpage.txt` | 單檔 | [textutil(1) macOS man page](https://ss64.com/mac/textutil.html) | macOS 內建 `textutil` 的 manual。`macdoc convert` 的 CLI 語法對齊 textutil(見 `.claude/rules/cli-design/textutil-compat.md`),改 CLI 前對一下 |
 
@@ -66,6 +68,43 @@ git clone https://github.com/apple/swift-argument-parser.git
 - `pandoc/src/Text/Pandoc/Readers/Docx.hs` — Word 讀取邏輯
 - `pandoc/src/Text/Pandoc/Readers/HTML.hs` — HTML 讀取邏輯
 - `pandoc/src/Text/Pandoc/Writers/Markdown.hs` — Markdown 輸出邏輯
+
+### genoffice → xlsx 缺口 / patch-narrowly round-trip / pptx 功能廣度
+
+先講清楚定位,免得誤判:genoffice 是**桌面 GUI 套裝軟體**(Electron,五個 app 共用 engine 層),macdoc 是 CLI + MCP 的管線工具,兩者不是同一個品類,也不互相取代。它沒有 MCP server、沒有 public API、沒有自動化 CLI,AI 走 Genspark 帳號的雲端(本機不存 API key)。
+
+**真正有參考價值的是 `packages/` 那層**——官方描述為「All pure TypeScript, no Electron dependency」,可以完全脫離 GUI 單獨閱讀。這是目前少見的、同時涵蓋 docx + xlsx + pptx + pdf 四種格式的現代開源實作。
+
+三個具體對照點:
+
+**1. xlsx——macdoc 唯一缺的 OOXML 主格式**
+
+macdoc 有 word / pptx / keynote / pdf,沒有 Excel。genoffice 的做法是 UI 用 Univer core(Apache-2.0),import/export 走 Rust sidecar(calamine + IronCalc)。
+- `genoffice/packages/file-parse/src/xlsx.ts` — 解析入口,先看它把 xlsx 拆成什麼中介結構
+- `genoffice/apps/sheets/` — 上層怎麼消費
+
+注意這是「要不要做 xlsx」的判斷材料,不是「該做」的理由。先問自己的工作流有沒有 Excel 需求,不要為了對齊功能表而追賽道。
+
+**2. patch-narrowly / byte-preserving round-trip——跟 `ooxml-swift` op log 同目標、不同解法**
+
+genoffice 的 docx 存檔只重新產生被改動的段落,未觸碰的 block 保留原始 bytes,其餘 zip entry 逐 byte 複製。目的跟 `word-aligned-state-sync` 的 op log 一樣(存檔不破壞 Word 版面),但走的是「差異化重生」而非「op 重放」。
+- `genoffice/packages/docx-engine/src/patch.ts` — 核心 patch 邏輯
+- `genoffice/packages/docx-engine/src/text-patch.ts` — 文字層級的窄幅修改
+- `genoffice/packages/docx-engine/src/parse.ts` / `scan.ts` — 解析與掃描(patch 的前置)
+- `genoffice/packages/docx-engine/src/generate.ts` — 產生端
+- `genoffice/packages/pptx-engine/src/zip.ts` — zip entry 保留策略
+
+對照重點:python-docx 是「直接 mutate tree、沒有 op log」,genoffice 是「保留原 bytes + 窄幅重生」,macdoc 是「op log 重放」。三種解法擺在一起看,才知道 op log 的成本換到了什麼。
+
+**3. pptx 功能廣度——`pptx-swift` 的擴充 checklist**
+
+`genoffice/packages/pptx-engine/src/` 有 macdoc 目前沒有的項目,可當功能對照表:`smartart.ts` / `smartart-layout.ts`、`custgeom.ts`(自訂幾何)、`animation.ts`、`theme-apply.ts`、`format-brush.ts`、`slide-transfer.ts`、`table-style.ts`。
+
+**授權注意**:Apache-2.0,但 `ee/` 目錄保留給未來的 enterprise 模組(另一套 GenOffice Enterprise License)。GenOffice / Genspark 名稱與 logo 是 Mainfunc, Inc. 商標。當**設計參考**讀沒問題;若要逐行移植實作到 Swift,先確認 Apache-2.0 的 NOTICE 保留義務與 macdoc 自身授權相容。
+
+**成熟度警語**:clone 當下(2026-08-04)發布版是 v0.4.110,pre-1.0,354 stars / 3 watchers。`main` 的 commit history 極短且訊息形如 `Sync snapshot (2026-08-03) (#6)`——是**內部開發、定期推 snapshot 出來**的模式,不是長期公開開發史,所以看不到 PR 討論、design rationale、bug 修復的來龍去脈,只能讀最終碼。程式碼本身看起來紮實(有 CI、Vitest、ESLint、SECURITY.md),但**不要當作經過長期生產驗證的參考**——跟 pandoc、python-docx 那種十年老專案不是同一個信賴等級。
+
+上游仍在活躍同步(上次 snapshot 距 clone 僅一天),所以這份 clone 會很快過時。要更新直接 `cd reference/genoffice && git pull`;因為是 `--depth 1` 淺 clone,必要時 `git fetch --unshallow` 才拿得到完整歷史(但如上所述,歷史本身資訊量不高)。
 
 ### swift-argument-parser → `macdoc` CLI
 
