@@ -164,13 +164,12 @@ swift run macdoc config ai detect
 swift run macdoc config ai list
 swift run macdoc config ai set agent claude
 
-# OCR 設定管理（v1.1+：具名 host profile）
+# OCR 設定管理（v1.1+：具名 host profile；供 pdf-to-latex 內部頁級 OCR 使用）
 swift run macdoc config ocr list
 swift run macdoc config ocr add-host kyle localhost:11435  # 例：SSH tunnel 到遠端 Ollama
-swift run macdoc config ocr add-host local localhost:11434
-swift run macdoc config ocr set-default kyle              # 之後 ocr 命令不傳 --host 就用這個
-swift run macdoc config ocr set-model glm-ocr
-# 之後 `macdoc ocr file.pdf` 自動用 kyle profile，--host 也接受 profile 名
+swift run macdoc config ocr set-default kyle
+# 注意：通用文字辨識入口 `macdoc ocr` 已移除（#145），改用 bestocr——
+# 此處設定只影響 pdf-to-latex 管線內部的頁級 OCR
 
 # 建構個別套件
 cd packages/ooxml-swift && swift build
@@ -378,7 +377,7 @@ swift build
 - `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force] [--coverage] [--paragraphs-only] [--slot name=paraId]…`（docx → `.mdocx.swift` 腳本反向轉換；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）。**預設 full-fidelity**（format-alignment-engine Phase C #130）：全 parts 騎在腳本上（raw channel byte-equal floor）+ typed DSL 升級（`ReverseExtractor` 的 trial-rebuild byte-equal gate 通過才升級，涵蓋 run rPr / paragraph pPr / sections / canonical tables 五層）；執行腳本重建出 Stage B byte-equal 的 docx。**真實 Word 文件的 document.xml 現在會升級**（word-canonical-forms #131，ooxml-swift v1.4.0）：新增 Word-canonical 詞彙（root namespace 雲、rsid 家族、`xml:space`、inline passthrough markers（bookmark/proofErr）、pPr/rPr 長尾、docGrid/section-type/pgSz、CRLF prolog）後，`90_template_ja.docx`（JPA 日文學術 template）的 document.xml 由 0% 升到 **per-part 100%**（aggregate 53.5%，餘量為尚無 typed 表示的 sibling parts）。`--paragraphs-only` 退回舊的段落 text+styleId 反向（無 byte-equal 保證）；有 oplog sidecar 時仍優先匯出現況 log。`--coverage` 印出 dual-track 覆蓋率報告：每個 part 的 DSL/raw split + aggregate %（DSL 份額 = byte-equal 證明過的 typed 重建；raw = 逐字搬運；基線數字見 [docs/format-alignment-baselines.md](docs/format-alignment-baselines.md)）。`--slot name=paraId`（可重複，Phase D + #131）：指定段落的文字成為腳本的 Swift 函式參數；**DSL-spellable 段落**走 script-text 參數，**raw-form 格式化段落**（真實 template 常見）走 op-level 替換（`// @slot` directive + 替換 `setRuns` run text），兩者都 strict mode 明確指定、不推斷；無 slot 時腳本逐字重建 byte-equal。**能拼寫 ≠ 理解渲染效果**（render-effect-semantics 第三層）：typed 欄位對排版的實際效果由 [docs/render-effect-registry.md](docs/render-effect-registry.md) 台帳記錄——每條 entry 須經 gated perturbation probe（`RUN_WORD_INTEGRATION=1 swift test --filter RenderEffectProbeTests`，真實 Word 渲染 + PDFKit 幾何量測）驗證方標 `verified`（no probe, no claim）；slot 換內容另有渲染驗收（RealTemplateUpgradeTests scenario (d)：頁數/頁框/被替換頁行距結構不變、未動頁 pixel-equal）
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
-- `Sources/MacDocCLI/MacDoc+OCR.swift` - OCR 子命令（top-level `macdoc ocr`，單檔 GLM-OCR）
+- `Sources/MacDocCLI/MacDoc+OCR.swift` - deprecation shim（#145）：`macdoc ocr` 已移除，印遷移訊息指向 bestocr 並以 exit 2 結束。通用文字辨識歸 PsychQuant/bestOCR 單點；pdf-to-latex 內部頁級 OCR（PageOCRRunner）不受影響，其委派屬第二期（bestOCR#55 介面定案後）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
 
