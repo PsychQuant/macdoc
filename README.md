@@ -1,6 +1,31 @@
 # macdoc
 
-原生 macOS 文件處理工具集，專注於文件格式轉換和 OCR。使用 Swift 開發，充分利用 Apple 平台原生能力（PDFKit、Vision.framework）。
+原生 macOS 文件處理工具集，使用 Swift 開發，專注於**直接、格式感知（format-aware）的文件轉換**、PDF 工作流與文件自動化，並充分利用 Apple 平台原生能力（PDFKit、Vision.framework）。通用 OCR CLI 已移交 [`PsychQuant/bestOCR`](https://github.com/PsychQuant/bestOCR)；macdoc 仍在特定 PDF 管線內使用 Vision OCR 作為流程元件。
+
+## Why macdoc?
+
+macdoc 並不是要取代 [Pandoc](https://pandoc.org/)。兩者解決的問題層級不同，也採取不同的轉換取捨。
+
+Pandoc 的核心架構是 **reader → Pandoc AST → writer**：各種輸入格式先被解析為共同的中介表示，再由 writer 輸出成目標格式。這讓 Pandoc 能以少量 readers / writers 支援廣泛的 M × N 格式轉換。macdoc 則依照本專案的 [conversion rules](CONVERSIONS.md) 優先採用 **direct source → target converter**；例如 Word → HTML 與 Word → Markdown 可以直接理解 OOXML 的來源語意，而不要求所有格式先正規化成同一個通用 AST。
+
+這不是單純的優劣差異，而是不同 trade-off：Pandoc 強在**格式廣度、跨平台與統一轉換生態**；macdoc 則把範圍集中在**格式感知的直接轉換、macOS 原生文件能力、PDF 工作流與 agent/MCP 文件操作**。
+
+| 面向 | macdoc | Pandoc |
+|------|--------|--------|
+| 主要目標 | Native macOS document-processing stack | Universal document converter |
+| 轉換架構 | 優先 direct source → target | reader → Pandoc AST → writer |
+| 格式策略 | 選擇性支援需要深入處理的路徑 | 以共享 AST 支援廣泛 M × N 轉換 |
+| PDF / OCR | PDFKit、Vision OCR、PDF → LaTeX 重建工作流 | 不是以 OCR / PDF 文件重建為核心定位 |
+| 平台整合 | Swift + Apple frameworks | 跨平台 CLI / library |
+| Agent 整合 | Word / PDF / PowerPoint MCP、AI pipeline | CLI、library、Lua / JSON filters 生態 |
+
+兩者也可以組合使用，例如：
+
+```text
+PDF ──macdoc──> Markdown ──Pandoc──> EPUB / JATS / Typst / ...
+```
+
+Pandoc 架構可參考官方的 [Using the pandoc API](https://pandoc.org/using-the-pandoc-api.html)。
 
 ## Claude Code Plugin Marketplace
 
@@ -8,7 +33,7 @@
 
 | Plugin | 內容 |
 |--------|------|
-| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，242 工具） |
+| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫） |
 | `che-pdf-mcp` | PDF MCP server（PDFKit 解析、Vision OCR） |
 | `che-pptx-mcp` | PowerPoint (.pptx) MCP server（PresentationML 解析與生成） |
 | `macdoc` | macdoc CLI 使用指南 skill |
@@ -237,20 +262,22 @@ macdoc config ai set transcription codex
 
 ## MCP Servers
 
-macdoc 附帶兩個 MCP server，讓 AI 助手直接操作文件：
+macdoc marketplace 提供三個 MCP server，讓 AI 助手直接操作不同文件格式。各 server 的 binary 由 plugin wrapper 從對應 GitHub Releases 下載，不需要在 macdoc repo 內另外編譯：
 
-| Server | Binary | 工具數 | 用途 |
-|--------|--------|--------|------|
-| che-word-mcp | `mcp/che-word-mcp/.build/release/CheWordMCP` | 145 | Word 文件讀寫 |
-| che-pdf-mcp | `mcp/che-pdf-mcp/.build/release/ChePDFMCP` | 25 | PDF 解析與 OCR |
+| Server | 上游 repo | 用途 |
+|--------|-----------|------|
+| `che-word-mcp` | [`PsychQuant/che-word-mcp`](https://github.com/PsychQuant/che-word-mcp) | Word / OOXML 文件讀寫 |
+| `che-pdf-mcp` | [`PsychQuant/che-pdf-mcp`](https://github.com/PsychQuant/che-pdf-mcp) | PDF 解析與 OCR |
+| `che-pptx-mcp` | [`PsychQuant/che-pptx-mcp`](https://github.com/PsychQuant/che-pptx-mcp) | PowerPoint / PresentationML 解析與生成 |
 
-Build MCP servers：
+安裝範例：
 
 ```bash
-cd mcp/che-word-mcp && swift build -c release
-cd mcp/che-pdf-mcp && swift build -c release
+claude plugin install che-word-mcp@macdoc
+claude plugin install che-pdf-mcp@macdoc
+claude plugin install che-pptx-mcp@macdoc
 ```
 
 ## License
 
-Private repository. All rights reserved.
+目前此 repository 未附 `LICENSE` 檔案。GitHub 上的 public visibility 本身不等同於授權重製、修改或散布。
