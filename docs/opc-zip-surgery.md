@@ -1,5 +1,11 @@
 # OPC ZIP 手術：VBA 注入與保真契約
 
+> 平台聲明
+> - 格式／離線層：跨平台的 OPC、ZIP 與 OOXML 設計契約；狀態為 `design-only`，#135 的產品實作與可重現測試尚未完成，因此不宣稱目前已有跨平台 runtime 支援。
+> - 自動化／活 Excel 層：macOS 與 Excel for Mac；狀態為 `design-only`，本文引用歷史現場觀察，精確的 macOS 與 Excel 版本未記錄，repository 內尚無真實 Excel 驗收。
+> - Windows／Linux 的活應用程式驗證：Excel 自動化；狀態為 `not-verified`，不由離線格式契約外推支援。
+> - 證據：PsychQuant/macdoc#135、#136、#138；標示規範見 `docs/platform-support.md`。
+
 > 狀態：#135 `che-excel-mcp` 離線 `inject_vba` 能力的設計依據
 >
 > 適用範圍：以受信任的 VBA carrier 將一般 `.xlsx` 轉為 `.xlsm`
