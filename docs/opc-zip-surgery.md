@@ -70,8 +70,9 @@ worksheet part；不得用頁籤順序或顯示名稱猜測。這需要兩份不
 
 1. **Carrier module inventory** 跟 `vbaProject.bin` digest 綁定，記錄受控 asset ID／
    版本、workbook document-module code name，以及每個 module 的 kind、code name 與
-   文字來源版本；不得保存使用者本機路徑。carrier 自己的 `sheetN.xml` URI 不能拿來
-   決定另一份目標活頁簿的對映。
+   文字來源版本；另列出完整 callable／event procedure inventory，以及 prohibited
+   auto／event entrypoint scan 的工具版本、source digest 與結果。不得保存使用者本機
+   路徑。carrier 自己的 `sheetN.xml` URI 不能拿來決定另一份目標活頁簿的對映。
 2. **Target binding** 由本次 caller 明示，將 inventory 中每個 worksheet module 一一
    對映到目標 workbook 裡的 sheet relationship ID／解析後 part URI。preflight 必須
    驗證 module 集合完整、沒有多餘項目、每個 target 是 workbook 實際列出的 worksheet，
@@ -79,8 +80,10 @@ worksheet part；不得用頁籤順序或顯示名稱猜測。這需要兩份不
 
 第一版 typed host kind 只支援 `workbook` 與 `worksheet`。carrier 若含 chart sheet、
 dialog sheet、macro sheet 或無法對映的 document module，資產註冊與注入都要 fail-loud；
-不可把它猜成 worksheet。所有 code names 必須符合 Excel 的長度／identifier 限制，
-並與 inventory、target binding 及 VBA project module names 做不分大小寫的唯一性檢查。
+不可把它猜成 worksheet。所有 code names 必須符合 Excel 的長度／identifier 限制；
+每個宿主 code name 要與 inventory 中對應 document-module identifier 不分大小寫相等，
+再對不同 logical modules 的 identifier 做不分大小寫的唯一性檢查，且不得與不相干的
+standard／class module 撞名。正確的 `ThisWorkbook ↔ ThisWorkbook` 對應不是衝突。
 
 寫入 XML 時有三項結構要求：
 
@@ -154,9 +157,10 @@ VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍
 5. 拒絕已加密、密碼保護、數位簽章或帶未知保護語意的輸入。
 6. 驗證 carrier provenance、binary hash、carrier module inventory、target binding
    的完整雙射，以及允許的 macro 清單。
-7. 目的狀態必須二選一：新檔要求 `expectedDestination = absent`；覆寫既有目的檔則
-   要求 caller 明示 overwrite，並提供目的檔 identity 與 digest。來源與目的為同一檔
-   時沿用同一份 identity／digest，不能只靠字串路徑判斷。
+7. 第一版只接受 **distinct new destination**：來源與目的經 canonical／no-follow
+   identity 判定後必須不同，目的在 preflight 必須不存在。任何 existing destination、
+   `overwrite = true` 或 source = destination 都要拒絕；支援既有目的檔的 conditional
+   replace 必須另案設計。
 
 ### 5.2 Staging
 
@@ -167,14 +171,14 @@ VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍
    驗證範圍，工作完成即清除。持久日誌只記 part name、mutation kind、before／after
    digest 與 semantic assertion，不得記錄 raw XML、cell value 或 VBA bytes。
 4. 完成 ZIP 後 fsync staging file，重新開啟並跑結構與 digest 驗證。
-5. atomic replace 前以 no-follow 方式重新檢查來源 identity／digest、目的父目錄
-   identity，以及目的狀態：`absent` 必須仍不存在，`existing` 必須仍符合預期
-   identity／digest。任一代次不同就拒絕 stale save；成功 replace 後同步目的目錄
-   metadata。檢查要貼近 rename，且 generation mismatch 發生在 rename 前時不得用舊
-   backup 回滾並覆蓋外部的新代次。
+5. commit 前以 no-follow 方式重新檢查來源 identity／digest 與目的父目錄 identity。
+   最後提交不可使用「先檢查 absent、再一般 rename」；必須用 macOS
+   `renameatx_np(..., RENAME_EXCL)` 或語意等價的單一 atomic no-replace primitive。若
+   race 中目的檔出現，commit 必須失敗並保留外部 bytes；失敗處理只清除 staging，
+   不得用 backup 回滾或覆蓋目的檔。成功後再同步目的目錄 metadata。
 
-staging 驗證失敗不得改到來源或既有目的檔。若 caller 要保留來源，預設輸出到新的
-`.xlsm` URL；覆寫模式必須另外明示。
+staging 驗證失敗不得改到來源或目的檔。第一版一律輸出到新的 `.xlsm` URL，不提供
+覆寫模式。
 
 ## 6. Byte-level 保真驗收
 
@@ -232,19 +236,25 @@ declaration 或其他無關節點的問題。
 
 功能驗收必須使用受控 fixture、受控 macro allow-list 與真實 Excel for Mac：
 
-1. **第一次交給 Excel 前**，先從受信任的 carrier module inventory 靜態確認沒有
-   `Auto_Open`、`Workbook_Open` 或其他 auto／event entrypoint，且 external content
-   policy 已通過。以事件巨集停用、外部更新拒絕的方式開啟；無法保證時就不執行。
+1. **第一次交給 Excel 前**，重新核對受信任 carrier module inventory 的 procedure
+   清單與 prohibited-entrypoint scan attestation，確認其 source／binary digest 仍吻合，
+   且沒有 `Auto_Open`、`Workbook_Open` 或其他 auto／event entrypoint；external content
+   policy 也必須通過。以事件巨集停用、外部更新拒絕的方式開啟；無法保證時就不執行。
 2. 使用隔離的受控 Excel session，不同時開啟可能暴露同名 macro 的其他 workbook 或
    add-in；驗證目標活頁簿 identity、檔案 digest、巨集清單、VBE 非 break mode，且
-   沒有 modal dialog。
-3. 讀取挑戰輸入、輸出與 checksum，確認測試前置條件成立。
-4. 將至少一個輸入改成會讓獨立 oracle 產生不同輸出的值。
-5. 以 Excel bridge 驗證過的 **workbook／project-qualified + module-qualified** 名稱執行
+   沒有 modal dialog。先切為 manual calculation、停用 refresh；無法控制這兩者時就
+   不執行該驗收。
+3. 受控 fixture 的 allow-listed macro 必須另外更新專用 execution witness（caller
+   nonce 或單調 counter）；witness 不能由公式、recalculation、refresh 或一般輸入寫入。
+4. 讀取挑戰輸入、輸出、checksum 與 witness，確認測試前置條件成立。
+5. 將至少一個輸入改成會讓獨立 oracle 產生不同輸出的值；呼叫巨集前立即重讀，斷言
+   輸出與 witness 都尚未改變，排除 automatic calculation 或 data refresh 的假陽性。
+6. 以 Excel bridge 驗證過的 **workbook／project-qualified + module-qualified** 名稱執行
    allow-list 內的巨集；執行前後都重驗 target identity。設定 timeout，任何 dialog、
    作用中活頁簿漂移或失去目標 workbook 都要 fail-loud。
-6. 重新讀取輸出，斷言它確實改變，並逐格與獨立實作的預期結果比對。
-7. 還原輸入後再執行一次，斷言輸出也復原。
+7. 重新讀取輸出，斷言結果與 witness **同時**按本輪 nonce／counter 改變，並逐格與
+   獨立實作的預期結果比對。
+8. 還原輸入後再執行一次，要求新的 witness，再斷言輸出也復原。
 
 以下都不是充分證據：AppleScript exit 0、巨集名稱可列出、Excel 沒跳錯誤、輸出
 剛好等於測試前的預填值。
@@ -280,16 +290,17 @@ declaration 或其他無關節點的問題。
 
 `che-excel-mcp` 的 `inject_vba` 在進入 verify 前至少要有：
 
-- [ ] typed request：經使用者授權的來源／目的 URL、expected input identity／digest、
-      expected destination absent 或 identity／digest、asset ID／digest、carrier module
-      inventory、target binding、overwrite policy；
+- [ ] typed request：經使用者授權且 identity 不同的來源／新目的 URL、expected input
+      identity／digest、`expectedDestination = absent`、asset ID／digest、carrier module
+      inventory、target binding；
 - [ ] hostile OPC preflight 與明確的 typed errors；
 - [ ] canonical Excel layout、一般 `.xlsx` content type、無既有 VBA 與只支援
       workbook／worksheet document modules 的 fail-loud gate；
 - [ ] owning-part-relative relationship confinement，以及 external Target 永不解參照；
 - [ ] fixed delta 與 conditional binding delta 的窄幅 XML patcher；
 - [ ] entry-set、untouched payload、reverse-patch、binary 與結構驗收；
-- [ ] same-filesystem staging、fsync、fresh reopen、generation check 與 atomic replace；
+- [ ] same-filesystem staging、fsync、fresh reopen、source generation check 與 atomic
+      no-replace；pre-rename race 建立目的檔時必須失敗並保留外部 bytes；
 - [ ] raw workbook／VBA bytes 不進日誌、telemetry 或一般 artifact 的隱私測試；
 - [ ] 受控 fixture 的 macro-alive 狀態改變測試；
 - [ ] 另一 workbook 暴露同名 module／macro 時仍不會誤呼叫的 integration regression；
