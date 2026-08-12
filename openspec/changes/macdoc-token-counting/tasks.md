@@ -24,17 +24,19 @@
 
 ## 5. Documentation and Release Verification
 
-- [x] [P] 5.1 Update `README.md` and `CONVERSIONS.md` for **User-facing privacy and platform documentation** and **Document provider and platform boundaries**, including exact commands/output, accepted models, byte limit, offline resource, `ANTHROPIC_API_KEY`, per-invocation disclosure consent, Anthropic estimate semantics, and evidence-backed platform states; verify the documented examples match captured CLI acceptance bytes and pass the platform block validator.
+- [x] [P] 5.1 Update `README.md` and `CONVERSIONS.md` for **User-facing privacy and platform documentation** and **Document provider and platform boundaries**, including exact commands/output, accepted models, byte limit, offline resource, `ANTHROPIC_API_KEY`, per-invocation disclosure consent, Anthropic estimate semantics, and evidence-backed platform states; verify the documented examples match captured CLI acceptance bytes and pass the token-documentation evidence regression.
 - [x] 5.2 Confirm the complete **Acceptance criteria** by running the local package tests, root `swift test`, compiled-binary offline acceptance, official-vector comparison, secret/redaction checks, `spectra validate macdoc-token-counting`, and `git diff --check`; record the exact command results and verify `Package.resolved` pins the audited tokenizer revision with no live Anthropic call.
 
 ### Verification evidence — 2026-08-13
 
-- `swift test` in `packages/token-counter-swift`: 19 tests, 0 failures (8.797 s), including 5 official Python `tiktoken` vectors, resource-integrity checks, no-cache/HOME isolation, all Anthropic status/limit/error mappings, and redaction assertions.
-- Root `swift test`: 37 XCTest cases (3 environment-gated skips) plus 26 Swift Testing cases, 63 total, 0 failures. `TokenCountCommandTests` contributed 18 compiled/factory cases, 0 failures.
-- Compiled GPT-4o acceptance ran under `sandbox-exec` with `(deny network*)`, isolated HOME/cache/TMP, exact stdout `2\n`, and no newly created isolation files. Successful `--output` wrote exact `2\n` with empty stdout.
-- The six injected provider failures (authentication, rate limit, timeout, redirect, oversized response, malformed response) returned no renderable value and left absent/existing destinations absent/byte-identical; no live Anthropic credential or endpoint was used.
-- `spectra validate macdoc-token-counting`: `valid`; artifact analysis: 0 Critical, 0 Warning (4 non-blocking example Suggestions).
+- `swift test` in `packages/token-counter-swift`: 24 tests, 0 failures (8.510 s), including 5 official Python `tiktoken` vectors, resource-integrity checks, no-cache/HOME isolation, public API consumption, lazy Claude-only construction, all Anthropic status/limit/error mappings, production URLSession hard-bound cancellation, and redaction assertions.
+- Root `swift test`: 40 XCTest cases (3 environment-gated skips) plus 26 Swift Testing cases, 66 total, 0 failures. `TokenCountCommandTests` contributed 21 compiled/factory cases, 0 failures.
+- Compiled GPT-4o `hello world` acceptance ran under `sandbox-exec` with `(deny network*)`, isolated HOME/cache/TMP, exact stdout `2\n`, and no newly created isolation files. The five official Python `tiktoken` vectors ran in the package suite. Successful `--output` wrote exact `2\n` with empty stdout.
+- The six injected Anthropic transport failures (authentication, rate limit, timeout, redirect, oversized response, malformed response) each ran after a real local GPT count through the production command/output seam. Every command result was non-zero with empty stdout and left absent/existing destinations absent/byte-identical; no live Anthropic credential or endpoint was used.
+- Input admission uses one `O_NOFOLLOW` descriptor for `fstat` and reads. Deterministic regressions prove a post-open pathname swap still reads the admitted descriptor and a final-entry symlink invokes no provider.
+- The production URLSession bridge consumes exactly the 64-KiB limit plus one overflow byte, cancels the task, and never delivers the later sentinel chunk; the integration regression passed 5/5 repeated runs.
+- `spectra validate macdoc-token-counting`: `valid`; artifact analysis: 0 Critical, 0 Warning (5 non-blocking example Suggestions).
 - `o200k_base.tiktoken` SHA-256: `446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d`.
 - Root and package `Package.resolved`, plus package manifest, pin `swift-tiktoken` revision `b4310ee520995ddff45b055de19e6605e0f8e5b6`.
-- `swift package describe --type json` passed in both roots; `git diff --check`, platform-block gate, and secret/private-path scan passed.
+- `swift package describe --type json` passed in both roots; `git diff --check`, token-documentation evidence regression, and secret/private-path scan passed.
 - Evidence environment: macOS 27.0 arm64, Apple Swift 6.3.3. No live Anthropic call was made.

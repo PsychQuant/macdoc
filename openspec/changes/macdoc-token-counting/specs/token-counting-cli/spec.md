@@ -59,7 +59,7 @@ Any count containing `claude-sonnet-4-6` SHALL require `--allow-network` and a n
 
 ### Requirement: Anthropic request and response contract
 
-The Anthropic provider SHALL send `POST https://api.anthropic.com/v1/messages/count_tokens` with `anthropic-version: 2023-06-01`, the selected model, and one user text message. It SHALL reject redirects, SHALL use a 30-second timeout, SHALL stop reading response bytes after 64 KiB, SHALL NOT retry automatically, and SHALL accept only a 2xx JSON response containing a non-negative integer `input_tokens`.
+The Anthropic provider SHALL send `POST https://api.anthropic.com/v1/messages/count_tokens` with `anthropic-version: 2023-06-01`, the selected model, and one user text message. It SHALL reject redirects, SHALL use 30-second request and resource timeouts, SHALL consume at most 64 KiB plus one overflow-detection byte at the network receive boundary, SHALL cancel immediately on overflow, SHALL NOT use an independently producing unbounded response bridge, SHALL NOT retry automatically, and SHALL accept only a 2xx JSON response containing a non-negative integer `input_tokens`.
 
 #### Scenario: Parse a successful response
 
@@ -78,7 +78,7 @@ The Anthropic provider SHALL send `POST https://api.anthropic.com/v1/messages/co
 
 ### Requirement: Input admission and boundaries
 
-The token route SHALL accept regular files of at most 1,000,000 bytes that decode strictly as UTF-8. It SHALL reject directories, larger files, and invalid UTF-8 before invoking any provider. It SHALL count the entire admitted file and SHALL NOT truncate input.
+The token route SHALL open the final input pathname with no-follow semantics, validate the opened object with `fstat`, and read from that same descriptor. It SHALL accept regular files of at most 1,000,000 bytes that decode strictly as UTF-8. It SHALL reject final-entry symlinks, directories, larger files, and invalid UTF-8 before invoking any provider. It SHALL count the entire admitted file and SHALL NOT truncate input.
 
 #### Scenario: Accept the size boundary
 
@@ -99,6 +99,11 @@ The token route SHALL accept regular files of at most 1,000,000 bytes that decod
 
 - **WHEN** an input is an empty UTF-8 file
 - **THEN** GPT-4o SHALL return zero and Anthropic SHALL return its non-negative provider count when requested
+
+#### Scenario: Preserve the admitted descriptor across a path swap
+
+- **WHEN** the input pathname is replaced after the file descriptor is opened
+- **THEN** the CLI SHALL read only the already-opened regular file and SHALL NOT follow the replacement pathname
 
 ### Requirement: Deterministic output and atomic presentation
 
@@ -145,7 +150,7 @@ The CLI SHALL accept `--model` and `--allow-network` only with `--to tokens`. Th
 
 ### Requirement: Reusable service behavior
 
-The `TokenCounter` package SHALL expose typed model and count values, an injectable Anthropic transport, and an asynchronous service that returns one result per requested model in request order. The service SHALL throw without returning a partial array if any model fails.
+The `TokenCounter` package SHALL expose typed model and count values, a public injectable Anthropic transport, public package-owned Anthropic errors, and an asynchronous service that returns one result per requested model in request order. Third-party tokenizer errors SHALL be normalized to a public package-owned error. Constructing or using a Claude-only service SHALL NOT load the GPT vocabulary. The service SHALL throw without returning a partial array if any model fails.
 
 #### Scenario: Preserve requested order
 

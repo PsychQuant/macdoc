@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import TokenCounter
 
@@ -50,6 +51,12 @@ struct TokenCountCommandRunner: Sendable {
 
     private let environment: EnvironmentReader
     private let count: CountOperation
+
+    struct InvocationResult: Equatable, Sendable {
+        let exitCode: Int32
+        let stdout: Data
+        let stderr: Data
+    }
 
     init(
         environment: @escaping EnvironmentReader,
@@ -108,20 +115,91 @@ struct TokenCountCommandRunner: Sendable {
         return output
     }
 
-    private static func readAdmittedText(from url: URL) throws -> String {
-        let values = try url.resourceValues(forKeys: [
-            .isRegularFileKey,
-            .fileSizeKey,
-        ])
-        guard values.isRegularFile == true else {
+    func execute(
+        inputURL: URL,
+        modelName: String?,
+        allowNetwork: Bool,
+        outputURL: URL?,
+        stdout: (Data) throws -> Void,
+        stderr: (Data) throws -> Void
+    ) async throws {
+        let rendered = try await render(
+            inputURL: inputURL,
+            modelName: modelName,
+            allowNetwork: allowNetwork
+        )
+        let data = Data(rendered.utf8)
+        if let outputURL {
+            try data.write(to: outputURL, options: .atomic)
+            try stderr(Data("已寫入: \(outputURL.path)\n".utf8))
+        } else {
+            try stdout(data)
+        }
+    }
+
+    func invoke(
+        inputURL: URL,
+        modelName: String?,
+        allowNetwork: Bool,
+        outputURL: URL?
+    ) async -> InvocationResult {
+        let output = SynchronizedDataBuffer()
+        let diagnostics = SynchronizedDataBuffer()
+        do {
+            try await execute(
+                inputURL: inputURL,
+                modelName: modelName,
+                allowNetwork: allowNetwork,
+                outputURL: outputURL,
+                stdout: { output.append($0) },
+                stderr: { diagnostics.append($0) }
+            )
+            return InvocationResult(
+                exitCode: 0,
+                stdout: output.snapshot,
+                stderr: diagnostics.snapshot
+            )
+        } catch {
+            let description = (error as? LocalizedError)?.errorDescription
+                ?? String(describing: error)
+            diagnostics.append(Data("Error: \(description)\n".utf8))
+            return InvocationResult(
+                exitCode: 1,
+                stdout: output.snapshot,
+                stderr: diagnostics.snapshot
+            )
+        }
+    }
+
+    static func readAdmittedText(
+        from url: URL,
+        afterOpen: () throws -> Void = {}
+    ) throws -> String {
+        // Open first and keep this descriptor as the single identity for
+        // validation and reading. O_NOFOLLOW prevents a final-entry symlink;
+        // O_NONBLOCK prevents a FIFO from blocking before fstat rejects it.
+        let descriptor = Darwin.open(
+            url.path,
+            O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard descriptor >= 0 else {
             throw TokenCountCommandError.inputIsNotRegularFile
         }
-        if let fileSize = values.fileSize, fileSize > inputByteLimit {
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? handle.close() }
+
+        try afterOpen()
+
+        var metadata = stat()
+        guard Darwin.fstat(descriptor, &metadata) == 0,
+              (metadata.st_mode & S_IFMT) == S_IFREG
+        else {
+            throw TokenCountCommandError.inputIsNotRegularFile
+        }
+        if metadata.st_size > inputByteLimit {
             throw TokenCountCommandError.inputTooLarge(limit: inputByteLimit)
         }
 
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
         var data = Data()
         while data.count <= inputByteLimit {
             let remaining = inputByteLimit + 1 - data.count
@@ -139,5 +217,18 @@ struct TokenCountCommandRunner: Sendable {
             throw TokenCountCommandError.invalidUTF8
         }
         return text
+    }
+}
+
+private final class SynchronizedDataBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) {
+        lock.withLock { data.append(chunk) }
+    }
+
+    var snapshot: Data {
+        lock.withLock { data }
     }
 }

@@ -94,7 +94,7 @@ struct AnthropicTokenCounterTests {
         #expect(await loader.callCount() == 1)
     }
 
-    @Test("rejects redirects without following or retrying", arguments: [301, 302, 307, 308])
+    @Test("rejects redirects without following or retrying", arguments: [301, 302, 303, 307, 308])
     func rejectsRedirects(statusCode: Int) async {
         let loader = RecordingAnthropicHTTPDataLoader(
             response: response(
@@ -168,6 +168,55 @@ struct AnthropicTokenCounterTests {
         assertRedacted(error, additionalForbiddenValues: ["UNREAD_RESPONSE_CONTENT_DO_NOT_LEAK"])
         #expect(await probe.readCount() == 2)
         #expect(await loader.callCount() == 1)
+    }
+
+    @Test("production body reader cancels after reading only limit plus one bytes")
+    func productionBodyReaderIsHardBounded() async {
+        let probe = ResponseByteProbe(byteCount: 65_538)
+        let cancellation = CancellationProbe()
+
+        do {
+            _ = try await URLSessionAnthropicHTTPDataLoader.readBoundedBody(
+                from: ProbeAsyncBytes(probe: probe),
+                limit: 65_536,
+                cancel: { cancellation.cancel() }
+            )
+            Issue.record("Expected the production body reader to reject an oversized response")
+        } catch let error as AnthropicTokenCountError {
+            #expect(error == .responseTooLarge(limit: 65_536))
+        } catch {
+            Issue.record("Expected a typed AnthropicTokenCountError, got \(error)")
+        }
+
+        #expect(await probe.readCount() == 65_537)
+        #expect(cancellation.count == 1)
+    }
+
+    @Test("production URLSession bridge cancels before a post-limit chunk")
+    func productionURLSessionBridgeIsBounded() async throws {
+        BoundedBodyURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [BoundedBodyURLProtocol.self]
+        let loader = URLSessionAnthropicHTTPDataLoader(
+            session: URLSession(configuration: configuration)
+        )
+
+        do {
+            _ = try await loader.load(
+                URLRequest(url: URL(string: "https://unit.test/bounded")!),
+                redirectPolicy: .reject,
+                bodyByteLimit: 65_536
+            )
+            Issue.record("Expected the production loader to reject an oversized response")
+        } catch let error as AnthropicTokenCountError {
+            #expect(error == .responseTooLarge(limit: 65_536))
+        } catch {
+            Issue.record("Expected a typed AnthropicTokenCountError, got \(error)")
+        }
+
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(BoundedBodyURLProtocol.deliveredByteCount == 65_537)
+        #expect(BoundedBodyURLProtocol.stopCount >= 1)
     }
 
     @Test("rejects malformed, missing, negative, and non-integer input_tokens")
@@ -284,7 +333,8 @@ private actor RecordingAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
 
     func load(
         _ request: URLRequest,
-        redirectPolicy: AnthropicRedirectPolicy
+        redirectPolicy: AnthropicRedirectPolicy,
+        bodyByteLimit _: Int
     ) async throws -> AnthropicHTTPResponse {
         calls.append(Call(request: request, redirectPolicy: redirectPolicy))
         switch outcome {
@@ -322,6 +372,153 @@ private actor ResponseChunkProbe {
 
     func readCount() -> Int {
         reads
+    }
+}
+
+private actor ResponseByteProbe {
+    private let byteCount: Int
+    private var index = 0
+
+    init(byteCount: Int) {
+        self.byteCount = byteCount
+    }
+
+    func next() -> UInt8? {
+        guard index < byteCount else {
+            return nil
+        }
+        index += 1
+        return 0x41
+    }
+
+    func readCount() -> Int {
+        index
+    }
+}
+
+private struct ProbeAsyncBytes: AsyncSequence, Sendable {
+    typealias Element = UInt8
+
+    let probe: ResponseByteProbe
+
+    struct AsyncIterator: AsyncIteratorProtocol {
+        let probe: ResponseByteProbe
+
+        mutating func next() async throws -> UInt8? {
+            await probe.next()
+        }
+    }
+
+    func makeAsyncIterator() -> AsyncIterator {
+        AsyncIterator(probe: probe)
+    }
+}
+
+private final class CancellationProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancellations = 0
+
+    var count: Int {
+        lock.withLock { cancellations }
+    }
+
+    func cancel() {
+        lock.withLock { cancellations += 1 }
+    }
+}
+
+private final class BoundedBodyURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let state = BoundedBodyURLProtocolState()
+    private let cancellationLock = NSLock()
+    private var cancelled = false
+
+    static var deliveredByteCount: Int {
+        state.deliveredByteCount
+    }
+
+    static var stopCount: Int {
+        state.stopCount
+    }
+
+    static func reset() {
+        state.reset()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "unit.test"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                  url: url,
+                  statusCode: 200,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: ["Content-Type": "application/json"]
+              )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        deliver(Data(repeating: 0x41, count: 65_536))
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.02) { [weak self] in
+            guard let self, !self.isCancelled else { return }
+            self.deliver(Data([0x42]))
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self, !self.isCancelled else { return }
+                self.deliver(Data("MUST_NOT_BE_DELIVERED".utf8))
+                self.client?.urlProtocolDidFinishLoading(self)
+            }
+        }
+    }
+
+    override func stopLoading() {
+        cancellationLock.withLock { cancelled = true }
+        Self.state.recordStop()
+    }
+
+    private var isCancelled: Bool {
+        cancellationLock.withLock { cancelled }
+    }
+
+    private func deliver(_ data: Data) {
+        Self.state.recordDelivery(byteCount: data.count)
+        client?.urlProtocol(self, didLoad: data)
+    }
+}
+
+private final class BoundedBodyURLProtocolState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var deliveredBytes = 0
+    private var stops = 0
+
+    var deliveredByteCount: Int {
+        lock.withLock { deliveredBytes }
+    }
+
+    var stopCount: Int {
+        lock.withLock { stops }
+    }
+
+    func reset() {
+        lock.withLock {
+            deliveredBytes = 0
+            stops = 0
+        }
+    }
+
+    func recordDelivery(byteCount: Int) {
+        lock.withLock { deliveredBytes += byteCount }
+    }
+
+    func recordStop() {
+        lock.withLock { stops += 1 }
     }
 }
 

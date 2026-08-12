@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 import SwiftTiktoken
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -33,6 +33,7 @@ public enum TokenCounterError: Error, Equatable, Sendable, LocalizedError {
     case invalidTokenCount(TokenModel)
     case resourceIntegrity(expectedSHA256: String, actualSHA256: String)
     case invalidResource
+    case tokenizerFailure
     case providerNotImplemented
 
     public var errorDescription: String? {
@@ -47,6 +48,8 @@ public enum TokenCounterError: Error, Equatable, Sendable, LocalizedError {
             "The bundled tokenizer resource failed its integrity check."
         case .invalidResource:
             "The bundled tokenizer resource is invalid."
+        case .tokenizerFailure:
+            "The local tokenizer failed."
         case .providerNotImplemented:
             "The token-count provider is not implemented."
         }
@@ -61,14 +64,29 @@ protocol TokenCountingProvider: Sendable {
 public struct TokenCounterService: Sendable {
     private let providers: [TokenModel: any TokenCountingProvider]
 
-    public init(anthropicAPIKey: String? = nil) throws {
+    public init(
+        anthropicAPIKey: String? = nil,
+        anthropicTransport: (any AnthropicTokenCountTransport)? = nil
+    ) throws {
+        try self.init(
+            anthropicAPIKey: anthropicAPIKey,
+            anthropicTransport: anthropicTransport,
+            openAIResourceLoader: OpenAITokenCounter.bundledResourceLoader
+        )
+    }
+
+    init(
+        anthropicAPIKey: String?,
+        anthropicTransport: (any AnthropicTokenCountTransport)?,
+        openAIResourceLoader: @escaping OpenAITokenCounter.ResourceLoader
+    ) throws {
         var providers: [TokenModel: any TokenCountingProvider] = [
-            .gpt4o: try OpenAITokenCountingProvider(),
+            .gpt4o: OpenAITokenCountingProvider(resourceLoader: openAIResourceLoader),
         ]
         if let anthropicAPIKey, !anthropicAPIKey.isEmpty {
             providers[.claudeSonnet46] = AnthropicTokenCountingProvider(
                 apiKey: anthropicAPIKey,
-                transport: AnthropicHTTPTokenCountTransport(
+                transport: anthropicTransport ?? AnthropicHTTPTokenCountTransport(
                     loader: URLSessionAnthropicHTTPDataLoader()
                 )
             )
@@ -134,7 +152,14 @@ public struct OpenAITokenCounter: Sendable {
     private let encoder: CoreBPE
 
     public init(resourceLoader: @escaping ResourceLoader = Self.bundledResourceLoader) throws {
-        let data = try resourceLoader()
+        let data: Data
+        do {
+            data = try resourceLoader()
+        } catch let error as TokenCounterError {
+            throw error
+        } catch {
+            throw TokenCounterError.invalidResource
+        }
         let actualSHA256 = SHA256.hash(data: data)
             .map { String(format: "%02x", $0) }
             .joined()
@@ -146,14 +171,18 @@ public struct OpenAITokenCounter: Sendable {
         }
 
         let ranks = try Self.parseVocabulary(data)
-        encoder = try CoreBPE(
-            encoder: ranks,
-            specialTokensEncoder: [
-                "<|endoftext|>": 199_999,
-                "<|endofprompt|>": 200_018,
-            ],
-            pattern: Self.o200kBasePattern
-        )
+        do {
+            encoder = try CoreBPE(
+                encoder: ranks,
+                specialTokensEncoder: [
+                    "<|endoftext|>": 199_999,
+                    "<|endofprompt|>": 200_018,
+                ],
+                pattern: Self.o200kBasePattern
+            )
+        } catch {
+            throw TokenCounterError.tokenizerFailure
+        }
     }
 
     public static func bundledResourceLoader() throws -> Data {
@@ -165,12 +194,20 @@ public struct OpenAITokenCounter: Sendable {
         }
         // Return owned bytes: callers can inject or mutate a copy in integrity
         // tests without retaining a read-only mmap-backed Data value.
-        return try Data(contentsOf: url)
+        do {
+            return try Data(contentsOf: url)
+        } catch {
+            throw TokenCounterError.invalidResource
+        }
     }
 
     public func count(text: String) throws -> TokenCount {
-        let tokens = try encoder.encodeOrdinary(text: text)
-        return TokenCount(model: .gpt4o, tokens: tokens.count, source: .local)
+        do {
+            let tokens = try encoder.encodeOrdinary(text: text)
+            return TokenCount(model: .gpt4o, tokens: tokens.count, source: .local)
+        } catch {
+            throw TokenCounterError.tokenizerFailure
+        }
     }
 
     private static let o200kBasePattern =
@@ -242,11 +279,12 @@ struct AnthropicHTTPResponse: @unchecked Sendable {
 protocol AnthropicHTTPDataLoader: Sendable {
     func load(
         _ request: URLRequest,
-        redirectPolicy: AnthropicRedirectPolicy
+        redirectPolicy: AnthropicRedirectPolicy,
+        bodyByteLimit: Int
     ) async throws -> AnthropicHTTPResponse
 }
 
-enum AnthropicTokenCountError: Error, Equatable, Sendable, LocalizedError {
+public enum AnthropicTokenCountError: Error, Equatable, Sendable, LocalizedError {
     case authenticationFailed
     case rateLimited
     case providerFailure(statusCode: Int)
@@ -256,7 +294,7 @@ enum AnthropicTokenCountError: Error, Equatable, Sendable, LocalizedError {
     case invalidResponse
     case notImplemented
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .authenticationFailed:
             "Anthropic authentication failed."
@@ -283,6 +321,7 @@ struct AnthropicHTTPTokenCountTransport: AnthropicTokenCountTransport {
         string: "https://api.anthropic.com/v1/messages/count_tokens"
     )!
     static let responseByteLimit = 65_536
+    static let requestTimeout: TimeInterval = 30
 
     private let loader: any AnthropicHTTPDataLoader
 
@@ -293,7 +332,7 @@ struct AnthropicHTTPTokenCountTransport: AnthropicTokenCountTransport {
     func countTokens(request: AnthropicTokenCountRequest) async throws -> Data {
         var urlRequest = URLRequest(url: Self.endpoint)
         urlRequest.httpMethod = "POST"
-        urlRequest.timeoutInterval = 30
+        urlRequest.timeoutInterval = Self.requestTimeout
         urlRequest.setValue(request.apiKey, forHTTPHeaderField: "x-api-key")
         urlRequest.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         urlRequest.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -301,7 +340,11 @@ struct AnthropicHTTPTokenCountTransport: AnthropicTokenCountTransport {
 
         let response: AnthropicHTTPResponse
         do {
-            response = try await loader.load(urlRequest, redirectPolicy: .reject)
+            response = try await loader.load(
+                urlRequest,
+                redirectPolicy: .reject,
+                bodyByteLimit: Self.responseByteLimit
+            )
         } catch let error as URLError where error.code == .timedOut {
             throw AnthropicTokenCountError.timedOut
         } catch let error as AnthropicTokenCountError {
@@ -373,17 +416,24 @@ struct AnthropicHTTPTokenCountTransport: AnthropicTokenCountTransport {
     }
 }
 
-private struct OpenAITokenCountingProvider: TokenCountingProvider {
-    let source: TokenCount.Source = .local
-    private let counter: OpenAITokenCounter
+private actor OpenAITokenCountingProvider: TokenCountingProvider {
+    nonisolated let source: TokenCount.Source = .local
+    private let resourceLoader: OpenAITokenCounter.ResourceLoader
+    private var counter: OpenAITokenCounter?
 
-    init() throws {
-        counter = try OpenAITokenCounter()
+    init(resourceLoader: @escaping OpenAITokenCounter.ResourceLoader) {
+        self.resourceLoader = resourceLoader
     }
 
     func count(text: String, model: TokenModel) async throws -> Int {
         guard model == .gpt4o else {
             throw TokenCounterError.invalidRequest("OpenAI provider received the wrong model.")
+        }
+        if counter == nil {
+            counter = try OpenAITokenCounter(resourceLoader: resourceLoader)
+        }
+        guard let counter else {
+            throw TokenCounterError.tokenizerFailure
         }
         return try counter.count(text: text).tokens
     }
@@ -436,12 +486,19 @@ struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
+        configuration.timeoutIntervalForRequest = AnthropicHTTPTokenCountTransport.requestTimeout
+        configuration.timeoutIntervalForResource = AnthropicHTTPTokenCountTransport.requestTimeout
         session = URLSession(configuration: configuration)
+    }
+
+    init(session: URLSession) {
+        self.session = session
     }
 
     func load(
         _ request: URLRequest,
-        redirectPolicy: AnthropicRedirectPolicy
+        redirectPolicy: AnthropicRedirectPolicy,
+        bodyByteLimit: Int
     ) async throws -> AnthropicHTTPResponse {
         let delegate = RejectingRedirectDelegate(policy: redirectPolicy)
         let (bytes, rawResponse) = try await session.bytes(
@@ -457,34 +514,52 @@ struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
             guard let key = item.key as? String else { return }
             result[key] = String(describing: item.value)
         }
+        let bodyData: Data
+        if (200 ..< 300).contains(response.statusCode) {
+            // Consume directly from URLSession.AsyncBytes. Do not hand the
+            // sequence to an independently producing stream: that would let
+            // the producer enqueue an unbounded body ahead of the 64-KiB gate.
+            bodyData = try await Self.readBoundedBody(
+                from: bytes,
+                limit: bodyByteLimit,
+                cancel: { bytes.task.cancel() }
+            )
+        } else {
+            bytes.task.cancel()
+            bodyData = Data()
+        }
         let body = AsyncThrowingStream<Data, Error> { continuation in
-            let producer = Task {
-                do {
-                    var chunk = Data()
-                    chunk.reserveCapacity(16_384)
-                    for try await byte in bytes {
-                        try Task.checkCancellation()
-                        chunk.append(byte)
-                        if chunk.count == 16_384 {
-                            continuation.yield(chunk)
-                            chunk.removeAll(keepingCapacity: true)
-                        }
-                    }
-                    if !chunk.isEmpty {
-                        continuation.yield(chunk)
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
+            if !bodyData.isEmpty {
+                continuation.yield(bodyData)
             }
-            continuation.onTermination = { _ in producer.cancel() }
+            continuation.finish()
         }
         return AnthropicHTTPResponse(
             statusCode: response.statusCode,
             headers: headers,
             body: body
         )
+    }
+
+    static func readBoundedBody<Bytes: AsyncSequence>(
+        from bytes: Bytes,
+        limit: Int,
+        cancel: @Sendable () -> Void
+    ) async throws -> Data where Bytes.Element == UInt8 {
+        var body = Data()
+        body.reserveCapacity(min(limit, 16_384))
+        do {
+            for try await byte in bytes {
+                guard body.count < limit else {
+                    throw AnthropicTokenCountError.responseTooLarge(limit: limit)
+                }
+                body.append(byte)
+            }
+            return body
+        } catch {
+            cancel()
+            throw error
+        }
     }
 }
 
