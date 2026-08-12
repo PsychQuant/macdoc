@@ -34,12 +34,17 @@ enum CLITestHelper {
     }
 
     /// 執行 macdoc 指令
-    static func run(_ arguments: [String], timeout: TimeInterval = 30) throws -> CLIResult {
+    static func run(
+        _ arguments: [String],
+        timeout: TimeInterval = 30,
+        environment: [String: String]? = nil
+    ) throws -> CLIResult {
         try runProcess(
             executableURL: URL(fileURLWithPath: binaryPath),
             arguments: arguments,
             currentDirectory: repoRoot,
-            timeout: timeout)
+            timeout: timeout,
+            environment: environment)
     }
 
     /// Runs an arbitrary executable with a timeout, returning its captured
@@ -49,12 +54,19 @@ enum CLITestHelper {
         executableURL: URL,
         arguments: [String],
         currentDirectory: URL?,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        environment: [String: String]? = nil
     ) throws -> CLIResult {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
         process.currentDirectoryURL = currentDirectory
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(
+                environment,
+                uniquingKeysWith: { _, override in override }
+            )
+        }
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -97,9 +109,14 @@ enum CLITestHelper {
     }
 
     /// 執行 macdoc convert 指令
-    static func convert(to format: String, input: String, flags: [String] = []) throws -> CLIResult {
+    static func convert(
+        to format: String,
+        input: String,
+        flags: [String] = [],
+        environment: [String: String]? = nil
+    ) throws -> CLIResult {
         var args = ["convert", "--to", format] + flags + [input]
-        return try run(args)
+        return try run(args, environment: environment)
     }
 
     /// 取得 .note 測試 fixture 的絕對路徑。若 repo 內無可用樣本則 XCTSkip。

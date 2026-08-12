@@ -1,11 +1,47 @@
 # macdoc Conversion Matrix
 
+> 平台聲明
+> - Token 計數／離線 GPT-4o 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `verified`，compiled route 已在 `sandbox-exec` 禁網路與隔離 HOME／cache 下通過官方 reference vectors。
+> - Anthropic token-count transport 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `implemented-not-live-verified`，只以注入 transport 驗證 fixed request、response limits、錯誤映射與資料遮蔽，沒有 live provider call。
+> - Windows／Linux token 計數：macdoc CLI 與 `TokenCounter` package；狀態為 `not-supported`，目前 manifests 僅宣告 macOS 14+。
+> - 證據：`swift test --filter TokenCountCommandTests`、`swift test`（`packages/token-counter-swift`），以及 bundled resource SHA-256 regression。
+
 ## Status Legend
 
 | Symbol | Meaning |
 |--------|---------|
 | ✅ | **implemented** — merged and available |
 | · | not planned |
+
+## Token Counting（measurement route，非格式轉換）
+
+`tokens` 接受任何副檔名的一般檔案，但內容必須是完整、嚴格 UTF-8，大小不得超過
+1,000,000 bytes。它不透過 matrix 中的中繼格式，也不截斷輸入。
+
+| Model | Invocation | Boundary |
+|---|---|---|
+| `gpt-4o` | `macdoc convert --to tokens --model gpt-4o sample.txt` | bundled `o200k_base.tiktoken`；固定 SHA-256；完全離線，不下載或寫 cache／HOME |
+| `claude-sonnet-4-6` | `macdoc convert --to tokens --model claude-sonnet-4-6 --allow-network sample.txt` | 需要非空 `ANTHROPIC_API_KEY`；把完整檔案文字送到 Anthropic；結果是 provider-reported estimate |
+| default（兩者） | `macdoc convert --to tokens --allow-network sample.txt` | 固定 GPT-4o → Claude 順序；兩者都成功才輸出，否則沒有部分 stdout／檔案 |
+
+若 `sample.txt` 精確包含 `hello world`，GPT-4o compiled acceptance 的 stdout bytes 為：
+
+```text
+2
+```
+
+單模型成功固定輸出 `<ASCII integer>\n`。雙模型成功固定輸出 tab-separated bytes：
+
+```text
+Model	Tokens
+gpt-4o	1234
+claude-sonnet-4-6	1198
+```
+
+`--output tokens.txt` 只在所有 requested providers 成功後原子寫入；失敗時不存在的目的檔
+維持不存在，既有目的檔維持原 bytes。`--allow-network` 是逐次 disclosure consent：環境中有
+API key 本身不代表允許送出當次檔案。Anthropic 的 estimate 不應與 bundled GPT-4o 的離線
+reference-vector 精確值混為一談。
 
 ## Cross Matrix (Source → Target)
 
@@ -37,6 +73,7 @@
 | Markdown → Word | `md-to-word-swift` | ✅ implemented | swift-markdown AST → OOXML writer |
 | PDF → DOCX | `pdf-to-docx-swift` | ✅ implemented | PDFKit text extraction → OOXML writer |
 | Note → HTML | `note-to-html-swift` | ✅ implemented | Notability .note → interactive HTML player with audio-synced stroke replay |
+| UTF-8 text → Token count | `token-counter-swift` | ✅ implemented | measurement route；GPT-4o offline，Claude 僅在逐次同意後連線 |
 
 ## Rules
 

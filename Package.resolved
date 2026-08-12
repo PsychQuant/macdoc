@@ -217,6 +217,14 @@
       }
     },
     {
+      "identity" : "swift-tiktoken",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/DePasqualeOrg/swift-tiktoken.git",
+      "state" : {
+        "revision" : "b4310ee520995ddff45b055de19e6605e0f8e5b6"
+      }
+    },
+    {
       "identity" : "swift-transformers",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-transformers",
