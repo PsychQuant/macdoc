@@ -96,6 +96,9 @@ genoffice 的 docx 存檔只重新產生被改動的段落,未觸碰的 block �
 
 對照重點:python-docx 是「直接 mutate tree、沒有 op log」,genoffice 是「保留原 bytes + 窄幅重生」,macdoc 是「op log 重放」。三種解法擺在一起看,才知道 op log 的成本換到了什麼。
 
+完整研究筆記（含 byte 保證邊界、Word-canonical 詞彙與三方比較）：
+[`docs/genoffice-roundtrip-comparison.md`](../docs/genoffice-roundtrip-comparison.md)。
+
 **3. pptx 功能廣度——`pptx-swift` 的擴充 checklist**
 
 `genoffice/packages/pptx-engine/src/` 有 macdoc 目前沒有的項目,可當功能對照表:`smartart.ts` / `smartart-layout.ts`、`custgeom.ts`(自訂幾何)、`animation.ts`、`theme-apply.ts`、`format-brush.ts`、`slide-transfer.ts`、`table-style.ts`。
