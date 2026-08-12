@@ -9,6 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        .package(name: "TokenCounter", path: "packages/token-counter-swift"),
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         // Local override — packages/word-to-md-swift has the BodyChild fix
         // (`.bookmarkMarker` / `.rawBlockElement` cases) ahead of the published
@@ -69,16 +70,19 @@ let package = Package(
                 .product(name: "NoteToHTML", package: "note-to-html-swift"),
                 .product(name: "NoteToPDF", package: "note-to-pdf-swift"),
                 .product(name: "OCRCore", package: "ocr-swift"),
+                .product(name: "TokenCounter", package: "TokenCounter"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .testTarget(
             name: "MacDocCLITests",
             dependencies: [
+                "MacDocCLI",
                 .product(name: "NoteCore", package: "note-core-swift"),
                 // Authoring API for building synthetic docx fixtures in tests
                 // (WordReverseCoverageTests → emptyAuthoringDocument).
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
+                .product(name: "TokenCounter", package: "TokenCounter"),
             ]
         ),
     ]

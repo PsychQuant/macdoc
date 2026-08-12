@@ -29,6 +29,19 @@ func writeStringOutput(_ content: String, to outputPath: String?) throws {
     }
 }
 
+/// Write already-rendered bytes exactly once. Unlike `print`, this preserves a
+/// command contract that already includes its trailing newline.
+func writeExactStringOutput(_ content: String, to outputPath: String?) throws {
+    let data = Data(content.utf8)
+    if let outputPath {
+        let outputURL = URL(fileURLWithPath: outputPath)
+        try data.write(to: outputURL, options: .atomic)
+        FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
+    } else {
+        FileHandle.standardOutput.write(data)
+    }
+}
+
 // MARK: - Bib Helpers
 
 /// Load and optionally filter bib entries from a .bib file.
