@@ -166,15 +166,22 @@ VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍
 
 ### 5.2 Staging
 
-1. 在目的檔案相同檔案系統建立不可預測名稱的 staging file。
+1. 透過目的 parent dirfd 以 `mkdirat` + 隨機名稱原子建立同檔案系統的**私有 staging
+   directory**；owner 必須是目前使用者、mode 為 `0700`，且不得有 ACL、group／other
+   write 或其他 writer。以 `O_DIRECTORY | O_NOFOLLOW` 開啟並持有 staging dirfd。
+   候選檔再以 `openat(O_CREAT | O_EXCL | O_NOFOLLOW, 0600)` 建立，從不重用既有 leaf，
+   也不把 staging 路徑暴露給 log、callback 或其他程序。
 2. 逐 entry 讀取來源；只有 allowed touched parts 進入專用 XML patcher，其餘 payload
    原樣複製。
 3. 加入 `xl/vbaProject.bin`；before／after bytes 只存在受限的暫存記憶體或 staging
    驗證範圍，工作完成即清除。持久日誌只記 part name、mutation kind、before／after
    digest 與 semantic assertion，不得記錄 raw XML、cell value 或 VBA bytes。
-4. 完成 ZIP 後 fsync staging file，重新開啟並跑結構與 digest 驗證。
-5. commit 前透過持有的 descriptors 重新檢查來源 identity／digest 與目的 parent
-   identity。最後提交不可使用「先檢查 absent、再一般 rename」；必須以 relative leaf
+4. 完成 ZIP 後 fsync 持有的 staging file descriptor；透過 staging dirfd + relative
+   leaf 重新開啟，跑結構與 digest 驗證。commit 前再次以 `fstat`／`fstatat` 核對持有
+   file descriptor 與 leaf 的 device、inode、type、owner、mode、link count、size、
+   digest 完全相同，也重驗私有 staging directory identity／權限；不符就停止。
+5. 同時透過持有的 descriptors 重新檢查來源 identity／digest 與目的 parent identity。
+   最後提交不可使用「先檢查 absent、再一般 rename」；必須以 relative leaf
    呼叫 macOS `renameatx_np(fromDirFD, ..., toDirFD, ...,
    RENAME_EXCL | RENAME_NOFOLLOW_ANY)`，或語意等價、descriptor-anchored 的單一 atomic
    no-replace primitive。不支援這種 primitive 就 fail-loud。若 race 中目的 leaf 出現，
@@ -182,10 +189,16 @@ VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍
    覆蓋目的檔。若原 pathname 的 ancestor 被換成 symlink，descriptor-anchored commit
    仍可安全寫入原先已授權的 directory object，但絕不可寫入 redirect target；回傳值
    要包含透過 `toDirFD` 重新開啟驗證的 output identity／handle，原 pathname 只作提示，
-   不宣稱仍指向產物。成功後透過持有的 directory descriptor 同步 metadata。
+   不宣稱仍指向產物。成功後透過 `toDirFD` 以 `O_NOFOLLOW` 重開輸出，確認 inode 與
+   已驗證候選相同並重算 digest，再透過持有的 directory descriptor 同步 metadata。
 
 staging 驗證失敗不得改到來源或目的檔。第一版一律輸出到新的 `.xlsm` URL，不提供
 覆寫模式。
+
+上述保證的威脅模型是互動式單一使用者，且私有 staging directory 在交易期間只有
+本程序能修改。能以同一使用者權限無視 `0700`、注入程序或修改其記憶體的惡意程序
+不在第一版邊界內；若 staging identity／post-commit digest 仍不一致，必須回報完整性
+事件、不得把產物交給 Excel，也不得自動用任何 backup 覆寫現場證據。
 
 ## 6. Byte-level 保真驗收
 
@@ -308,6 +321,9 @@ declaration 或其他無關節點的問題。
 - [ ] entry-set、untouched payload、reverse-patch、binary 與結構驗收；
 - [ ] same-filesystem staging、fsync、fresh reopen、source generation check 與 atomic
       no-replace；pre-rename race 建立目的檔時必須失敗並保留外部 bytes；
+- [ ] 私有 `0700` staging directory、`O_EXCL | O_NOFOLLOW` candidate、pre-rename
+      fd／leaf inode+digest equality 與 post-commit inode+digest equality；同名 leaf 取代
+      的 deterministic hook 必須在最後 identity gate 被拒絕；
 - [ ] pre-rename 把 pathname ancestor 換成 symlink 時，產物仍只落在原授權 directory
       object，redirect target bytes 不變，且回傳的是由持有 dirfd 重開驗證的 identity；
 - [ ] raw workbook／VBA bytes 不進日誌、telemetry 或一般 artifact 的隱私測試；
