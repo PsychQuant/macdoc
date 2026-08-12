@@ -18,6 +18,7 @@ import MarkerWordConverter
 import NoteToHTML
 import NoteToPDF
 import NotabilityContainerDetection
+import TokenCounter
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
@@ -27,8 +28,14 @@ extension MacDoc {
             abstract: "Convert documents between formats (textutil-compatible)"
         )
 
-        @Option(name: .long, help: "Target format (md, html, docx, pdf, json, marker)")
+        @Option(name: .long, help: "Target format (md, html, docx, pdf, json, marker, tokens)")
         var to: String
+
+        @Option(name: .long, help: "Token model: gpt-4o or claude-sonnet-4-6")
+        var model: String?
+
+        @Flag(name: .long, help: "Allow sending the complete input text to a network provider")
+        var allowNetwork: Bool = false
 
         @Option(name: .long, help: "Output file path (or directory for marker)")
         var output: String?
@@ -59,6 +66,21 @@ extension MacDoc {
 
             let ext = inputURL.pathExtension.lowercased()
             let target = to.lowercased()
+
+            if target == "tokens" {
+                try validateTokenRouteOptions()
+                let rendered = try await TokenCountCommandRunner.live.render(
+                    inputURL: inputURL,
+                    modelName: model,
+                    allowNetwork: allowNetwork
+                )
+                try writeExactStringOutput(rendered, to: resolveOutputPath())
+                return
+            }
+
+            if model != nil || allowNetwork {
+                throw ValidationError("--model 與 --allow-network 只適用於 --to tokens")
+            }
 
             switch (ext, target) {
             case ("docx", "md"):
@@ -471,6 +493,20 @@ extension MacDoc {
         }
 
         // MARK: - Helpers
+
+        private func validateTokenRouteOptions() throws {
+            var unsupported: [String] = []
+            if css != .web { unsupported.append("--css") }
+            if hardBreaks { unsupported.append("--hard-breaks") }
+            if full { unsupported.append("--full") }
+            if frontmatter { unsupported.append("--frontmatter") }
+            if htmlExtensions { unsupported.append("--html-extensions") }
+            guard unsupported.isEmpty else {
+                throw ValidationError(
+                    "--to tokens 不支援格式轉換選項：\(unsupported.joined(separator: ", "))"
+                )
+            }
+        }
 
         /// Resolve the output path: --stdout forces nil (stdout), overriding --output.
         /// If neither is specified, defaults to stdout.
