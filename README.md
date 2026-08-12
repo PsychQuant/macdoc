@@ -1,7 +1,7 @@
 # macdoc
 
 > 平台聲明
-> - Token 計數／離線 GPT-4o 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `verified`，compiled executable 已在禁用網路並隔離 HOME／cache 的環境通過官方 `o200k_base` vectors。
+> - Token 計數／離線 GPT-4o 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `verified`，compiled executable 已在禁用網路並隔離 HOME／cache 的環境通過 `hello world` exact-byte acceptance；package suite 另以五組官方 Python `tiktoken` vectors 驗證 bundled `o200k_base`。
 > - Anthropic token-count transport 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `implemented-not-live-verified`，固定 endpoint、錯誤映射與資料遮蔽只以注入 transport 驗證，沒有呼叫 live Anthropic。
 > - Windows／Linux token 計數：macdoc CLI 與 `TokenCounter` package；狀態為 `not-supported`，目前 manifests 僅宣告 macOS 14+，不得由離線演算法外推 runtime 支援。
 > - 證據：`swift test --filter TokenCountCommandTests`、`swift test`（`packages/token-counter-swift`），以及 `Tests/MacDocCLITests/TokenCountCommandTests.swift`。

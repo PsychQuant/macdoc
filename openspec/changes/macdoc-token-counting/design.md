@@ -49,11 +49,21 @@ public protocol AnthropicTokenCountTransport: Sendable {
 }
 
 public struct TokenCounterService: Sendable {
+    public init(
+        anthropicAPIKey: String? = nil,
+        anthropicTransport: (any AnthropicTokenCountTransport)? = nil
+    ) throws
     public func count(text: String, models: [TokenModel]) async throws -> [TokenCount]
+}
+
+public enum AnthropicTokenCountError: Error, Equatable, Sendable {
+    case authenticationFailed, rateLimited, redirectRejected, timedOut, invalidResponse
+    case providerFailure(statusCode: Int)
+    case responseTooLarge(limit: Int)
 }
 ```
 
-`TokenCounterService` preserves model order and returns results only after every requested provider succeeds. OpenAI and Anthropic implementations remain internal details except for the injectable Anthropic transport used by tests and future callers. This avoids coupling CLI output to third-party package types. A CLI-only implementation was rejected because it would make transport tests and future reuse unnecessarily difficult.
+`TokenCounterService` preserves model order and returns results only after every requested provider succeeds. OpenAI and Anthropic implementations remain internal details except for the public injectable Anthropic transport and package-owned typed errors used by tests and future callers. The OpenAI adapter normalizes third-party tokenizer failures to `TokenCounterError`, and the default GPT provider loads its resource lazily only when GPT-4o is requested. This avoids coupling CLI output or external callers to third-party package types. A CLI-only implementation was rejected because it would make transport tests and future reuse unnecessarily difficult.
 
 ### Bundle and verify the OpenAI vocabulary
 
@@ -63,13 +73,13 @@ Reference tests compare empty, ASCII, Traditional Chinese, mixed-script, and emo
 
 ### Require explicit consent for Anthropic disclosure
 
-Any requested model set containing `claude-sonnet-4-6` requires both `--allow-network` and a non-empty `ANTHROPIC_API_KEY`. Validation happens before the Anthropic transport is constructed or called. The endpoint is fixed, redirects are rejected, the timeout is 30 seconds, and the response body limit is 64 KiB. The client performs no automatic retry.
+Any requested model set containing `claude-sonnet-4-6` requires both `--allow-network` and a non-empty `ANTHROPIC_API_KEY`. Validation happens before the Anthropic transport is constructed or called. The endpoint is fixed, redirects are rejected, request and resource timeouts are 30 seconds, and the response body limit is 64 KiB. The production URLSession loader consumes at most 64 KiB plus one detection byte directly from `AsyncBytes`, cancels on overflow, and never relays the network response through an independently producing unbounded stream. Non-success responses are cancelled after their status is known without consuming the body. The client performs no automatic retry.
 
 The JSON request is `{ "model": "claude-sonnet-4-6", "messages": [{ "role": "user", "content": <file text> }] }`. The client accepts only a successful 2xx response containing a non-negative integer `input_tokens`. It maps 401 and 403 to authentication failure, 429 to rate limiting, other non-2xx responses to a provider failure, timeout to a transport timeout, and invalid or oversized JSON to an invalid-response error. Errors omit API keys, request headers, request bodies, and source text. A hidden or environment-only consent mechanism was rejected because possession of an API key is not consent to disclose the current file.
 
 ### Validate the complete input before counting
 
-The CLI reads a regular input file with a maximum size of 1,000,000 bytes, then decodes it strictly as UTF-8. It rejects directories, invalid UTF-8, and larger files before any provider call. Empty UTF-8 files are valid: the local result is zero and the Anthropic result is whatever non-negative count the endpoint returns.
+The CLI opens the final input pathname once with `O_NOFOLLOW`, validates the opened object with `fstat`, and reads through that same descriptor. It accepts only a regular file with a maximum size of 1,000,000 bytes, then decodes it strictly as UTF-8. A pathname swap after open cannot redirect the read, and a final-entry symlink is rejected. Directories, invalid UTF-8, and larger files fail before any provider call. Empty UTF-8 files are valid: the local result is zero and the Anthropic result is whatever non-negative count the endpoint returns.
 
 The byte limit gives both providers the same deterministic admission rule and remains below the local BPE implementation's one-million-character ceiling. Truncation was rejected because a plausible-looking partial count is unsafe for automation.
 
@@ -89,11 +99,11 @@ Numbers use ASCII digits without locale grouping. The command completes all requ
 
 Library tests use reference vectors, an injected vocabulary loader, and a stub Anthropic transport. They assert exact request headers and JSON, success parsing, authentication and rate-limit mapping, timeout, redirect rejection, response-size enforcement, malformed JSON, secret redaction, preserved model order, and all-or-nothing results.
 
-CLI tests invoke the compiled executable for local GPT-4o success, stable numeric and table rendering, `--output`, invalid options, invalid UTF-8, the size boundary, missing consent, missing key, and dual-provider failure with empty stdout and no output file. Anthropic CLI tests inject a local test transport through an internal command factory rather than reading a live service. End-to-end acceptance includes an offline GPT-4o invocation with networking unavailable and official tiktoken reference vectors recorded in the repository.
+CLI tests invoke the compiled executable for local GPT-4o success, stable numeric and table rendering, `--output`, invalid options, invalid UTF-8, the size boundary, missing consent, and missing key. Provider-failure tests use the same command execution/output seam as production: local GPT succeeds first, an injected Anthropic transport produces each typed failure, and the returned command result must be non-zero with empty stdout and an absent or byte-unchanged destination. Descriptor swap and symlink tests cover input admission. End-to-end acceptance includes one offline compiled GPT-4o invocation with networking unavailable; the five official tiktoken reference vectors run in the package suite.
 
 ### Document provider and platform boundaries
 
-`README.md` and `CONVERSIONS.md` describe accepted models, output formats, the 1,000,000-byte UTF-8 limit, `ANTHROPIC_API_KEY`, `--allow-network`, disclosure of the entire file to Anthropic, Anthropic's estimate semantics, and GPT-4o's offline resource. The platform declaration follows `docs/platform-support.md`: compiled and tested platforms receive an evidence-backed state, while other platforms remain `not-verified` unless CI or acceptance evidence exists.
+`README.md` and `CONVERSIONS.md` describe accepted models, output formats, the 1,000,000-byte UTF-8 limit, `ANTHROPIC_API_KEY`, `--allow-network`, disclosure of the entire file to Anthropic, Anthropic's estimate semantics, and GPT-4o's offline resource. Each document carries an explicit platform, toolchain, state, and evidence block: compiled and tested behavior receives `verified`, the stub-only Anthropic layer remains `implemented-not-live-verified`, and platforms without a compatible manifest remain `not-supported`. The compiled `hello world` acceptance and the five package-level official reference vectors are reported separately rather than combined into one claim.
 
 ## Implementation Contract
 

@@ -68,12 +68,15 @@ extension MacDoc {
 
             if target == "tokens" {
                 try validateTokenRouteOptions()
-                let rendered = try await TokenCountCommandRunner.live.render(
+                let outputURL = resolveOutputPath().map(URL.init(fileURLWithPath:))
+                try await TokenCountCommandRunner.live.execute(
                     inputURL: inputURL,
                     modelName: model,
-                    allowNetwork: allowNetwork
+                    allowNetwork: allowNetwork,
+                    outputURL: outputURL,
+                    stdout: { FileHandle.standardOutput.write($0) },
+                    stderr: { FileHandle.standardError.write($0) }
                 )
-                try writeExactStringOutput(rendered, to: resolveOutputPath())
                 return
             }
 
