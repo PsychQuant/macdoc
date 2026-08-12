@@ -248,6 +248,7 @@ final class TokenCountCommandTests: XCTestCase {
     }
 
     func testInjectedProviderFailuresNeverWritePartialOutput() async throws {
+        let localCounter = try OpenAITokenCounter()
         for failure in StubProviderFailure.allCases {
             let input = try temporaryFile(
                 named: "sample-\(failure.rawValue).txt",
@@ -258,38 +259,94 @@ final class TokenCountCommandTests: XCTestCase {
             let existingOutput = directory.appendingPathComponent("existing.txt")
             let absentOutput = directory.appendingPathComponent("absent.txt")
             try Data("KEEP".utf8).write(to: existingOutput)
-            let probe = FailingCountInvocationProbe(failure: failure)
+            let probe = ProviderFailureCommandProbe(failure: failure)
             let runner = TokenCountCommandRunner(
                 environment: { key in
                     key == "ANTHROPIC_API_KEY" ? "TEST_STUB_KEY_NOT_LIVE" : nil
                 },
                 count: { text, models, apiKey in
-                    try await probe.count(text: text, models: models, apiKey: apiKey)
+                    let local = try localCounter.count(text: text)
+                    probe.recordLocalSuccess(local)
+                    _ = try await probe.transport.countTokens(
+                        request: AnthropicTokenCountRequest(
+                            model: .claudeSonnet46,
+                            text: text,
+                            apiKey: apiKey ?? ""
+                        )
+                    )
+                    return []
                 }
             )
-            var rendered: String?
 
-            do {
-                rendered = try await runner.render(
+            for output in [existingOutput, absentOutput] {
+                let result = await runner.invoke(
                     inputURL: input,
                     modelName: nil,
-                    allowNetwork: true
+                    allowNetwork: true,
+                    outputURL: output
                 )
-                XCTFail("Expected \(failure.rawValue) to fail")
-            } catch {
-                let diagnostic = String(describing: error)
+
+                XCTAssertEqual(result.exitCode, 1)
+                XCTAssertEqual(result.stdout, Data())
+                XCTAssertFalse(result.stderr.isEmpty)
+                let diagnostic = String(decoding: result.stderr, as: UTF8.self)
                 XCTAssertFalse(diagnostic.contains("TEST_STUB_KEY_NOT_LIVE"))
                 XCTAssertFalse(diagnostic.contains("PRIVATE_SOURCE_TEXT"))
             }
 
-            XCTAssertNil(rendered)
             XCTAssertEqual(try Data(contentsOf: existingOutput), Data("KEEP".utf8))
             XCTAssertFalse(FileManager.default.fileExists(atPath: absentOutput.path))
-            let invocations = await probe.invocations()
-            XCTAssertEqual(invocations.count, 1)
-            XCTAssertEqual(invocations.first?.models, [.gpt4o, .claudeSonnet46])
-            XCTAssertEqual(invocations.first?.apiKey, "TEST_STUB_KEY_NOT_LIVE")
+            XCTAssertEqual(probe.localSuccessCount, 2)
+            XCTAssertEqual(probe.transport.callCount, 2)
         }
+    }
+
+    func testInputPathSwapAfterOpenReadsTheAlreadyAuthorizedDescriptor() throws {
+        let original = try temporaryFile(named: "source.txt", data: Data("AUTHORIZED".utf8))
+        let directory = original.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let moved = directory.appendingPathComponent("opened-source.txt")
+        let secret = directory.appendingPathComponent("secret.txt")
+        try Data("MUST_NOT_BE_READ".utf8).write(to: secret)
+
+        let text = try TokenCountCommandRunner.readAdmittedText(
+            from: original,
+            afterOpen: {
+                try FileManager.default.moveItem(at: original, to: moved)
+                try FileManager.default.createSymbolicLink(
+                    at: original,
+                    withDestinationURL: secret
+                )
+            }
+        )
+
+        XCTAssertEqual(text, "AUTHORIZED")
+    }
+
+    func testInputSymlinkIsRejectedBeforeProvider() async throws {
+        let target = try temporaryFile(named: "target.txt", data: Data("PRIVATE".utf8))
+        let directory = target.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let link = directory.appendingPathComponent("link.txt")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let probe = CountInvocationProbe(result: [])
+        let runner = TokenCountCommandRunner(
+            environment: { _ in nil },
+            count: { text, models, apiKey in
+                await probe.count(text: text, models: models, apiKey: apiKey)
+            }
+        )
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await runner.render(
+                inputURL: link,
+                modelName: "gpt-4o",
+                allowNetwork: false
+            )
+        }
+
+        let invocations = await probe.invocations()
+        XCTAssertTrue(invocations.isEmpty)
     }
 
     func testRunnerMissingConsentReadsNoCredentialAndInvokesNoProvider() async throws {
@@ -402,15 +459,39 @@ final class TokenCountCommandTests: XCTestCase {
         let input = try temporaryFile(named: "sample.md", data: Data("hello".utf8))
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 
-        let result = try CLITestHelper.convert(
-            to: "tokens",
-            input: input.path,
-            flags: ["--model", "gpt-4o", "--full"]
-        )
+        for flags in [
+            ["--css", "minimal"],
+            ["--hard-breaks"],
+            ["--full"],
+            ["--frontmatter"],
+            ["--html-extensions"],
+        ] {
+            let result = try CLITestHelper.convert(
+                to: "tokens",
+                input: input.path,
+                flags: ["--model", "gpt-4o"] + flags
+            )
 
-        XCTAssertNotEqual(result.exitCode, 0)
-        XCTAssertEqual(result.stdout, "")
-        XCTAssertTrue(result.stderr.contains("--full"), result.stderr)
+            XCTAssertNotEqual(result.exitCode, 0)
+            XCTAssertEqual(result.stdout, "")
+            XCTAssertTrue(result.stderr.contains(flags[0]), result.stderr)
+        }
+    }
+
+    func testTokenDocumentationSeparatesCompiledAndPackageEvidence() throws {
+        let root = CLITestHelper.repoRoot
+        for name in ["README.md", "CONVERSIONS.md"] {
+            let text = try String(
+                contentsOf: root.appendingPathComponent(name),
+                encoding: .utf8
+            )
+            XCTAssertTrue(text.contains("macOS 27.0（arm64）、Apple Swift 6.3.3"), name)
+            XCTAssertTrue(text.contains("狀態為 `verified`"), name)
+            XCTAssertTrue(text.contains("`hello world` exact-byte acceptance"), name)
+            XCTAssertTrue(text.contains("五組官方 Python `tiktoken`"), name)
+            XCTAssertTrue(text.contains("`implemented-not-live-verified`"), name)
+            XCTAssertTrue(text.contains("`not-supported`"), name)
+        }
     }
 }
 
@@ -427,30 +508,70 @@ private enum StubProviderFailure: String, Error, CaseIterable, Sendable {
     case malformedResponse
 }
 
-private actor FailingCountInvocationProbe {
-    struct Invocation: Sendable {
-        let models: [TokenModel]
-        let apiKey: String?
-    }
-
+private final class ProviderFailureCommandProbe: @unchecked Sendable {
+    private let lock = NSLock()
     private let failure: StubProviderFailure
-    private var recorded: [Invocation] = []
+    private var localSuccesses = 0
+    private var transportCalls = 0
+
+    var transport: FailingAnthropicTransport {
+        FailingAnthropicTransport(failure: failure, probe: self)
+    }
 
     init(failure: StubProviderFailure) {
         self.failure = failure
     }
 
-    func count(
-        text _: String,
-        models: [TokenModel],
-        apiKey: String?
-    ) throws -> [TokenCount] {
-        recorded.append(Invocation(models: models, apiKey: apiKey))
-        throw failure
+    func recordLocalSuccess(_ count: TokenCount) {
+        guard count.model == .gpt4o, count.source == .local else {
+            return
+        }
+        lock.withLock { localSuccesses += 1 }
     }
 
-    func invocations() -> [Invocation] {
-        recorded
+    var localSuccessCount: Int {
+        lock.withLock { localSuccesses }
+    }
+
+    func recordTransportCall() {
+        lock.withLock { transportCalls += 1 }
+    }
+
+    var transportCallCount: Int {
+        lock.withLock { transportCalls }
+    }
+}
+
+private struct FailingAnthropicTransport: AnthropicTokenCountTransport {
+    let failure: StubProviderFailure
+    let probe: ProviderFailureCommandProbe
+
+    func countTokens(request _: AnthropicTokenCountRequest) async throws -> Data {
+        probe.recordTransportCall()
+        throw failure.typedError
+    }
+
+    var callCount: Int {
+        probe.transportCallCount
+    }
+}
+
+private extension StubProviderFailure {
+    var typedError: AnthropicTokenCountError {
+        switch self {
+        case .authentication:
+            .authenticationFailed
+        case .rateLimit:
+            .rateLimited
+        case .timeout:
+            .timedOut
+        case .redirect:
+            .redirectRejected
+        case .oversizedResponse:
+            .responseTooLarge(limit: 65_536)
+        case .malformedResponse:
+            .invalidResponse
+        }
     }
 }
 

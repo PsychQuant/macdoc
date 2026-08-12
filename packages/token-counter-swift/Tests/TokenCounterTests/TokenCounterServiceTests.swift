@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import TokenCounter
 
@@ -102,6 +103,30 @@ func duplicateModelsAreAnInvalidRequest() async {
     #expect(invokedModels.isEmpty)
 }
 
+@Test("Claude-only requests do not load the GPT vocabulary")
+func claudeOnlyRequestDoesNotConstructOpenAIProvider() async throws {
+    let resourceProbe = SynchronousResourceProbe()
+    let transport = SuccessfulAnthropicTransport()
+    let service = try TokenCounterService(
+        anthropicAPIKey: "STUB_KEY",
+        anthropicTransport: transport,
+        openAIResourceLoader: {
+            resourceProbe.recordCall()
+            throw TokenCounterError.invalidResource
+        }
+    )
+
+    let counts = try await service.count(
+        text: "Claude only",
+        models: [.claudeSonnet46]
+    )
+
+    #expect(counts == [
+        TokenCount(model: .claudeSonnet46, tokens: 9, source: .provider),
+    ])
+    #expect(resourceProbe.callCount == 0)
+}
+
 private enum ServiceStubError: Error, Sendable {
     case providerUnavailable
 }
@@ -143,5 +168,24 @@ private actor ProviderCallLog {
 
     func snapshot() -> [TokenModel] {
         models
+    }
+}
+
+private struct SuccessfulAnthropicTransport: AnthropicTokenCountTransport {
+    func countTokens(request _: AnthropicTokenCountRequest) async throws -> Data {
+        Data(#"{"input_tokens":9}"#.utf8)
+    }
+}
+
+private final class SynchronousResourceProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+
+    func recordCall() {
+        lock.withLock { calls += 1 }
+    }
+
+    var callCount: Int {
+        lock.withLock { calls }
     }
 }
