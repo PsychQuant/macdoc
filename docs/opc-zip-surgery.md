@@ -177,10 +177,12 @@ VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍
    identity。最後提交不可使用「先檢查 absent、再一般 rename」；必須以 relative leaf
    呼叫 macOS `renameatx_np(fromDirFD, ..., toDirFD, ...,
    RENAME_EXCL | RENAME_NOFOLLOW_ANY)`，或語意等價、descriptor-anchored 的單一 atomic
-   no-replace primitive。不支援這種 primitive 就 fail-loud。若 race 中目的檔出現，或
-   任一路徑 ancestor 被換成 symlink，commit 必須失敗並保留外部／redirect target
-   bytes；失敗處理只清除 staging，不得用 backup 回滾或覆蓋目的檔。成功後再同步目的
-   目錄 metadata。
+   no-replace primitive。不支援這種 primitive 就 fail-loud。若 race 中目的 leaf 出現，
+   commit 必須失敗並保留外部 bytes；失敗處理只清除 staging，不得用 backup 回滾或
+   覆蓋目的檔。若原 pathname 的 ancestor 被換成 symlink，descriptor-anchored commit
+   仍可安全寫入原先已授權的 directory object，但絕不可寫入 redirect target；回傳值
+   要包含透過 `toDirFD` 重新開啟驗證的 output identity／handle，原 pathname 只作提示，
+   不宣稱仍指向產物。成功後透過持有的 directory descriptor 同步 metadata。
 
 staging 驗證失敗不得改到來源或目的檔。第一版一律輸出到新的 `.xlsm` URL，不提供
 覆寫模式。
@@ -306,8 +308,8 @@ declaration 或其他無關節點的問題。
 - [ ] entry-set、untouched payload、reverse-patch、binary 與結構驗收；
 - [ ] same-filesystem staging、fsync、fresh reopen、source generation check 與 atomic
       no-replace；pre-rename race 建立目的檔時必須失敗並保留外部 bytes；
-- [ ] pre-rename 把 pathname ancestor 換成 symlink 時必須失敗，且 redirect target 與
-      目的 bytes 均不變；
+- [ ] pre-rename 把 pathname ancestor 換成 symlink 時，產物仍只落在原授權 directory
+      object，redirect target bytes 不變，且回傳的是由持有 dirfd 重開驗證的 identity；
 - [ ] raw workbook／VBA bytes 不進日誌、telemetry 或一般 artifact 的隱私測試；
 - [ ] 受控 fixture 的 macro-alive 狀態改變測試；
 - [ ] 另一 workbook 暴露同名 module／macro 時仍不會誤呼叫的 integration regression；
