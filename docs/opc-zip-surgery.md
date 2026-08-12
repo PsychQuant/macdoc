@@ -36,16 +36,25 @@ ZIP central directory、壓縮層級、時間戳或 entry 順序可能因封裝�
 | `xl/_rels/workbook.xml.rels` | 新增 type 為 `http://schemas.microsoft.com/office/2006/relationships/vbaProject`、target 為 `vbaProject.bin` 的 internal relationship |
 | `xl/vbaProject.bin` | 加入與受信任 carrier asset 完全相同的 binary payload |
 
-實作者不得假設固定 `rId`；relationship ID 必須在現有集合中唯一。若 package 已有
-VBA relationship、VBA part，或既有 `.bin` Default 使用不同 content type，第一版
-應 fail-loud，不得靜默覆寫或重新分類其他 binary parts。替換既有 VBA project 必須
-是另一個有明確驗收的操作模式。
+這三個 URI 是第一版刻意採用的 **canonical Excel layout profile**。preflight 必須從
+package root relationship 解析 office document、再由 workbook relationships 解析每個
+sheet，並確認實際 URI 正是這個 profile；合法但使用其他 part URI 的 OPC package
+目前應回報 `unsupportedPackageLayout`，不得仍向寫死路徑寫入。實作者也不得假設固定
+`rId`；relationship ID 必須在現有集合中唯一。
+
+來源 workbook content type 必須是一般 `.xlsx` 的
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml`。若 package
+已是 macro-enabled、已有 VBA relationship／part、已有 VBA content-type Override，或
+既有 `.bin` Default 使用不同 content type，第一版應 fail-loud，不得靜默覆寫或重新
+分類其他 binary parts。同樣要拒絕重複／衝突的 workbook Override，以及 TargetMode、
+Target 或 type 不符與懸空的疑似 VBA relationship。替換既有 VBA project 必須是另一個
+有明確驗收的操作模式。
 
 ### 2.2 條件式宿主綁定
 
 「固定三項」只描述 package 最小差異，不代表每個來源活頁簿都只需改三個 parts。
 只要 carrier 的 VBA project 含 document modules，注入器還必須讓宿主 XML 的
-`codeName` 與 carrier binding manifest 一致：
+`codeName` 與 carrier module inventory 及本次 target binding 一致：
 
 | VBA project 宣告 | 宿主綁定 |
 |---|---|
@@ -53,20 +62,31 @@ VBA relationship、VBA part，或既有 `.bin` Default 使用不同 content type
 | worksheet document module | 對應 `xl/worksheets/sheetN.xml` 的 `<sheetPr codeName="…"/>` |
 
 這些是**條件式 delta**。如果來源 XML 已有相同綁定，就不應改寫；若缺少，才做
-窄幅插入；若現值衝突或 manifest 無法完整對映，必須停止並回報衝突。
+窄幅插入；若現值衝突，或 inventory／target binding 無法完整對映，必須停止並回報衝突。
 
 `codeName` 不是使用者在頁籤看到的 sheet name。工作表必須透過
-`xl/workbook.xml` 的 sheet relationship ID、workbook relationships 與 manifest
-對映到實際 worksheet part；不得用頁籤順序或顯示名稱猜測。manifest 至少要記錄：
+`xl/workbook.xml` 的 sheet relationship ID 與 workbook relationships 對映到實際
+worksheet part；不得用頁籤順序或顯示名稱猜測。這需要兩份不能混用的資料：
 
-- workbook document-module code name；
-- 每個 document module 對應的 worksheet part 與 code name；
-- carrier `vbaProject.bin` 的 SHA-256；
-- 產生 carrier 的來源活頁簿與文字模組版本。
+1. **Carrier module inventory** 跟 `vbaProject.bin` digest 綁定，記錄受控 asset ID／
+   版本、workbook document-module code name，以及每個 module 的 kind、code name 與
+   文字來源版本；不得保存使用者本機路徑。carrier 自己的 `sheetN.xml` URI 不能拿來
+   決定另一份目標活頁簿的對映。
+2. **Target binding** 由本次 caller 明示，將 inventory 中每個 worksheet module 一一
+   對映到目標 workbook 裡的 sheet relationship ID／解析後 part URI。preflight 必須
+   驗證 module 集合完整、沒有多餘項目、每個 target 是 workbook 實際列出的 worksheet，
+   且 module 與 target 都是一對一。
+
+第一版 typed host kind 只支援 `workbook` 與 `worksheet`。carrier 若含 chart sheet、
+dialog sheet、macro sheet 或無法對映的 document module，資產註冊與注入都要 fail-loud；
+不可把它猜成 worksheet。所有 code names 必須符合 Excel 的長度／identifier 限制，
+並與 inventory、target binding 及 VBA project module names 做不分大小寫的唯一性檢查。
 
 寫入 XML 時有三項結構要求：
 
-1. 既有 `workbookPr`／`sheetPr` 要保留其他屬性與未知子節點，只更新 `codeName`。
+1. 既有 `workbookPr` 要保留其他屬性與 namespace 宣告；它在 schema 中是 leaf，若含
+   無法解釋的子節點應拒絕輸入。既有 `sheetPr` 則要保留其他屬性與合法子節點，兩者
+   都只更新 `codeName`。
 2. 元素不存在時要依 SpreadsheetML schema 順序插入。
 3. 每個容器最多只能有一個 `workbookPr` 或 `sheetPr`；不得用 regex 直接附加而產生
    duplicate elements。
@@ -99,9 +119,15 @@ stream 宣告了 `ThisWorkbook` 與 worksheet document modules；如果宿主 XM
 2. 文字來源採可預測的 ASCII policy；非 ASCII 顯示文字用 `ChrW` 等明確組合，避免
    VBE legacy code page 把多位元組尾碼與引號誤判在一起。
 3. 由明確版本的真實 Excel 將來源匯入受控 carrier 活頁簿，編譯後另存 `.xlsm`。
-4. 從 carrier 抽出 `xl/vbaProject.bin`，同時產生 binding manifest。
-5. 將文字來源版本、Excel 版本、carrier digest、binary digest、manifest 與產製日期
-   一起保存；binary 是 build artifact，不取代文字來源。
+4. 從 carrier 抽出 `xl/vbaProject.bin`，同時產生 carrier module inventory。
+5. 將文字來源版本、Excel 版本、opaque carrier asset ID、carrier digest、binary
+   digest、module inventory 與產製日期一起保存；binary 是 build artifact，不取代
+   文字來源。
+
+來源模組與 carrier 進入資產庫前要做 secrets、個人資料、硬編碼路徑與不必要外部
+連線的掃描及人工審查。binary 與可解出的 VBA streams 都視為敏感 build artifact，
+使用最小權限存放；一般執行日誌只能記錄 asset ID、版本與 digest，不得複製 VBA
+source、binary、工作表內容或本機來源路徑。
 
 任何 VBA 邏輯或 document-module 組成變更，都必須重走產製與驗證流程。已簽章的
 VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍。
@@ -112,25 +138,40 @@ VBA project、含密碼或不明保護的 carrier 不屬於第一版支援範圍
 
 在寫入任何資料前：
 
-1. 計算來源活頁簿與 VBA asset digest，核對 caller 提供的 expected digest。
-2. 驗證副檔名、OPC root parts、workbook main part 與 relationships 存在且唯一。
-3. 拒絕 traversal、absolute／non-canonical path、duplicate entry、symlink entry、
-   不安全 external relationship，以及超過 entry 數量、解壓總量、壓縮比、XML
-   深度或節點數上限的 package。
+1. 將 caller 明確授權的來源與目的 URL canonicalize；以 no-follow 語意檢查父目錄及
+   leaf identity，拒絕 symlink／alias 跳轉與授權範圍外的目的地。計算來源活頁簿與
+   VBA asset digest，核對 caller 提供的 expected digest。
+2. 驗證副檔名、OPC root parts、workbook main part 與 relationships 存在且唯一，並
+   確認上一節的 canonical layout、一般 `.xlsx` content type 與無既存 VBA 狀態。
+3. 拒絕 traversal、absolute／non-canonical path、duplicate entry、symlink entry，
+   以及超過 entry 數量、解壓總量、壓縮比、XML 深度或節點數上限的 package。
+   每個 internal relationship Target 都要相對 owning part 做 URI 解析與 canonical
+   resolution，且結果必須仍在 package 內；不得以 ZIP root 為所有 Target 的共同基準。
+   既有 external relationship 只可作 opaque metadata 保留，offline validator 永不對
+   `file:`、網路或其他 external Target 解參照；新增 external relationship 一律拒絕，
+   要交給活 Excel 前則依第 8 節另做 deny／consent gate。
 4. XML parser 停用 DTD 與 external entities；未知 parts 保留但不執行。
 5. 拒絕已加密、密碼保護、數位簽章或帶未知保護語意的輸入。
-6. 驗證 carrier provenance、binary hash、binding manifest 與允許的 macro 清單。
+6. 驗證 carrier provenance、binary hash、carrier module inventory、target binding
+   的完整雙射，以及允許的 macro 清單。
+7. 目的狀態必須二選一：新檔要求 `expectedDestination = absent`；覆寫既有目的檔則
+   要求 caller 明示 overwrite，並提供目的檔 identity 與 digest。來源與目的為同一檔
+   時沿用同一份 identity／digest，不能只靠字串路徑判斷。
 
 ### 5.2 Staging
 
 1. 在目的檔案相同檔案系統建立不可預測名稱的 staging file。
 2. 逐 entry 讀取來源；只有 allowed touched parts 進入專用 XML patcher，其餘 payload
    原樣複製。
-3. 加入 `xl/vbaProject.bin`，並記錄每一筆實際 mutation 的 before／after bytes 與
-   semantic assertion。
+3. 加入 `xl/vbaProject.bin`；before／after bytes 只存在受限的暫存記憶體或 staging
+   驗證範圍，工作完成即清除。持久日誌只記 part name、mutation kind、before／after
+   digest 與 semantic assertion，不得記錄 raw XML、cell value 或 VBA bytes。
 4. 完成 ZIP 後 fsync staging file，重新開啟並跑結構與 digest 驗證。
-5. atomic replace 前再次比較來源 expected digest，若外部程式已更新檔案就拒絕 stale
-   save；成功 replace 後同步目的目錄 metadata。
+5. atomic replace 前以 no-follow 方式重新檢查來源 identity／digest、目的父目錄
+   identity，以及目的狀態：`absent` 必須仍不存在，`existing` 必須仍符合預期
+   identity／digest。任一代次不同就拒絕 stale save；成功 replace 後同步目的目錄
+   metadata。檢查要貼近 rename，且 generation mismatch 發生在 rename 前時不得用舊
+   backup 回滾並覆蓋外部的新代次。
 
 staging 驗證失敗不得改到來源或既有目的檔。若 caller 要保留來源，預設輸出到新的
 `.xlsm` URL；覆寫模式必須另外明示。
@@ -157,18 +198,23 @@ output entries = input entries ∪ {xl/vbaProject.bin}
 - `xl/_rels/workbook.xml.rels`
 - 新增的 `xl/vbaProject.bin`
 
-只有 manifest 要求且來源缺少相同綁定時，才可再改：
+只有 target binding 要求且來源缺少相同綁定時，才可再改：
 
 - `xl/workbook.xml`
-- manifest 列出的 `xl/worksheets/sheetN.xml`
+- target binding 列出的 `xl/worksheets/sheetN.xml`
 
 所有其他 entry 的 payload bytes 與 digest 必須逐筆相同。
 
 ### 6.3 被修改 XML 的可逆性
 
-每個 XML patch 都要有 typed patch manifest。驗收先確認輸出語意，再只撤回 manifest
-列出的變更；撤回後的 XML bytes 必須與來源完全相等。這能抓到 formatter 順手改了
-空白、attribute order、namespace、XML declaration 或其他無關節點的問題。
+每個 XML patch 都要有交易內的 typed patch ledger。每筆 mutation 記錄 part、唯一
+typed locator、原始 byte range、expected-before digest／bytes、after digest／bytes 與
+patch order；後續 patch 的定位以當下版本重新驗證，任何 ambiguity 或 expected-before
+mismatch 都要停止，不能猜測。raw bytes 只存在交易內受限暫存，不進一般日誌。
+
+驗收先確認輸出語意，再依 ledger 反向順序只撤回列出的變更；撤回後的 XML bytes 必須
+與來源完全相等。這能抓到 formatter 順手改了空白、attribute order、namespace、XML
+declaration 或其他無關節點的問題。
 
 只比較 parse tree 不夠，因為它看不出非必要的 byte drift；只比較 bytes 也不夠，
 因為它不能證明 relationship、content type 與 `codeName` 語意正確。兩種檢查都要做。
@@ -177,8 +223,8 @@ output entries = input entries ∪ {xl/vbaProject.bin}
 
 - 輸出的 `xl/vbaProject.bin` bytes 必須與已核准 asset 完全相同。
 - package 重新開啟後必須只有一個 VBA part 與一條對應 internal relationship。
-- workbook main content type、binary content type、relationship target 與所有 manifest
-  綁定都必須精確吻合。
+- workbook main content type、binary content type、relationship target 與所有 target
+  binding 都必須精確吻合。
 - offline 驗證完成後才可把副本交給 Excel 作功能驗收；Excel 另存後的 package 不再
   使用上述 byte-preserving 主張。
 
@@ -186,14 +232,19 @@ output entries = input entries ∪ {xl/vbaProject.bin}
 
 功能驗收必須使用受控 fixture、受控 macro allow-list 與真實 Excel for Mac：
 
-1. 先驗證活頁簿 identity、檔案 digest、巨集清單、VBE 非 break mode，且沒有 modal
-   dialog。
-2. 讀取挑戰輸入、輸出與 checksum，確認測試前置條件成立。
-3. 將至少一個輸入改成會讓獨立 oracle 產生不同輸出的值。
-4. 以 module-qualified 名稱執行允許的巨集；設定 timeout，任何 dialog 或失去目標
-   workbook 都要 fail-loud。
-5. 重新讀取輸出，斷言它確實改變，並逐格與獨立實作的預期結果比對。
-6. 還原輸入後再執行一次，斷言輸出也復原。
+1. **第一次交給 Excel 前**，先從受信任的 carrier module inventory 靜態確認沒有
+   `Auto_Open`、`Workbook_Open` 或其他 auto／event entrypoint，且 external content
+   policy 已通過。以事件巨集停用、外部更新拒絕的方式開啟；無法保證時就不執行。
+2. 使用隔離的受控 Excel session，不同時開啟可能暴露同名 macro 的其他 workbook 或
+   add-in；驗證目標活頁簿 identity、檔案 digest、巨集清單、VBE 非 break mode，且
+   沒有 modal dialog。
+3. 讀取挑戰輸入、輸出與 checksum，確認測試前置條件成立。
+4. 將至少一個輸入改成會讓獨立 oracle 產生不同輸出的值。
+5. 以 Excel bridge 驗證過的 **workbook／project-qualified + module-qualified** 名稱執行
+   allow-list 內的巨集；執行前後都重驗 target identity。設定 timeout，任何 dialog、
+   作用中活頁簿漂移或失去目標 workbook 都要 fail-loud。
+6. 重新讀取輸出，斷言它確實改變，並逐格與獨立實作的預期結果比對。
+7. 還原輸入後再執行一次，斷言輸出也復原。
 
 以下都不是充分證據：AppleScript exit 0、巨集名稱可列出、Excel 沒跳錯誤、輸出
 剛好等於測試前的預填值。
@@ -229,13 +280,19 @@ output entries = input entries ∪ {xl/vbaProject.bin}
 
 `che-excel-mcp` 的 `inject_vba` 在進入 verify 前至少要有：
 
-- [ ] typed request：來源／目的 URL、expected input digest、asset ID／digest、binding
-      manifest、overwrite policy；
+- [ ] typed request：經使用者授權的來源／目的 URL、expected input identity／digest、
+      expected destination absent 或 identity／digest、asset ID／digest、carrier module
+      inventory、target binding、overwrite policy；
 - [ ] hostile OPC preflight 與明確的 typed errors；
+- [ ] canonical Excel layout、一般 `.xlsx` content type、無既有 VBA 與只支援
+      workbook／worksheet document modules 的 fail-loud gate；
+- [ ] owning-part-relative relationship confinement，以及 external Target 永不解參照；
 - [ ] fixed delta 與 conditional binding delta 的窄幅 XML patcher；
 - [ ] entry-set、untouched payload、reverse-patch、binary 與結構驗收；
 - [ ] same-filesystem staging、fsync、fresh reopen、generation check 與 atomic replace；
+- [ ] raw workbook／VBA bytes 不進日誌、telemetry 或一般 artifact 的隱私測試；
 - [ ] 受控 fixture 的 macro-alive 狀態改變測試；
+- [ ] 另一 workbook 暴露同名 module／macro 時仍不會誤呼叫的 integration regression；
 - [ ] 真 Excel integration gate 與缺少 Excel 時的明確 skip／fail policy；
 - [ ] 文件化的平台、巨集授權與不支援封裝邊界。
 
