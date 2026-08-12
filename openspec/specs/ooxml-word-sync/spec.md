@@ -1106,12 +1106,12 @@ code:
 ---
 ### Requirement: Sidecar persistence of snapshot and log
 
-The orchestrator SHALL persist the operation log as `<docx-stem>.oplog.jsonl` and the most-recently-imported snapshot tree as `<docx-stem>.snapshot.json` in the same directory as the docx. The orchestrator SHALL NOT write metadata into the docx itself.
+The orchestrator SHALL persist the operation log as `<docx-full-name>.oplog.jsonl` and the most-recently-imported snapshot tree as `<docx-full-name>.snapshot.json` in the same directory as the docx. For example, `report.docx` uses `report.docx.oplog.jsonl` and `report.docx.snapshot.json`. The orchestrator SHALL NOT write metadata into the docx itself. During migration, loaders SHALL fall back to the legacy stem paths (`report.oplog.jsonl` / `report.snapshot.json`) when the full-name path is absent; writers SHALL create only the full-name paths.
 
 #### Scenario: Sidecar files created on first sync
 
 - **WHEN** `SyncOrchestrator.bootstrapFromDocx(url:)` runs on a docx with no existing sidecar files
-- **THEN** `<docx-stem>.oplog.jsonl` is created (initially empty) and `<docx-stem>.snapshot.json` is created with the initial tree snapshot
+- **THEN** `<docx-full-name>.oplog.jsonl` is created (initially empty) and `<docx-full-name>.snapshot.json` is created with the initial tree snapshot
 
 #### Scenario: docx contains zero sync metadata
 
@@ -1291,13 +1291,13 @@ The orchestrator SHALL provide `SyncOrchestrator.bootstrapFromDocx(url:)` that i
 
 #### Scenario: Fresh docx without sidecars
 
-- **GIVEN** `report.docx` exists with no `report.oplog.jsonl` and no `report.snapshot.json`
+- **GIVEN** `report.docx` exists with no `report.docx.oplog.jsonl` and no `report.docx.snapshot.json`
 - **WHEN** `bootstrapFromDocx(url:)` runs
 - **THEN** sidecars are created with the docx's current state as the snapshot and an empty log; subsequent Swift mutations append to the new log
 
 #### Scenario: Existing sidecars are reused
 
-- **GIVEN** `report.docx`, `report.oplog.jsonl` (with prior history), and `report.snapshot.json` (from prior session) all exist
+- **GIVEN** `report.docx`, `report.docx.oplog.jsonl` (with prior history), and `report.docx.snapshot.json` (from prior session) all exist
 - **WHEN** `bootstrapFromDocx(url:)` runs
 - **THEN** the orchestrator loads the existing log and snapshot; if the docx has changed since the snapshot's timestamp, an import diff is run to capture the intervening changes
 
