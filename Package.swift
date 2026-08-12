@@ -31,6 +31,7 @@ let package = Package(
         .package(name: "DocxWorkflowLib", path: "packages/docx-workflow-swift"),
         .package(url: "https://github.com/PsychQuant/note-to-html-swift.git", from: "0.1.1"),
         .package(url: "https://github.com/PsychQuant/note-to-pdf-swift.git", from: "0.1.3"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.20"),
         // NoteCore is transitively pulled via note-to-html-swift/note-to-pdf-swift,
         // but declaring it here lets MacDocCLITests `import NoteCore` to verify
         // synthetic .note generation against the parser (per #100 Plan).
@@ -68,6 +69,7 @@ let package = Package(
                 .product(name: "DocxWorkflowLib", package: "DocxWorkflowLib"),
                 .product(name: "NoteToHTML", package: "note-to-html-swift"),
                 .product(name: "NoteToPDF", package: "note-to-pdf-swift"),
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
                 .product(name: "OCRCore", package: "ocr-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
@@ -75,6 +77,7 @@ let package = Package(
         .testTarget(
             name: "MacDocCLITests",
             dependencies: [
+                "MacDocCLI",
                 .product(name: "NoteCore", package: "note-core-swift"),
                 // Authoring API for building synthetic docx fixtures in tests
                 // (WordReverseCoverageTests → emptyAuthoringDocument).

@@ -105,10 +105,12 @@ extension MacDoc {
             case ("tex", "docx"):
                 try convertTeXToWord(inputURL: inputURL)
 
-            case ("note", "html"):
+            case ("note", "html"), ("ntb", "html"):
+                try rejectUnsupportedNotabilityGeneration(inputURL: inputURL)
                 try convertNoteToHTML(inputURL: inputURL)
 
-            case ("note", "pdf"):
+            case ("note", "pdf"), ("ntb", "pdf"):
+                try rejectUnsupportedNotabilityGeneration(inputURL: inputURL)
                 try convertNoteToPDF(inputURL: inputURL)
 
             default:
@@ -409,6 +411,13 @@ extension MacDoc {
         }
 
         // MARK: - Note → HTML
+
+        private func rejectUnsupportedNotabilityGeneration(inputURL: URL) throws {
+            guard NotabilityContainerDetector.classify(at: inputURL) == .modernFlatBuffers else {
+                return
+            }
+            throw ValidationError(NotabilityContainerDetector.modernContainerDiagnostic)
+        }
 
         private func convertNoteToHTML(inputURL: URL) throws {
             if css != .dark && css != .light {
