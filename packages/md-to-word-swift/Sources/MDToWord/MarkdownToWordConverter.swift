@@ -121,7 +121,12 @@ public struct MarkdownToWordConverter: DocumentConverter {
             frontmatter: extracted.metadata,
             mathTokens: mathTokens
         )
-        return try builder.build(markdown: markdown)
+        var document = try builder.build(markdown: markdown)
+        if !mathTokens.isEmpty {
+            document.documentRootAttributes["xmlns:m"] =
+                "http://schemas.openxmlformats.org/officeDocument/2006/math"
+        }
+        return document
     }
 
     private func renderDocumentXML(_ document: WordDocument) -> String {
@@ -212,6 +217,7 @@ private struct MarkdownWordBuilder {
     private let sourceName: String?
     private let frontmatter: [String: String]
     private let mathTokens: [RenderedMarkdownMathToken]
+    private let mathTokensByPlaceholder: [String: RenderedMarkdownMathToken]
     private var inferredTitle = false
 
     init(
@@ -226,6 +232,9 @@ private struct MarkdownWordBuilder {
         self.sourceName = sourceName
         self.frontmatter = frontmatter
         self.mathTokens = mathTokens
+        self.mathTokensByPlaceholder = Dictionary(
+            uniqueKeysWithValues: mathTokens.map { ($0.placeholder, $0) }
+        )
     }
 
     mutating func build(markdown: String) throws -> WordDocument {
@@ -758,19 +767,25 @@ private struct MarkdownWordBuilder {
         in text: String,
         from cursor: String.Index
     ) -> (range: Range<String.Index>, token: RenderedMarkdownMathToken)? {
-        var match: (range: Range<String.Index>, token: RenderedMarkdownMathToken)?
-        for token in mathTokens where token.kind == .inline {
-            guard let range = text.range(
-                of: token.placeholder,
-                range: cursor..<text.endIndex
-            ) else {
-                continue
+        var searchStart = cursor
+        while searchStart < text.endIndex,
+              let prefixRange = text.range(
+                  of: MarkdownMathScanner.defaultMarkerPrefix,
+                  range: searchStart..<text.endIndex
+              ) {
+            if let suffixRange = text.range(
+                of: "TOKEN",
+                range: prefixRange.upperBound..<text.endIndex
+            ) {
+                let range = prefixRange.lowerBound..<suffixRange.upperBound
+                let candidate = String(text[range])
+                if let token = mathTokensByPlaceholder[candidate], token.kind == .inline {
+                    return (range, token)
+                }
             }
-            if match == nil || range.lowerBound < match!.range.lowerBound {
-                match = (range, token)
-            }
+            searchStart = prefixRange.upperBound
         }
-        return match
+        return nil
     }
 
     private func displayToken(in children: [Markup]) -> RenderedMarkdownMathToken? {
@@ -778,9 +793,10 @@ private struct MarkdownWordBuilder {
               let text = children[0] as? Text else {
             return nil
         }
-        return mathTokens.first {
-            $0.kind == .display && $0.placeholder == text.string
+        guard let token = mathTokensByPlaceholder[text.string], token.kind == .display else {
+            return nil
         }
+        return token
     }
 
     private func plainText(from markup: Markup) -> String {

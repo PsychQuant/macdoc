@@ -120,5 +120,50 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertTrue(result.markdown.contains("MDTOWORDMATHPLACEHOLDERFIXED0TOKEN"))
         XCTAssertTrue(result.markdown.contains(result.tokens[0].placeholder))
     }
+
+    func testDisplayFormulaCannotShareALogicalParagraphWithText() {
+        let sources = [
+            "Before\n$$x$$\nAfter",
+            "Before\n$$\nx\n$$\nAfter",
+        ]
+
+        for source in sources {
+            XCTAssertThrowsError(try MarkdownMathScanner().scan(source)) { error in
+                XCTAssertEqual(
+                    error as? MarkdownMathScanner.ScanError,
+                    .misplacedDisplayFormula(line: 2, column: 1),
+                    "Source: \(source)"
+                )
+            }
+        }
+    }
+
+    func testReferenceDefinitionDestinationsRemainLiteralInContainersAndContinuations() throws {
+        let sources = [
+            "[ref]:\n  https://example.com/$x$\n\n[link][ref]",
+            "> [ref]: https://example.com/$x$\n>\n> [link][ref]",
+            "> [ref]:\n> https://example.com/$x$\n>\n> [link][ref]",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source)
+        }
+    }
+
+    func testContainerFencesAndIndentedCodeRemainLiteral() throws {
+        let sources = [
+            "> ~~~text\n> $x$\n> ~~~",
+            "- ~~~text\n  $x$\n  ~~~",
+            "    $x$",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source)
+        }
+    }
 }
 #endif

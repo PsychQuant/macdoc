@@ -61,6 +61,12 @@ struct MarkdownOMathRouteTests {
         let xml = try archiveEntry(named: "word/document.xml", in: output)
         #expect(xml.components(separatedBy: "<m:oMath>").count - 1 == 1)
         #expect(!xml.contains("$x^2$"))
+        #expect(
+            xml.contains(
+                "xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\""
+            )
+        )
+        _ = try XMLDocument(data: Data(xml.utf8), options: [.nodePreserveAll])
     }
 
     @Test("omath mode emits display native Word math")
@@ -144,6 +150,28 @@ struct MarkdownOMathRouteTests {
         #expect(!result.succeeded)
         #expect(result.stdout.isEmpty)
         #expect(result.stderr.contains("line 1, column 1"))
+        #expect(try Data(contentsOf: output) == sentinel)
+    }
+
+    @Test("display math sharing a logical paragraph fails before replacing destination")
+    func mixedLogicalParagraphDisplayPreservesDestination() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        let sentinel = Data("KEEP".utf8)
+        try "Before\n$$x$$\nAfter".write(to: input, atomically: true, encoding: .utf8)
+        try sentinel.write(to: output)
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(!result.succeeded)
+        #expect(result.stdout.isEmpty)
+        #expect(result.stderr.contains("line 2, column 1"))
         #expect(try Data(contentsOf: output) == sentinel)
     }
 
