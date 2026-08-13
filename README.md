@@ -84,6 +84,9 @@ cp .build/release/macdoc ~/bin/macdoc
 macdoc convert --to md file.docx
 macdoc convert --to docx file.md
 
+# Markdown → Word：選擇性將行內 $...$ 與獨立段落 $$...$$ 轉為原生 OMath
+macdoc convert --to docx file.md --math omath
+
 # Word ↔ HTML
 macdoc convert --to html file.docx
 macdoc convert --to docx file.html
@@ -109,6 +112,15 @@ macdoc convert --to html notes.note --full
 macdoc convert --to html notes.note --full --css dark
 ```
 
+Markdown → Word 的數學模式預設為 `literal`，因此未指定 `--math omath` 時，
+`$...$` 與 `$$...$$` 會保留為一般 Markdown 文字。原生 OMath 轉換採選擇性啟用，
+且只適用於 Markdown → DOCX 路由。
+
+`omath` 模式採用 [`latex-math-swift`](https://github.com/PsychQuant/latex-math-swift)
+定義的支援子集：分數與根號、上下標、重音符號、成對分隔符號、求和／積分／乘積、
+函數與極限、`\text{}`、希臘字母及常用運算子。這項功能不等同完整 TeX 引擎，
+也不追求與 Pandoc texmath 相同的語法涵蓋範圍；子集以連結套件的版本化文件為準。
+
 常用選項：
 
 | 選項 | 說明 |
@@ -117,6 +129,7 @@ macdoc convert --to html notes.note --full --css dark
 | `--stdout` | 輸出到 stdout |
 | `--frontmatter` | 含 YAML frontmatter（Word → MD） |
 | `--html-extensions` | 保留 `<u>/<sup>/<sub>/<mark>`（→ MD） |
+| `--math literal\|omath` | Markdown → DOCX 數學模式（預設 `literal`；`omath` 為原生 Word 數學） |
 | `--full` | 輸出完整 HTML 文件 |
 | `--css dark\|light` | SRT 主題 |
 | `--css minimal\|web` | Bib 樣式 |

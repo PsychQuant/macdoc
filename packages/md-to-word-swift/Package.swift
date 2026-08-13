@@ -10,7 +10,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.1"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "1.4.0"),
+        .package(url: "https://github.com/PsychQuant/latex-math-swift.git", from: "0.2.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.4.0"),
     ],
@@ -21,6 +22,7 @@ let package = Package(
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
+                .product(name: "LaTeXMathSwift", package: "latex-math-swift"),
                 .product(name: "Yams", package: "Yams"),
             ]
         ),
