@@ -315,14 +315,17 @@ struct MarkdownMathScanner {
                 let isClosing = cursor < characters.count && characters[cursor] == "/"
                 if isClosing { cursor += 1 }
                 let nameStart = cursor
-                while cursor < characters.count,
-                      characters[cursor].isLetter || characters[cursor].isNumber
-                        || characters[cursor] == "-" {
-                    cursor += 1
-                }
-                guard cursor > nameStart else {
+                guard cursor < characters.count,
+                      isASCIILetter(characters[cursor]) else {
                     index += 1
                     continue
+                }
+                cursor += 1
+                while cursor < characters.count,
+                      isASCIILetter(characters[cursor])
+                        || isASCIINumber(characters[cursor])
+                        || characters[cursor] == "-" {
+                    cursor += 1
                 }
                 let tagName = String(characters[nameStart..<cursor]).lowercased()
                 let attributesStart = cursor
@@ -341,7 +344,10 @@ struct MarkdownMathScanner {
                     cursor += 1
                 }
                 guard let end else {
-                    index += 1
+                    // No candidate later on this physical line can close before the
+                    // boundary we already reached. Skip the suffix once instead of
+                    // restarting an end-of-line scan at every nested `<tag` prefix.
+                    index = cursor
                     continue
                 }
                 if isClosing {
@@ -375,45 +381,91 @@ struct MarkdownMathScanner {
             var index = start
             var containsDollar = false
             while index < end {
-                while index < end, characters[index].isWhitespace { index += 1 }
-                if index >= end { break }
+                let separatorStart = index
+                while index < end, isHTMLSpace(characters[index]) { index += 1 }
+                if index >= end { return containsDollar }
                 if characters[index] == "/" {
                     index += 1
-                    while index < end, characters[index].isWhitespace { index += 1 }
                     return index == end && containsDollar
                 }
-                guard characters[index].isLetter || characters[index] == "_"
-                    || characters[index] == ":" else {
+                guard index > separatorStart,
+                      isASCIIAttributeNameStart(characters[index]) else {
                     return false
                 }
                 index += 1
                 while index < end,
-                      characters[index].isLetter || characters[index].isNumber
-                        || characters[index] == "_" || characters[index] == ":"
-                        || characters[index] == "." || characters[index] == "-" {
+                      isASCIIAttributeNameContinuation(characters[index]) {
                     index += 1
                 }
-                while index < end, characters[index].isWhitespace { index += 1 }
-                guard index < end, characters[index] == "=" else { continue }
-                index += 1
-                while index < end, characters[index].isWhitespace { index += 1 }
-                guard index < end,
-                      characters[index] == "\"" || characters[index] == "'" else {
-                    while index < end, !characters[index].isWhitespace { index += 1 }
+
+                let afterName = index
+                while index < end, isHTMLSpace(characters[index]) { index += 1 }
+                guard index < end, characters[index] == "=" else {
+                    index = afterName
                     continue
                 }
-                let quote = characters[index]
                 index += 1
-                var attributeContainsDollar = false
-                while index < end, characters[index] != quote {
-                    if characters[index] == "$" { attributeContainsDollar = true }
-                    index += 1
-                }
+                while index < end, isHTMLSpace(characters[index]) { index += 1 }
                 guard index < end else { return false }
-                index += 1
-                containsDollar = containsDollar || attributeContainsDollar
+
+                if characters[index] == "\"" || characters[index] == "'" {
+                    let quote = characters[index]
+                    index += 1
+                    var attributeContainsDollar = false
+                    while index < end, characters[index] != quote {
+                        guard characters[index].asciiValue != 0 else { return false }
+                        if characters[index] == "$" { attributeContainsDollar = true }
+                        index += 1
+                    }
+                    guard index < end else { return false }
+                    index += 1
+                    containsDollar = containsDollar || attributeContainsDollar
+                } else {
+                    let valueStart = index
+                    while index < end, !isHTMLSpace(characters[index]) {
+                        guard !isForbiddenUnquotedAttributeValueCharacter(characters[index])
+                        else {
+                            return false
+                        }
+                        index += 1
+                    }
+                    guard index > valueStart else { return false }
+                }
             }
             return containsDollar
+        }
+
+        private static func isASCIILetter(_ character: Character) -> Bool {
+            guard let value = character.asciiValue else { return false }
+            return (65...90).contains(value) || (97...122).contains(value)
+        }
+
+        private static func isASCIINumber(_ character: Character) -> Bool {
+            guard let value = character.asciiValue else { return false }
+            return (48...57).contains(value)
+        }
+
+        private static func isASCIIAttributeNameStart(_ character: Character) -> Bool {
+            isASCIILetter(character) || character == "_" || character == ":"
+        }
+
+        private static func isASCIIAttributeNameContinuation(_ character: Character) -> Bool {
+            isASCIIAttributeNameStart(character) || isASCIINumber(character)
+                || character == "." || character == "-"
+        }
+
+        private static func isHTMLSpace(_ character: Character) -> Bool {
+            character == " " || character == "\t" || character == "\r"
+                || character == "\n" || character == "\u{000B}"
+                || character == "\u{000C}"
+        }
+
+        private static func isForbiddenUnquotedAttributeValueCharacter(
+            _ character: Character
+        ) -> Bool {
+            character.asciiValue == 0 || character == "\"" || character == "'"
+                || character == "=" || character == "<" || character == ">"
+                || character == "`"
         }
     }
 
