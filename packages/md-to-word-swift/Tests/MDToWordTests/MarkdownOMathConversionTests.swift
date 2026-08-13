@@ -213,14 +213,19 @@ final class MarkdownOMathConversionTests: XCTestCase {
         let rejected = [
             "Before\n$$x$$\nAfter",
             "Before\n$$\nx\n$$\nAfter",
+            "$$\n\nx\n\n$$",
+            "- $$\n- x\n- $$",
+            "> $$\nx\n> $$",
         ]
-        for source in rejected {
+        for (index, source) in rejected.enumerated() {
             XCTAssertThrowsError(
                 try MarkdownToWordConverter(mathMode: .omath).convertMarkdown(source)
             ) { error in
+                let expectedColumn = index >= 3 ? 3 : 1
+                let expectedLine = index < 2 ? 2 : 1
                 XCTAssertEqual(
                     error as? MarkdownMathConversionError,
-                    .misplacedDisplayFormula(line: 2, column: 1),
+                    .misplacedDisplayFormula(line: expectedLine, column: expectedColumn),
                     "Source: \(source)"
                 )
             }
@@ -240,6 +245,76 @@ final class MarkdownOMathConversionTests: XCTestCase {
             )
             XCTAssertEqual(count("<m:oMathPara>", in: xml), 1, "Source: \(source)")
             XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(source)")
+        }
+    }
+
+    func testComplexCommonMarkDestinationsNeverReceivePlaceholders() throws {
+        let cases: [(source: String, target: String)] = [
+            (
+                "Use [ref].\n\n[\nref\n]: https://example.com/$x$",
+                "https://example.com/$x$"
+            ),
+            (
+                "[link](<https://example.com/a)$x$>)",
+                "https://example.com/a)$x$"
+            ),
+        ]
+
+        for testCase in cases {
+            let converter = MarkdownToWordConverter(mathMode: .omath)
+            let document = try converter.convertMarkdown(testCase.source)
+            let xml = try documentXML(markdown: testCase.source, converter: converter)
+
+            XCTAssertEqual(document.hyperlinkReferences.first?.url, testCase.target)
+            XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(testCase.source)")
+            XCTAssertFalse(xml.contains("<m:oMath"), "Source: \(testCase.source)")
+        }
+    }
+
+    func testInvalidReferenceLikeVisibleTextStillConvertsInlineMath() throws {
+        let sources = [
+            "[ref]: invalid destination $x$",
+            "Use [ref].\n\n[ref]: https://example.com\n\"$x$\" ok",
+        ]
+
+        for source in sources {
+            let xml = try documentXML(
+                markdown: source,
+                converter: MarkdownToWordConverter(mathMode: .omath)
+            )
+            XCTAssertEqual(count("<m:oMath>", in: xml), 1, "Source: \(source); XML: \(xml)")
+            XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(source)")
+        }
+    }
+
+    func testInvalidReferenceTitleConvertsVisibleMathWithoutChangingMatchingTarget() throws {
+        let source = "Use [ref].\n\n[ref]: https://example.com/$x$\n\"$x$\" ok"
+        let converter = MarkdownToWordConverter(mathMode: .omath)
+        let document = try converter.convertMarkdown(source)
+        let xml = try documentXML(markdown: source, converter: converter)
+
+        XCTAssertEqual(document.hyperlinkReferences.first?.url, "https://example.com/$x$")
+        XCTAssertEqual(count("<m:oMath>", in: xml), 1)
+        XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"))
+    }
+
+    func testHTMLAndFormattingNodeBoundariesNeverCreateMathTokens() throws {
+        let sources = [
+            "<!--\n$\\overbrace{x}$\n-->\nVisible",
+            "<div>\n$\\overbrace{x}$\n</div>\nVisible",
+            #"<span title=\"> $x$\">text</span>"#,
+            "$*x*$",
+            "$**x**$",
+        ]
+
+        for source in sources {
+            let converter = MarkdownToWordConverter(mathMode: .omath)
+            let document = try converter.convertMarkdown(source)
+            let xml = try documentXML(markdown: source, converter: converter)
+
+            XCTAssertNil(document.documentRootAttributes["xmlns:m"], "Source: \(source)")
+            XCTAssertFalse(xml.contains("<m:oMath"), "Source: \(source); XML: \(xml)")
+            XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(source); XML: \(xml)")
         }
     }
 

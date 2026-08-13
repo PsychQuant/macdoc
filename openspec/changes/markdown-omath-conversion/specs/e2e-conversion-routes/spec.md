@@ -41,3 +41,16 @@ The compiled E2E suite SHALL exercise `macdoc convert` through the production co
 
 - **WHEN** the compiled binary runs a Markdown-to-DOCX conversion with `--math literal`
 - **THEN** exit code is 0 and delimiters remain literal Word text
+
+#### Scenario: Cross-block display failure preserves the compiled CLI destination
+
+- **GIVEN** an existing output file containing sentinel bytes `KEEP`
+- **WHEN** the compiled binary receives display delimiters in different list items, blank-separated paragraphs, or different blockquote containers with `--math omath`
+- **THEN** exit code is non-zero and stdout is empty
+- **AND** the output file remains byte-identical to `KEEP`
+
+#### Scenario: Compiled route never writes placeholders into relationships or visible text
+
+- **WHEN** the compiled binary receives multiline reference labels, angle-bracket destinations containing `)`, HTML comments/blocks, quoted HTML attributes, or formatting-node-spanning delimiters
+- **THEN** exit code and formula behavior follow the library boundary contract
+- **AND** neither `word/document.xml` nor `word/_rels/document.xml.rels` contains `MDTOWORDMATHPLACEHOLDER`

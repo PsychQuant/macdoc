@@ -6,6 +6,8 @@ The Markdown-to-DOCX route currently serializes `$...$` and `$$...$$` as literal
 
 - Add a public `MDToWord` math mode whose default preserves the current literal behavior and whose opt-in OMath mode converts supported inline and display LaTeX delimiters to native Word OMML.
 - Add a delimiter scanner that excludes escaped dollar signs, inline code, fenced code, and formulas crossing Markdown formatting-node boundaries.
+- Derive formula-eligible source ranges from the original CommonMark tree before substitution, so block/container boundaries, HTML regions, code, destinations, reference metadata, and formatting-node splits cannot be erased by placeholders.
+- Require every generated placeholder to be consumed exactly once by an allowed visible text or display carrier before conversion can succeed.
 - Reuse `LaTeXMathParser` from `latex-math-swift`; unsupported or malformed formulas fail loudly before any destination DOCX is replaced.
 - Add `macdoc convert --to docx ... --math literal|omath`, with route validation that rejects the option on incompatible source/target pairs.
 - Expand package-level and compiled-CLI acceptance coverage to inspect `word/document.xml`, distinguish inline from display carriers, and prove failure leaves an existing destination unchanged.

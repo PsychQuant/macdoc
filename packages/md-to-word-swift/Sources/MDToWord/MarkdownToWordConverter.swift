@@ -222,6 +222,7 @@ private struct MarkdownWordBuilder {
     private let frontmatter: [String: String]
     private let mathTokens: [RenderedMarkdownMathToken]
     private let mathTokensByPlaceholder: [String: RenderedMarkdownMathToken]
+    private var consumedMathPlaceholders: [String: Int] = [:]
     private var inferredTitle = false
 
     init(
@@ -249,12 +250,26 @@ private struct MarkdownWordBuilder {
         for child in parsed.children {
             try appendBlock(child, quoteDepth: 0)
         }
+        try validateMathTokenConsumption()
 
         if document.body.children.isEmpty {
             document.appendParagraph(WordParagraph(text: ""))
         }
 
         return document
+    }
+
+    private func validateMathTokenConsumption() throws {
+        for token in mathTokens where consumedMathPlaceholders[token.placeholder, default: 0] != 1 {
+            throw MarkdownMathConversionError.formulaPlacementMismatch(
+                line: token.line,
+                column: token.column
+            )
+        }
+    }
+
+    private mutating func markMathTokenConsumed(_ token: RenderedMarkdownMathToken) {
+        consumedMathPlaceholders[token.placeholder, default: 0] += 1
     }
 
     private func validateDisplayMathPlacement(in parsed: Document) throws {
@@ -488,6 +503,7 @@ private struct MarkdownWordBuilder {
         style: String? = nil
     ) throws -> WordParagraph? {
         if let token = displayToken(in: children) {
+            markMathTokenConsumed(token)
             var paragraph = WordParagraph(runs: [])
             paragraph.unrecognizedChildren = [
                 UnrecognizedChild(
@@ -717,7 +733,7 @@ private struct MarkdownWordBuilder {
         return "rId\(baseID + usedCount)"
     }
 
-    private func makeExternalHyperlinkXML(text: String, relationshipId: String) -> String {
+    private mutating func makeExternalHyperlinkXML(text: String, relationshipId: String) -> String {
         """
         <w:hyperlink r:id="\(relationshipId)">
             \(hyperlinkContentXML(text))
@@ -725,7 +741,7 @@ private struct MarkdownWordBuilder {
         """
     }
 
-    private func makeInternalHyperlinkXML(text: String, anchor: String) -> String {
+    private mutating func makeInternalHyperlinkXML(text: String, anchor: String) -> String {
         """
         <w:hyperlink w:anchor="\(escapeXML(anchor))">
             \(hyperlinkContentXML(text))
@@ -733,7 +749,7 @@ private struct MarkdownWordBuilder {
         """
     }
 
-    private func hyperlinkContentXML(_ text: String) -> String {
+    private mutating func hyperlinkContentXML(_ text: String) -> String {
         var xml = ""
         var cursor = text.startIndex
         while cursor < text.endIndex {
@@ -745,6 +761,7 @@ private struct MarkdownWordBuilder {
                 xml += hyperlinkTextRunXML(String(text[cursor..<match.range.lowerBound]))
             }
             xml += "<m:oMath>\(match.token.omml)</m:oMath>"
+            markMathTokenConsumed(match.token)
             cursor = match.range.upperBound
         }
         return xml
@@ -773,7 +790,7 @@ private struct MarkdownWordBuilder {
         return run
     }
 
-    private func appendText(
+    private mutating func appendText(
         _ text: String,
         into runs: inout [Run],
         properties: RunProperties
@@ -793,6 +810,7 @@ private struct MarkdownWordBuilder {
                 )
             }
             runs.append(makeRawRun("<m:oMath>\(match.token.omml)</m:oMath>"))
+            markMathTokenConsumed(match.token)
             cursor = match.range.upperBound
         }
     }

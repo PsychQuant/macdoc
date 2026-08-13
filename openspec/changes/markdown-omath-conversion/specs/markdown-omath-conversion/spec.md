@@ -24,7 +24,9 @@ The `MDToWord` library SHALL expose a public `MarkdownMathMode` enum with raw st
 
 In `.omath` mode, the converter SHALL recognize inline math only from a pair of unescaped single-dollar delimiters within non-code Markdown content. The first and last formula characters SHALL be non-whitespace, and an inline formula SHALL NOT contain a newline. The converter SHALL recognize display math only when a `$$...$$` pair occupies an entire logical paragraph, either on one trimmed line or between standalone opening and closing delimiter lines. Unmatched dollars SHALL remain literal.
 
-The scanner SHALL exclude escaped dollar signs, equal-length backtick code spans, fenced code blocks, angle-bracket HTML or autolink regions, Markdown link destinations, and image destinations. It SHALL perform one forward scan over source characters. A placeholder SHALL be selected only after confirming that the placeholder does not occur in caller input.
+The converter SHALL derive formula-eligible ranges from the original CommonMark tree before replacing source text. Inline formulas SHALL fit within one eligible original `Text` range. Display formulas SHALL fit within one eligible original `Paragraph` range whose inline descendants are limited to text and line breaks. Code, HTML, autolink, link/reference/image destinations, reference metadata, and delimiters split across formatting nodes SHALL remain non-math content. Source-range indexing, collision indexing, and replacement SHALL use a bounded number of linear passes over source characters. A placeholder SHALL be selected only after confirming that its numeric suffix does not occur in caller input.
+
+Every generated placeholder SHALL be consumed exactly once by an allowed visible inline or display carrier. A placeholder that is absent, repeated, or present in HTML, metadata, a relationship target, or any other non-carrier location SHALL cause conversion to fail before destination replacement.
 
 #### Scenario: Inline recognition boundary table
 
@@ -52,6 +54,42 @@ The scanner SHALL exclude escaped dollar signs, equal-length backtick code spans
 
 - **WHEN** `.omath` conversion receives a paragraph containing standalone `$$`, then `\\frac{a}{b}`, then standalone `$$`
 - **THEN** exactly one display formula is recognized with source body `\\frac{a}{b}`
+
+#### Scenario: Display formula cannot cross original CommonMark boundaries
+
+- **WHEN** `.omath` conversion receives standalone `$$` delimiters separated by blank paragraphs, different list items, or a blockquote/container change
+- **THEN** conversion throws `MarkdownMathConversionError.misplacedDisplayFormula` at the opening delimiter
+- **AND** no destination is created or replaced
+
+#### Scenario: HTML and formatting-node spans remain non-math
+
+- **WHEN** `.omath` conversion receives dollar delimiters inside an HTML comment, HTML block, quoted HTML attribute, or split around an `Emphasis` or `Strong` node
+- **THEN** no formula token is created from those delimiters
+- **AND** no generated placeholder appears in visible document text
+
+#### Scenario: CommonMark destinations and reference metadata are byte-preserving
+
+- **WHEN** `.omath` conversion receives a multiline reference label, an angle-bracket destination containing `)`, a multiline inline or image destination, or a valid optional reference title containing dollar delimiters
+- **THEN** every parsed relationship target remains byte-exact
+- **AND** no generated placeholder appears in a target or reference metadata
+
+#### Scenario: Visible text after invalid reference-like syntax remains eligible
+
+- **WHEN** a line beginning with reference-like or title-like syntax is parsed by CommonMark as visible text containing `$x$`
+- **THEN** `.omath` mode converts `$x$` as ordinary visible inline math
+
+#### Scenario: Every token has one allowed consumer
+
+- **WHEN** scanning produces formula tokens and the transformed CommonMark tree is built
+- **THEN** each token is consumed exactly once by one visible inline text carrier or one standalone display paragraph
+- **AND** any missing, duplicate, metadata, HTML, or relationship consumer causes a pre-write conversion failure
+
+##### Example: One inline and one display carrier
+
+- **GIVEN** source `Before $x$` followed by a separate `$$y$$` paragraph
+- **WHEN** conversion succeeds in `.omath` mode
+- **THEN** the inline token is consumed once by `<m:oMath>` and the display token once by `<m:oMathPara>`
+- **AND** neither placeholder remains in document XML or relationships
 
 #### Scenario: Display delimiter mixed with paragraph text is rejected
 

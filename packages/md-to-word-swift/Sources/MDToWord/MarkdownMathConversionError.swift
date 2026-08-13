@@ -6,6 +6,7 @@ public enum MarkdownMathConversionError: Error, Equatable, Sendable {
     case malformedFormula(line: Int, column: Int)
     case unsupportedFormula(token: String, line: Int, column: Int)
     case misplacedDisplayFormula(line: Int, column: Int)
+    case formulaPlacementMismatch(line: Int, column: Int)
 }
 
 extension MarkdownMathConversionError: LocalizedError {
@@ -17,6 +18,8 @@ extension MarkdownMathConversionError: LocalizedError {
             return "Unsupported LaTeX token \(token) at line \(line), column \(column)."
         case .misplacedDisplayFormula(let line, let column):
             return "Display math must occupy its own paragraph at line \(line), column \(column)."
+        case .formulaPlacementMismatch(let line, let column):
+            return "Math formula could not be placed exactly once at line \(line), column \(column)."
         }
     }
 }
