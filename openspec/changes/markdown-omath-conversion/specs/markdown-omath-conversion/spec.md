@@ -73,6 +73,12 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **THEN** every parsed relationship target remains byte-exact
 - **AND** no generated placeholder appears in a target or reference metadata
 
+#### Scenario: Invalid HTML-like visible text remains math-eligible
+
+- **WHEN** CommonMark parses `Visible <span $x$> tail` as one visible `Text` node rather than HTML
+- **THEN** `.omath` mode converts `$x$` to one inline OMath carrier
+- **AND** the visible angle-bracket text remains present without a generated placeholder
+
 #### Scenario: Visible text after invalid reference-like syntax remains eligible
 
 - **WHEN** a line beginning with reference-like or title-like syntax is parsed by CommonMark as visible text containing `$x$`

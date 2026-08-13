@@ -30,7 +30,6 @@ struct MarkdownMathScanner {
     private let markerNonce: String
 
     /// Original CommonMark source ranges are the authority for math eligibility.
-    /// A narrow raw-angle shield supplements ranges when cmark normalizes quoted tag spelling.
     private struct SourceEligibility {
         private struct Point: Hashable {
             let line: Int
@@ -39,6 +38,7 @@ struct MarkdownMathScanner {
 
         private let inlineIneligiblePrefix: [Int]
         private let visibleOffsets: [Bool]
+        private let paragraphIdentifiers: [Int?]
         private let paragraphRanges: Set<Range<Int>>
         private let displayRanges: Set<Range<Int>>
 
@@ -47,6 +47,8 @@ struct MarkdownMathScanner {
             let document = Document(parsing: source)
             var inlineRanges: [Range<Int>] = []
             var fallbackInlineRanges: [Range<Int>] = []
+            var opaqueHTMLRanges: [Range<Int>] = []
+            var closingHTMLTags: [Int: String] = [:]
             var paragraphRanges: Set<Range<Int>> = []
             var displayRanges: Set<Range<Int>> = []
 
@@ -116,6 +118,30 @@ struct MarkdownMathScanner {
                 }
             }
 
+            func recoverInlineHTMLRange(_ inlineHTML: InlineHTML) -> Range<Int>? {
+                guard let range = offsetRange(for: inlineHTML),
+                      !range.isEmpty,
+                      !inlineHTML.rawHTML.isEmpty else {
+                    return nil
+                }
+                let raw = Array(inlineHTML.rawHTML)
+                guard raw.count <= range.count else { return range }
+                let candidate = range.lowerBound..<(range.lowerBound + raw.count)
+                return characters[candidate].elementsEqual(raw) ? candidate : range
+            }
+
+            func closingHTMLTagName(_ inlineHTML: InlineHTML) -> String? {
+                let raw = Array(inlineHTML.rawHTML)
+                guard raw.count >= 4, raw[0] == "<", raw[1] == "/" else { return nil }
+                var nameEnd = 2
+                while nameEnd < raw.count,
+                      raw[nameEnd].isLetter || raw[nameEnd].isNumber || raw[nameEnd] == "-" {
+                    nameEnd += 1
+                }
+                guard nameEnd > 2 else { return nil }
+                return String(raw[2..<nameEnd]).lowercased()
+            }
+
             func collect(_ markup: Markup, insideAutolink: Bool = false) {
                 if let paragraph = markup as? Markdown.Paragraph,
                    let range = offsetRange(for: paragraph) {
@@ -132,20 +158,31 @@ struct MarkdownMathScanner {
                 if markup is Text, !insideAutolink, let range = offsetRange(for: markup) {
                     inlineRanges.append(range)
                 }
+                if let inlineHTML = markup as? InlineHTML,
+                   let range = recoverInlineHTMLRange(inlineHTML) {
+                    opaqueHTMLRanges.append(range)
+                    if let tagName = closingHTMLTagName(inlineHTML) {
+                        closingHTMLTags[range.lowerBound] = tagName
+                    }
+                }
                 for child in markup.children {
                     collect(child, insideAutolink: childrenInsideAutolink)
                 }
             }
 
             collect(document)
+            opaqueHTMLRanges += Self.normalizedOpeningHTMLRanges(
+                in: characters,
+                closingTags: closingHTMLTags
+            )
             var visibleOffsets = [Bool](repeating: false, count: characters.count)
             for range in inlineRanges + fallbackInlineRanges {
                 for offset in range where offset < visibleOffsets.count {
                     visibleOffsets[offset] = true
                 }
             }
-            for range in Self.angleRanges(in: characters) {
-                for offset in range where offset < visibleOffsets.count {
+            for range in opaqueHTMLRanges {
+                for offset in range where visibleOffsets.indices.contains(offset) {
                     visibleOffsets[offset] = false
                 }
             }
@@ -154,8 +191,15 @@ struct MarkdownMathScanner {
                 inlineIneligiblePrefix[offset + 1] = inlineIneligiblePrefix[offset]
                     + (visibleOffsets[offset] ? 0 : 1)
             }
+            var paragraphIdentifiers = [Int?](repeating: nil, count: characters.count)
+            for (identifier, range) in paragraphRanges.enumerated() {
+                for offset in range where paragraphIdentifiers.indices.contains(offset) {
+                    paragraphIdentifiers[offset] = identifier
+                }
+            }
             self.inlineIneligiblePrefix = inlineIneligiblePrefix
             self.visibleOffsets = visibleOffsets
+            self.paragraphIdentifiers = paragraphIdentifiers
             self.paragraphRanges = paragraphRanges
             self.displayRanges = displayRanges
         }
@@ -172,6 +216,15 @@ struct MarkdownMathScanner {
 
         func containsVisibleText(at offset: Int) -> Bool {
             visibleOffsets.indices.contains(offset) && visibleOffsets[offset]
+        }
+
+        func sharesParagraph(_ lhs: Int, _ rhs: Int) -> Bool {
+            guard paragraphIdentifiers.indices.contains(lhs),
+                  paragraphIdentifiers.indices.contains(rhs),
+                  let identifier = paragraphIdentifiers[lhs] else {
+                return false
+            }
+            return paragraphIdentifiers[rhs] == identifier
         }
 
         func isParagraph(_ range: Range<Int>) -> Bool {
@@ -196,42 +249,6 @@ struct MarkdownMathScanner {
                 }
             }
             result[Point(line: line, column: column)] = characters.count
-            return result
-        }
-
-        private static func angleRanges(in characters: [Character]) -> [Range<Int>] {
-            var result: [Range<Int>] = []
-            var index = 0
-            while index < characters.count {
-                guard characters[index] == "<", index + 1 < characters.count else {
-                    index += 1
-                    continue
-                }
-                let next = characters[index + 1]
-                guard next.isLetter || next == "/" || next == "!" || next == "?" else {
-                    index += 1
-                    continue
-                }
-
-                var cursor = index + 2
-                var quote: Character?
-                while cursor < characters.count, !characters[cursor].isNewline {
-                    let character = characters[cursor]
-                    if let activeQuote = quote {
-                        if character == activeQuote {
-                            quote = nil
-                        }
-                    } else if character == "\"" || character == "'" {
-                        quote = character
-                    } else if character == ">" {
-                        result.append(index..<(cursor + 1))
-                        index = cursor
-                        break
-                    }
-                    cursor += 1
-                }
-                index += 1
-            }
             return result
         }
 
@@ -277,6 +294,72 @@ struct MarkdownMathScanner {
             }
             return result
         }
+
+        private static func normalizedOpeningHTMLRanges(
+            in characters: [Character],
+            closingTags: [Int: String]
+        ) -> [Range<Int>] {
+            struct Opening {
+                let range: Range<Int>
+                let containsQuotedDollar: Bool
+            }
+            var stacks: [String: [Opening]] = [:]
+            var result: [Range<Int>] = []
+            var index = 0
+            while index < characters.count {
+                guard characters[index] == "<" else {
+                    index += 1
+                    continue
+                }
+                var cursor = index + 1
+                let isClosing = cursor < characters.count && characters[cursor] == "/"
+                if isClosing { cursor += 1 }
+                let nameStart = cursor
+                while cursor < characters.count,
+                      characters[cursor].isLetter || characters[cursor].isNumber
+                        || characters[cursor] == "-" {
+                    cursor += 1
+                }
+                guard cursor > nameStart else {
+                    index += 1
+                    continue
+                }
+                let tagName = String(characters[nameStart..<cursor]).lowercased()
+                var quote: Character?
+                var containsQuotedDollar = false
+                var end: Int?
+                while cursor < characters.count, !characters[cursor].isNewline {
+                    let character = characters[cursor]
+                    if let activeQuote = quote {
+                        if character == "$" { containsQuotedDollar = true }
+                        if character == activeQuote { quote = nil }
+                    } else if character == "\"" || character == "'" {
+                        quote = character
+                    } else if character == ">" {
+                        end = cursor + 1
+                        break
+                    }
+                    cursor += 1
+                }
+                guard let end else {
+                    index += 1
+                    continue
+                }
+                if isClosing {
+                    if closingTags[index] == tagName,
+                       let opening = stacks[tagName]?.popLast(),
+                       opening.containsQuotedDollar {
+                        result.append(opening.range)
+                    }
+                } else if characters[max(index, end - 2)] != "/" {
+                    stacks[tagName, default: []].append(
+                        Opening(range: index..<end, containsQuotedDollar: containsQuotedDollar)
+                    )
+                }
+                index = end
+            }
+            return result
+        }
     }
 
     init(
@@ -310,7 +393,7 @@ struct MarkdownMathScanner {
                 nextMarkerIndex += 1
             }
             defer { nextMarkerIndex += 1 }
-            return "\(markerStem)\(nextMarkerIndex)TOKEN"
+            return "?\(markerStem)\(nextMarkerIndex)TOKEN?"
         }
 
         while index < characters.count {
@@ -423,7 +506,8 @@ struct MarkdownMathScanner {
                        in: characters,
                        after: index + 2
                    ),
-                   eligibility.containsVisibleText(at: closing) {
+                   (eligibility.containsVisibleText(at: closing)
+                       || eligibility.sharesParagraph(index, closing)) {
                     throw ScanError.misplacedDisplayFormula(
                         line: openingLine,
                         column: openingColumn

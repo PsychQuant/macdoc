@@ -54,3 +54,9 @@ The compiled E2E suite SHALL exercise `macdoc convert` through the production co
 - **WHEN** the compiled binary receives multiline reference labels, angle-bracket destinations containing `)`, HTML comments/blocks, quoted HTML attributes, or formatting-node-spanning delimiters
 - **THEN** exit code and formula behavior follow the library boundary contract
 - **AND** neither `word/document.xml` nor `word/_rels/document.xml.rels` contains `MDTOWORDMATHPLACEHOLDER`
+
+#### Scenario: Compiled route converts math in invalid HTML-like visible text
+
+- **WHEN** the compiled binary receives `Visible <span $x$> tail` with `--math omath`
+- **THEN** the DOCX contains one inline OMath carrier and preserves the visible angle-bracket text
+- **AND** neither document XML nor relationships contain a generated placeholder

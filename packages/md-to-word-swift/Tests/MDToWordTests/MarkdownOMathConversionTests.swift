@@ -215,7 +215,7 @@ final class MarkdownOMathConversionTests: XCTestCase {
             "Before\n$$\nx\n$$\nAfter",
             "$$\n\nx\n\n$$",
             "- $$\n- x\n- $$",
-            "> $$\nx\n> $$",
+            "> $$\nx\n$$",
         ]
         for (index, source) in rejected.enumerated() {
             XCTAssertThrowsError(
@@ -269,6 +269,19 @@ final class MarkdownOMathConversionTests: XCTestCase {
             XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(testCase.source)")
             XCTAssertFalse(xml.contains("<m:oMath"), "Source: \(testCase.source)")
         }
+    }
+
+    func testInvalidHTMLLikeVisibleTextEmitsInlineMath() throws {
+        let source = "Visible <span $x$> tail"
+        let xml = try documentXML(
+            markdown: source,
+            converter: MarkdownToWordConverter(mathMode: .omath)
+        )
+
+        XCTAssertEqual(count("<m:oMath>", in: xml), 1)
+        XCTAssertTrue(xml.contains("&lt;span "), "Got: \(xml)")
+        XCTAssertTrue(xml.contains("&gt; tail"), "Got: \(xml)")
+        XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Got: \(xml)")
     }
 
     func testInvalidReferenceLikeVisibleTextStillConvertsInlineMath() throws {

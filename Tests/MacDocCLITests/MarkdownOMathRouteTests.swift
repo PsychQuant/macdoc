@@ -231,7 +231,7 @@ struct MarkdownOMathRouteTests {
         let sources = [
             "$$\n\nx\n\n$$",
             "- $$\n- x\n- $$",
-            "> $$\nx\n> $$",
+            "> $$\nx\n$$",
         ]
 
         for source in sources {
@@ -319,6 +319,28 @@ struct MarkdownOMathRouteTests {
             #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
             #expect(!xml.contains("<m:oMath"))
         }
+    }
+
+    @Test("invalid HTML-like visible text remains math eligible")
+    func invalidHTMLLikeVisibleTextEmitsMath() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        try "Visible <span $x$> tail".write(to: input, atomically: true, encoding: .utf8)
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(result.succeeded, "stderr: \(result.stderr)")
+        let xml = try archiveEntry(named: "word/document.xml", in: output)
+        #expect(xml.components(separatedBy: "<m:oMath>").count - 1 == 1)
+        #expect(xml.contains("&lt;span "))
+        #expect(xml.contains("&gt; tail"))
+        #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
     }
 
     private func makeWorkspace() throws -> URL {

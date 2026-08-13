@@ -135,7 +135,7 @@ final class MarkdownMathScannerTests: XCTestCase {
             ("Before\n$$\nx\n$$\nAfter", 2, 1),
             ("$$\n\nx\n\n$$", 1, 1),
             ("- $$\n- x\n- $$", 1, 3),
-            ("> $$\nx\n> $$", 1, 3),
+            ("> $$\nx\n$$", 1, 3),
         ]
 
         for testCase in rejected {
@@ -179,6 +179,48 @@ final class MarkdownMathScannerTests: XCTestCase {
             XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
             XCTAssertEqual(result.markdown, source)
         }
+    }
+
+    func testInvalidHTMLLikeVisibleTextRemainsMathEligible() throws {
+        let source = "Visible <span $x$> tail"
+        let result = try MarkdownMathScanner().scan(source)
+
+        XCTAssertEqual(result.tokens.count, 1)
+        XCTAssertEqual(result.tokens.first?.latex, "x")
+        XCTAssertEqual(
+            result.markdown,
+            "Visible <span \(try XCTUnwrap(result.tokens.first).placeholder)> tail"
+        )
+    }
+
+    func testMathTokenConsumptionRequiresExactlyOneCarrier() throws {
+        let token = RenderedMarkdownMathToken(
+            placeholder: "?TOKEN?",
+            omml: "<m:r/>",
+            kind: .inline,
+            line: 7,
+            column: 9
+        )
+
+        for counts in [[:], [token.placeholder: 2]] {
+            XCTAssertThrowsError(
+                try MarkdownMathConsumptionValidator.validate(
+                    tokens: [token],
+                    consumedPlaceholders: counts
+                )
+            ) { error in
+                XCTAssertEqual(
+                    error as? MarkdownMathConversionError,
+                    .formulaPlacementMismatch(line: 7, column: 9)
+                )
+            }
+        }
+        XCTAssertNoThrow(
+            try MarkdownMathConsumptionValidator.validate(
+                tokens: [token],
+                consumedPlaceholders: [token.placeholder: 1]
+            )
+        )
     }
 
     func testCommonMarkDestinationAndReferenceMetadataRemainLiteral() throws {
