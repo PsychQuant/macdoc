@@ -71,6 +71,10 @@ git clone --depth 1 https://github.com/genspark-ai/genoffice.git   # 43M,只讀 
 
 ### genoffice → xlsx 缺口 / patch-narrowly round-trip / pptx 功能廣度
 
+> **深入分析已完成**：round-trip 機制的逐檔閱讀（含 byte 保證邊界表、詞彙退化模式、三方對照）見
+> [`docs/genoffice-roundtrip-comparison.md`](../docs/genoffice-roundtrip-comparison.md)（#143 產物，
+> pin 在 snapshot `4da673d`）。本節的「對照點 2」為其入口摘要。
+
 先講清楚定位,免得誤判:genoffice 是**桌面 GUI 套裝軟體**(Electron,五個 app 共用 engine 層),macdoc 是 CLI + MCP 的管線工具,兩者不是同一個品類,也不互相取代。它沒有 MCP server、沒有 public API、沒有自動化 CLI,AI 走 Genspark 帳號的雲端(本機不存 API key)。
 
 **真正有參考價值的是 `packages/` 那層**——官方描述為「All pure TypeScript, no Electron dependency」,可以完全脫離 GUI 單獨閱讀。這是目前少見的、同時涵蓋 docx + xlsx + pptx + pdf 四種格式的現代開源實作。
