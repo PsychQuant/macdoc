@@ -6,12 +6,26 @@ import OOXMLSwift
 
 private typealias WordParagraph = OOXMLSwift.Paragraph
 
-private struct RenderedMarkdownMathToken {
+struct RenderedMarkdownMathToken {
     let placeholder: String
     let omml: String
     let kind: MarkdownMathScanner.TokenKind
     let line: Int
     let column: Int
+}
+
+enum MarkdownMathConsumptionValidator {
+    static func validate(
+        tokens: [RenderedMarkdownMathToken],
+        consumedPlaceholders: [String: Int]
+    ) throws {
+        for token in tokens where consumedPlaceholders[token.placeholder, default: 0] != 1 {
+            throw MarkdownMathConversionError.formulaPlacementMismatch(
+                line: token.line,
+                column: token.column
+            )
+        }
+    }
 }
 
 /// Controls whether dollar-delimited Markdown is preserved as text or converted
@@ -260,12 +274,10 @@ private struct MarkdownWordBuilder {
     }
 
     private func validateMathTokenConsumption() throws {
-        for token in mathTokens where consumedMathPlaceholders[token.placeholder, default: 0] != 1 {
-            throw MarkdownMathConversionError.formulaPlacementMismatch(
-                line: token.line,
-                column: token.column
-            )
-        }
+        try MarkdownMathConsumptionValidator.validate(
+            tokens: mathTokens,
+            consumedPlaceholders: consumedMathPlaceholders
+        )
     }
 
     private mutating func markMathTokenConsumed(_ token: RenderedMarkdownMathToken) {
@@ -829,7 +841,16 @@ private struct MarkdownWordBuilder {
                 of: "TOKEN",
                 range: prefixRange.upperBound..<text.endIndex
             ) {
-                let range = prefixRange.lowerBound..<suffixRange.upperBound
+                var lowerBound = prefixRange.lowerBound
+                var upperBound = suffixRange.upperBound
+                if lowerBound > text.startIndex {
+                    let preceding = text.index(before: lowerBound)
+                    if text[preceding] == "?" { lowerBound = preceding }
+                }
+                if upperBound < text.endIndex, text[upperBound] == "?" {
+                    upperBound = text.index(after: upperBound)
+                }
+                let range = lowerBound..<upperBound
                 let candidate = String(text[range])
                 if let token = mathTokensByPlaceholder[candidate], token.kind == .inline {
                     return (range, token)
