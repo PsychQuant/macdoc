@@ -121,20 +121,23 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertTrue(result.markdown.contains(result.tokens[0].placeholder))
     }
 
-    func testDisplayFormulaCannotShareALogicalParagraphWithText() {
+    func testScannerDefersLogicalParagraphValidationToCommonMarkTree() throws {
         let sources = [
             "Before\n$$x$$\nAfter",
             "Before\n$$\nx\n$$\nAfter",
+            "# Heading\n$$x$$\n\nAfter",
+            "Before\n\n$$x$$\n# After",
+            "- Before\n- $$x$$\n- After",
+            "- $$\n  x\n  $$",
+            "> $$\n> x\n> $$",
         ]
 
         for source in sources {
-            XCTAssertThrowsError(try MarkdownMathScanner().scan(source)) { error in
-                XCTAssertEqual(
-                    error as? MarkdownMathScanner.ScanError,
-                    .misplacedDisplayFormula(line: 2, column: 1),
-                    "Source: \(source)"
-                )
-            }
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertEqual(result.tokens.count, 1, "Source: \(source)")
+            guard result.tokens.count == 1 else { continue }
+            XCTAssertEqual(result.tokens[0].kind, .display, "Source: \(source)")
+            XCTAssertEqual(result.tokens[0].latex, "x", "Source: \(source)")
         }
     }
 
@@ -164,6 +167,46 @@ final class MarkdownMathScannerTests: XCTestCase {
             XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
             XCTAssertEqual(result.markdown, source)
         }
+    }
+
+    func testMultilineInlineLinkAndImageDestinationsRemainLiteral() throws {
+        let sources = [
+            "[link](\nhttps://example.com/$x$\n)",
+            "[link](   /uri\n  \"title $x$\"  )",
+            "[link](https://example.com/it's/$x$)",
+            "![alt](\nimages/$x$.png\n)",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source)
+        }
+    }
+
+    func testReferenceDefinitionOptionalTitlesRemainLiteral() throws {
+        let sources = [
+            "[ref]: https://example.com\n\"$x$\"",
+            "[ref]: https://example.com\n'$x$'",
+            "[ref]: https://example.com\n($x$)",
+            "[ref]: https://example.com '\n$title$\n'",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source)
+        }
+    }
+
+    func testDenseMarkerAllocationDoesNotRescanSourcePerToken() throws {
+        let source = Array(repeating: "$x$", count: 10_000).joined(separator: " ")
+        let started = Date()
+        let result = try MarkdownMathScanner(markerNonce: "PERF").scan(source)
+        let elapsed = Date().timeIntervalSince(started)
+
+        XCTAssertEqual(result.tokens.count, 10_000)
+        XCTAssertLessThan(elapsed, 1.5, "Dense marker allocation took \(elapsed) seconds")
     }
 }
 #endif

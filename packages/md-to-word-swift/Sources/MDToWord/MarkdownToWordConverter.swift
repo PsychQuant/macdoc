@@ -10,6 +10,8 @@ private struct RenderedMarkdownMathToken {
     let placeholder: String
     let omml: String
     let kind: MarkdownMathScanner.TokenKind
+    let line: Int
+    let column: Int
 }
 
 /// Controls whether dollar-delimited Markdown is preserved as text or converted
@@ -92,7 +94,9 @@ public struct MarkdownToWordConverter: DocumentConverter {
                     return RenderedMarkdownMathToken(
                         placeholder: token.placeholder,
                         omml: components.map { $0.toOMML() }.joined(),
-                        kind: token.kind
+                        kind: token.kind,
+                        line: token.line + extracted.bodyStartLine - 1,
+                        column: token.column
                     )
                 } catch let error as LaTeXParseError {
                     switch error {
@@ -241,6 +245,7 @@ private struct MarkdownWordBuilder {
         applyDocumentMetadata()
 
         let parsed = Document(parsing: markdown, options: .parseBlockDirectives)
+        try validateDisplayMathPlacement(in: parsed)
         for child in parsed.children {
             try appendBlock(child, quoteDepth: 0)
         }
@@ -250,6 +255,35 @@ private struct MarkdownWordBuilder {
         }
 
         return document
+    }
+
+    private func validateDisplayMathPlacement(in parsed: Document) throws {
+        var standaloneDisplayPlaceholders: Set<String> = []
+
+        func collect(from markup: Markup) {
+            if let paragraph = markup as? Markdown.Paragraph {
+                let children = Array(paragraph.children)
+                if children.count == 1,
+                   let text = children[0] as? Text,
+                   let token = mathTokensByPlaceholder[text.string],
+                   token.kind == .display {
+                    standaloneDisplayPlaceholders.insert(token.placeholder)
+                }
+            }
+            for child in markup.children {
+                collect(from: child)
+            }
+        }
+
+        collect(from: parsed)
+        for token in mathTokens where token.kind == .display {
+            guard standaloneDisplayPlaceholders.contains(token.placeholder) else {
+                throw MarkdownMathConversionError.misplacedDisplayFormula(
+                    line: token.line,
+                    column: token.column
+                )
+            }
+        }
     }
 
     private mutating func applyDocumentMetadata() {

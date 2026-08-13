@@ -175,6 +175,57 @@ struct MarkdownOMathRouteTests {
         #expect(try Data(contentsOf: output) == sentinel)
     }
 
+    @Test("multiline link destination remains byte-exact in relationship")
+    func multilineLinkDestinationIsNotMath() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        try "[link](\nhttps://example.com/$x$\n)".write(
+            to: input,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(result.succeeded, "stderr: \(result.stderr)")
+        let relationships = try archiveEntry(
+            named: "word/_rels/document.xml.rels",
+            in: output
+        )
+        #expect(relationships.contains("Target=\"https://example.com/$x$\""))
+        #expect(!relationships.contains("MDTOWORDMATHPLACEHOLDER"))
+    }
+
+    @Test("standalone display next to other CommonMark blocks succeeds")
+    func displayUsesParsedBlockBoundaries() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        try "# Heading\n$$x$$\n\nAfter".write(
+            to: input,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(result.succeeded, "stderr: \(result.stderr)")
+        let xml = try archiveEntry(named: "word/document.xml", in: output)
+        #expect(xml.components(separatedBy: "<m:oMathPara>").count - 1 == 1)
+        #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+    }
+
     private func makeWorkspace() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("macdoc-markdown-omath-cli-\(UUID().uuidString)", isDirectory: true)
