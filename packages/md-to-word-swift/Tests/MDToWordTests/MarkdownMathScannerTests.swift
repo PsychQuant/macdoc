@@ -188,6 +188,8 @@ final class MarkdownMathScannerTests: XCTestCase {
             "Visible <span \"$x$\"> tail </span>",
             "Visible <span ?=\"$x$\"> tail </span>",
             "Visible <span title=\"$x$\" ?> tail </span>",
+            "Visible <span foo=bar=baz title=\"$x$\"> tail </span>",
+            "Visible <span title=\"$x$\"foo=\"bar\"> tail </span>",
         ]
         for source in sources {
             let result = try MarkdownMathScanner().scan(source)
@@ -199,6 +201,17 @@ final class MarkdownMathScannerTests: XCTestCase {
                 "Source: \(source)"
             )
         }
+    }
+
+    func testUnterminatedHTMLLikePrefixesDoNotRescanLineSuffixes() throws {
+        let source = String(repeating: "<a", count: 10_000)
+        let clock = ContinuousClock()
+
+        let elapsed = try clock.measure {
+            _ = try MarkdownMathScanner().scan(source)
+        }
+
+        XCTAssertLessThan(elapsed, .seconds(1.5), "Elapsed: \(elapsed)")
     }
 
     func testMathTokenConsumptionRequiresExactlyOneCarrier() throws {

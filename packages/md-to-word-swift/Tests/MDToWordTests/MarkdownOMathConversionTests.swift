@@ -278,6 +278,8 @@ final class MarkdownOMathConversionTests: XCTestCase {
             "Visible <span \"$x$\"> tail </span>",
             "Visible <span ?=\"$x$\"> tail </span>",
             "Visible <span title=\"$x$\" ?> tail </span>",
+            "Visible <span foo=bar=baz title=\"$x$\"> tail </span>",
+            "Visible <span title=\"$x$\"foo=\"bar\"> tail </span>",
         ]
         for source in sources {
             let xml = try documentXML(
@@ -326,6 +328,7 @@ final class MarkdownOMathConversionTests: XCTestCase {
             "<!--\n$\\overbrace{x}$\n-->\nVisible",
             "<div>\n$\\overbrace{x}$\n</div>\nVisible",
             #"<span title="> $x$">text</span>"#,
+            #"<span foo=? title="$x$">text</span>"#,
             "$*x*$",
             "$**x**$",
         ]

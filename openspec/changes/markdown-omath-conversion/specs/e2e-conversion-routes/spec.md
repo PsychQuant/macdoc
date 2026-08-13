@@ -57,6 +57,6 @@ The compiled E2E suite SHALL exercise `macdoc convert` through the production co
 
 #### Scenario: Compiled route converts math in invalid HTML-like visible text
 
-- **WHEN** the compiled binary receives `<span $x$>`, `<$x$>`, or an invalid quoted opening tag containing `$x$` as visible text with `--math omath`
+- **WHEN** the compiled binary receives `<span $x$>`, `<$x$>`, or a grammatically invalid opening tag containing visible `$x$` with `--math omath`
 - **THEN** the DOCX contains one inline OMath carrier and preserves the visible angle-bracket text
 - **AND** neither document XML nor relationships contain a generated placeholder
