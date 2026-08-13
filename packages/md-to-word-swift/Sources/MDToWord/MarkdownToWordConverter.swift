@@ -845,9 +845,9 @@ private struct MarkdownWordBuilder {
                 var upperBound = suffixRange.upperBound
                 if lowerBound > text.startIndex {
                     let preceding = text.index(before: lowerBound)
-                    if text[preceding] == "?" { lowerBound = preceding }
+                    if text[preceding] == "\u{E000}" { lowerBound = preceding }
                 }
-                if upperBound < text.endIndex, text[upperBound] == "?" {
+                if upperBound < text.endIndex, text[upperBound] == "\u{E000}" {
                     upperBound = text.index(after: upperBound)
                 }
                 let range = lowerBound..<upperBound

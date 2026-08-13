@@ -301,7 +301,7 @@ struct MarkdownMathScanner {
         ) -> [Range<Int>] {
             struct Opening {
                 let range: Range<Int>
-                let containsQuotedDollar: Bool
+                let containsValidQuotedDollarAttribute: Bool
             }
             var stacks: [String: [Opening]] = [:]
             var result: [Range<Int>] = []
@@ -325,13 +325,12 @@ struct MarkdownMathScanner {
                     continue
                 }
                 let tagName = String(characters[nameStart..<cursor]).lowercased()
+                let attributesStart = cursor
                 var quote: Character?
-                var containsQuotedDollar = false
                 var end: Int?
                 while cursor < characters.count, !characters[cursor].isNewline {
                     let character = characters[cursor]
                     if let activeQuote = quote {
-                        if character == "$" { containsQuotedDollar = true }
                         if character == activeQuote { quote = nil }
                     } else if character == "\"" || character == "'" {
                         quote = character
@@ -348,17 +347,73 @@ struct MarkdownMathScanner {
                 if isClosing {
                     if closingTags[index] == tagName,
                        let opening = stacks[tagName]?.popLast(),
-                       opening.containsQuotedDollar {
+                       opening.containsValidQuotedDollarAttribute {
                         result.append(opening.range)
                     }
                 } else if characters[max(index, end - 2)] != "/" {
                     stacks[tagName, default: []].append(
-                        Opening(range: index..<end, containsQuotedDollar: containsQuotedDollar)
+                        Opening(
+                            range: index..<end,
+                            containsValidQuotedDollarAttribute: hasValidQuotedDollarAttribute(
+                                in: characters,
+                                from: attributesStart,
+                                before: end - 1
+                            )
+                        )
                     )
                 }
                 index = end
             }
             return result
+        }
+
+        private static func hasValidQuotedDollarAttribute(
+            in characters: [Character],
+            from start: Int,
+            before end: Int
+        ) -> Bool {
+            var index = start
+            var containsDollar = false
+            while index < end {
+                while index < end, characters[index].isWhitespace { index += 1 }
+                if index >= end { break }
+                if characters[index] == "/" {
+                    index += 1
+                    while index < end, characters[index].isWhitespace { index += 1 }
+                    return index == end && containsDollar
+                }
+                guard characters[index].isLetter || characters[index] == "_"
+                    || characters[index] == ":" else {
+                    return false
+                }
+                index += 1
+                while index < end,
+                      characters[index].isLetter || characters[index].isNumber
+                        || characters[index] == "_" || characters[index] == ":"
+                        || characters[index] == "." || characters[index] == "-" {
+                    index += 1
+                }
+                while index < end, characters[index].isWhitespace { index += 1 }
+                guard index < end, characters[index] == "=" else { continue }
+                index += 1
+                while index < end, characters[index].isWhitespace { index += 1 }
+                guard index < end,
+                      characters[index] == "\"" || characters[index] == "'" else {
+                    while index < end, !characters[index].isWhitespace { index += 1 }
+                    continue
+                }
+                let quote = characters[index]
+                index += 1
+                var attributeContainsDollar = false
+                while index < end, characters[index] != quote {
+                    if characters[index] == "$" { attributeContainsDollar = true }
+                    index += 1
+                }
+                guard index < end else { return false }
+                index += 1
+                containsDollar = containsDollar || attributeContainsDollar
+            }
+            return containsDollar
         }
     }
 
@@ -393,7 +448,7 @@ struct MarkdownMathScanner {
                 nextMarkerIndex += 1
             }
             defer { nextMarkerIndex += 1 }
-            return "?\(markerStem)\(nextMarkerIndex)TOKEN?"
+            return "\u{E000}\(markerStem)\(nextMarkerIndex)TOKEN\u{E000}"
         }
 
         while index < characters.count {

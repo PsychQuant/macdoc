@@ -45,3 +45,8 @@
 
 - [x] 9.1 Add exact RED regressions for the original blockquote escape `> $$\nx\n$$`, invalid HTML-like visible text `Visible <span $x$> tail`, and zero/duplicate placeholder consumption; prove the frozen R4 candidate either overwrites `KEEP` or misses visible math before the production correction.
 - [x] 9.2 Make original paragraph identity reject the exact blockquote escape, replace the global raw-angle override with AST-anchored bounded HTML pairing, use punctuation-wrapped placeholders that cannot reclassify invalid tag-like text, and validate each token has exactly one consumer. GREEN evidence: focused scanner/converter 50/50, compiled CLI 14/14, root 59 total with 0 failures and 3 environment skips, package 139 total with exactly the documented 42 baseline failures, both diff gates PASS, and Spectra validation PASS.
+
+## 10. R5 transformed-source lexical stability
+
+- [x] 10.1 Add exact RED regressions for `Visible <$x$> tail` and invalid quoted opening tags followed by a valid closer; prove the R5 question-mark wrapper either becomes a processing instruction or the permissive HTML pairing suppresses visible math.
+- [x] 10.2 Wrap placeholders in a private-use Unicode sentinel and require a syntactically valid named quoted attribute before AST-anchored opening-tag masking. GREEN evidence: focused scanner/converter 50/50, compiled CLI 14/14, root 59 total with 0 failures and 3 environment skips, and package 139 total with exactly the documented 42 baseline failures. The matrix includes `<span $x$>`, `<$x$>`, unnamed quoted attributes, invalid attribute names, and the existing valid quoted-HTML opaque case.

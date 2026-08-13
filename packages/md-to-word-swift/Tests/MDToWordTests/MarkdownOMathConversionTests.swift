@@ -272,16 +272,26 @@ final class MarkdownOMathConversionTests: XCTestCase {
     }
 
     func testInvalidHTMLLikeVisibleTextEmitsInlineMath() throws {
-        let source = "Visible <span $x$> tail"
-        let xml = try documentXML(
-            markdown: source,
-            converter: MarkdownToWordConverter(mathMode: .omath)
-        )
+        let sources = [
+            "Visible <span $x$> tail",
+            "Visible <$x$> tail",
+            "Visible <span \"$x$\"> tail </span>",
+            "Visible <span ?=\"$x$\"> tail </span>",
+            "Visible <span title=\"$x$\" ?> tail </span>",
+        ]
+        for source in sources {
+            let xml = try documentXML(
+                markdown: source,
+                converter: MarkdownToWordConverter(mathMode: .omath)
+            )
 
-        XCTAssertEqual(count("<m:oMath>", in: xml), 1)
-        XCTAssertTrue(xml.contains("&lt;span "), "Got: \(xml)")
-        XCTAssertTrue(xml.contains("&gt; tail"), "Got: \(xml)")
-        XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Got: \(xml)")
+            XCTAssertEqual(count("<m:oMath>", in: xml), 1, "Source: \(source)")
+            XCTAssertTrue(xml.contains("&lt;"), "Source: \(source); got: \(xml)")
+            XCTAssertFalse(
+                xml.contains("MDTOWORDMATHPLACEHOLDER"),
+                "Source: \(source); got: \(xml)"
+            )
+        }
     }
 
     func testInvalidReferenceLikeVisibleTextStillConvertsInlineMath() throws {
@@ -315,7 +325,7 @@ final class MarkdownOMathConversionTests: XCTestCase {
         let sources = [
             "<!--\n$\\overbrace{x}$\n-->\nVisible",
             "<div>\n$\\overbrace{x}$\n</div>\nVisible",
-            #"<span title=\"> $x$\">text</span>"#,
+            #"<span title="> $x$">text</span>"#,
             "$*x*$",
             "$**x**$",
         ]
