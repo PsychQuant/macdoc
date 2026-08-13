@@ -1,6 +1,8 @@
 import Foundation
 
 struct MarkdownMathScanner {
+    static let defaultMarkerPrefix = "MDTOWORDMATHPLACEHOLDER"
+
     enum TokenKind: Equatable {
         case inline
         case display
@@ -23,11 +25,16 @@ struct MarkdownMathScanner {
         case misplacedDisplayFormula(line: Int, column: Int)
     }
 
+    private enum ReferenceContinuation: Equatable {
+        case destination
+        case optionalTitle
+    }
+
     private let markerPrefix: String
     private let markerNonce: String
 
     init(
-        markerPrefix: String = "MDTOWORDMATHPLACEHOLDER",
+        markerPrefix: String = Self.defaultMarkerPrefix,
         markerNonce: String = UUID().uuidString.replacingOccurrences(of: "-", with: "")
     ) {
         self.markerPrefix = markerPrefix
@@ -44,6 +51,7 @@ struct MarkdownMathScanner {
         var column = 1
         var lineStart = 0
         var fence: (character: Character, length: Int)?
+        var referenceContinuation: ReferenceContinuation?
 
         func marker() -> String {
             var candidate: String
@@ -57,11 +65,16 @@ struct MarkdownMathScanner {
         while index < characters.count {
             if index == lineStart {
                 let end = Self.lineEnd(in: characters, from: index)
+                let contentEnd = Self.contentEndBeforeNewline(in: characters, lineEnd: end)
+                let context = Self.lineContext(
+                    characters,
+                    start: index,
+                    end: contentEnd
+                )
                 if let activeFence = fence {
-                    let contentEnd = Self.contentEndBeforeNewline(in: characters, lineEnd: end)
                     if Self.isFenceClosingLine(
                         characters,
-                        start: index,
+                        start: context.contentStart,
                         end: contentEnd,
                         fence: activeFence
                     ) {
@@ -80,10 +93,23 @@ struct MarkdownMathScanner {
                     continue
                 }
 
-                let contentEnd = Self.contentEndBeforeNewline(in: characters, lineEnd: end)
+                if context.isIndentedCode {
+                    output += String(characters[index..<end])
+                    Self.advance(
+                        characters,
+                        from: index,
+                        to: end,
+                        line: &line,
+                        column: &column,
+                        lineStart: &lineStart
+                    )
+                    index = end
+                    continue
+                }
+
                 if let openingFence = Self.fenceOpening(
                     characters,
-                    start: index,
+                    start: context.contentStart,
                     end: contentEnd
                 ) {
                     fence = openingFence
@@ -100,11 +126,34 @@ struct MarkdownMathScanner {
                     continue
                 }
 
-                if Self.isReferenceDefinitionLine(
+                if let activeReferenceContinuation = referenceContinuation {
+                    if context.isBlank {
+                        referenceContinuation = nil
+                    } else if activeReferenceContinuation == .destination
+                        || context.indentation > 0 {
+                        referenceContinuation = .optionalTitle
+                        output += String(characters[index..<end])
+                        Self.advance(
+                            characters,
+                            from: index,
+                            to: end,
+                            line: &line,
+                            column: &column,
+                            lineStart: &lineStart
+                        )
+                        index = end
+                        continue
+                    } else {
+                        referenceContinuation = nil
+                    }
+                }
+
+                if let needsDestination = Self.referenceDefinitionNeedsDestination(
                     characters,
-                    start: index,
+                    start: context.contentStart,
                     end: contentEnd
                 ) {
+                    referenceContinuation = needsDestination ? .destination : .optionalTitle
                     output += String(characters[index..<end])
                     Self.advance(
                         characters,
@@ -318,12 +367,22 @@ struct MarkdownMathScanner {
                 .allSatisfy(\.isWhitespace)
             let body = String(characters[(opening + 2)..<closing])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let mixed = !prefixIsWhitespace || !suffixIsWhitespace
+            let consumedEnd = closing + 2
+            let mixed = !prefixIsWhitespace
+                || !suffixIsWhitespace
+                || adjacentPreviousLineHasContent(
+                    in: characters,
+                    before: lineStart
+                )
+                || adjacentNextLineHasContent(
+                    in: characters,
+                    after: consumedEnd
+                )
             return DisplayMatch(
                 latex: body,
                 replacementStart: opening,
-                replacementEnd: closing + 2,
-                consumedEnd: closing + 2,
+                replacementEnd: consumedEnd,
+                consumedEnd: consumedEnd,
                 mixedWithText: mixed
             )
         }
@@ -364,7 +423,13 @@ struct MarkdownMathScanner {
                     replacementStart: opening,
                     replacementEnd: firstNonWhitespace + 2,
                     consumedEnd: consumedEnd,
-                    mixedWithText: false
+                    mixedWithText: adjacentPreviousLineHasContent(
+                        in: characters,
+                        before: lineStart
+                    ) || adjacentNextLineHasContent(
+                        in: characters,
+                        after: consumedEnd
+                    )
                 )
             }
             search = candidateLineEnd
@@ -434,11 +499,158 @@ struct MarkdownMathScanner {
         return (character, length)
     }
 
-    private static func isReferenceDefinitionLine(
+    private struct LineContext {
+        let contentStart: Int
+        let indentation: Int
+        let isIndentedCode: Bool
+        let isBlank: Bool
+    }
+
+    private static func lineContext(
+        _ characters: [Character],
+        start: Int,
+        end: Int
+    ) -> LineContext {
+        var index = start
+        var indentation = 0
+
+        func consumeIndentation() {
+            indentation = 0
+            while index < end {
+                if characters[index] == " " {
+                    indentation += 1
+                    index += 1
+                } else if characters[index] == "\t" {
+                    indentation += 4
+                    index += 1
+                } else {
+                    break
+                }
+            }
+        }
+
+        consumeIndentation()
+        if indentation >= 4 {
+            return LineContext(
+                contentStart: index,
+                indentation: indentation,
+                isIndentedCode: true,
+                isBlank: index == end
+            )
+        }
+
+        while index < end {
+            if characters[index] == ">" {
+                index += 1
+                if index < end, characters[index] == " " || characters[index] == "\t" {
+                    index += 1
+                }
+                consumeIndentation()
+                if indentation >= 4 {
+                    return LineContext(
+                        contentStart: index,
+                        indentation: indentation,
+                        isIndentedCode: true,
+                        isBlank: index == end
+                    )
+                }
+                continue
+            }
+
+            if let markerEnd = listMarkerEnd(
+                in: characters,
+                from: index,
+                before: end
+            ) {
+                index = markerEnd
+                consumeIndentation()
+                continue
+            }
+            break
+        }
+
+        return LineContext(
+            contentStart: index,
+            indentation: indentation,
+            isIndentedCode: false,
+            isBlank: characters[index..<end].allSatisfy(\.isWhitespace)
+        )
+    }
+
+    private static func listMarkerEnd(
+        in characters: [Character],
+        from start: Int,
+        before end: Int
+    ) -> Int? {
+        guard start < end else { return nil }
+        if characters[start] == "-" || characters[start] == "+" || characters[start] == "*" {
+            let after = start + 1
+            guard after < end, characters[after].isWhitespace else { return nil }
+            return after
+        }
+
+        var index = start
+        var digits = 0
+        while index < end, characters[index].isNumber, digits < 9 {
+            index += 1
+            digits += 1
+        }
+        guard digits > 0,
+              index < end,
+              characters[index] == "." || characters[index] == ")" else {
+            return nil
+        }
+        let after = index + 1
+        guard after < end, characters[after].isWhitespace else { return nil }
+        return after
+    }
+
+    private static func adjacentPreviousLineHasContent(
+        in characters: [Character],
+        before lineStart: Int
+    ) -> Bool {
+        guard lineStart > 0 else { return false }
+        var end = lineStart
+        if characters[end - 1].isNewline {
+            end -= 1
+        }
+        var start = end
+        while start > 0, !characters[start - 1].isNewline {
+            start -= 1
+        }
+        return lineHasLogicalContent(characters, start: start, end: end)
+    }
+
+    private static func adjacentNextLineHasContent(
+        in characters: [Character],
+        after consumedEnd: Int
+    ) -> Bool {
+        var start = consumedEnd
+        if start > 0, !characters[start - 1].isNewline {
+            start = lineEnd(in: characters, from: start)
+        }
+        guard start < characters.count else { return false }
+        let end = contentEndBeforeNewline(
+            in: characters,
+            lineEnd: lineEnd(in: characters, from: start)
+        )
+        return lineHasLogicalContent(characters, start: start, end: end)
+    }
+
+    private static func lineHasLogicalContent(
         _ characters: [Character],
         start: Int,
         end: Int
     ) -> Bool {
+        let context = lineContext(characters, start: start, end: end)
+        return !context.isBlank
+    }
+
+    private static func referenceDefinitionNeedsDestination(
+        _ characters: [Character],
+        start: Int,
+        end: Int
+    ) -> Bool? {
         var index = start
         var indentation = 0
         while index < end, characters[index] == " ", indentation < 4 {
@@ -446,7 +658,7 @@ struct MarkdownMathScanner {
             indentation += 1
         }
         guard indentation <= 3, index < end, characters[index] == "[" else {
-            return false
+            return nil
         }
 
         index += 1
@@ -457,13 +669,14 @@ struct MarkdownMathScanner {
                 continue
             }
             if characters[index] == "]" {
-                guard index > labelStart else { return false }
+                guard index > labelStart else { return nil }
                 let colon = index + 1
-                return colon < end && characters[colon] == ":"
+                guard colon < end, characters[colon] == ":" else { return nil }
+                return characters[(colon + 1)..<end].allSatisfy(\.isWhitespace)
             }
             index += 1
         }
-        return false
+        return nil
     }
 
     private static func isFenceClosingLine(

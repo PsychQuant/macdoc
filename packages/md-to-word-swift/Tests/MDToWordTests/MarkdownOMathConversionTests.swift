@@ -147,6 +147,74 @@ final class MarkdownOMathConversionTests: XCTestCase {
         )
     }
 
+    func testArchivedOMathDeclaresMathNamespaceAndParses() throws {
+        let xml = try documentXML(
+            markdown: "Before $x$ after",
+            converter: MarkdownToWordConverter(mathMode: .omath)
+        )
+
+        XCTAssertTrue(
+            xml.contains(
+                "xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\""
+            ),
+            "Got: \(xml)"
+        )
+        XCTAssertNoThrow(
+            try XMLDocument(
+                data: Data(xml.utf8),
+                options: [.nodePreserveAll]
+            )
+        )
+    }
+
+    func testReferenceDefinitionContinuationPreservesRelationshipTarget() throws {
+        let markdown = "[link][ref]\n\n[ref]:\n  https://example.com/$x$"
+        let document = try MarkdownToWordConverter(mathMode: .omath)
+            .convertMarkdown(markdown)
+
+        XCTAssertEqual(
+            document.hyperlinkReferences.first?.url,
+            "https://example.com/$x$"
+        )
+    }
+
+    func testCodeBlocksNeverLeakGeneratedPlaceholders() throws {
+        let sources = [
+            "> ~~~text\n> $x$\n> ~~~",
+            "- ~~~text\n  $x$\n  ~~~",
+            "    $x$",
+        ]
+
+        for source in sources {
+            let xml = try documentXML(
+                markdown: source,
+                converter: MarkdownToWordConverter(mathMode: .omath)
+            )
+            XCTAssertTrue(xml.contains("$x$"), "Source: \(source); XML: \(xml)")
+            XCTAssertFalse(
+                xml.contains("MDTOWORDMATHPLACEHOLDER"),
+                "Source: \(source); XML: \(xml)"
+            )
+            XCTAssertFalse(xml.contains("<m:oMath"), "Source: \(source); XML: \(xml)")
+        }
+    }
+
+    func testDenseInlineMathConversionDoesNotRescanEveryToken() throws {
+        let source = Array(repeating: "$x$", count: 400).joined(separator: " ")
+        let started = Date()
+        let document = try MarkdownToWordConverter(mathMode: .omath)
+            .convertMarkdown(source)
+        let elapsed = Date().timeIntervalSince(started)
+        let xml = document.getAllParagraphs().map { $0.toXML() }.joined()
+
+        XCTAssertEqual(count("<m:oMath>", in: xml), 400)
+        XCTAssertLessThan(
+            elapsed,
+            5,
+            "Dense inline conversion took \(elapsed) seconds"
+        )
+    }
+
     func testUnsupportedFormulaIsNormalizedWithSourceLocation() {
         XCTAssertThrowsError(
             try MarkdownToWordConverter(mathMode: .omath)
