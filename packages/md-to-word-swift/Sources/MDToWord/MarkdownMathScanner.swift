@@ -28,6 +28,11 @@ struct MarkdownMathScanner {
     private enum ReferenceContinuation: Equatable {
         case destination
         case optionalTitle
+        case title(closing: Character)
+    }
+
+    private struct ReferenceDefinitionMatch {
+        let continuation: ReferenceContinuation?
     }
 
     private let markerPrefix: String
@@ -43,6 +48,11 @@ struct MarkdownMathScanner {
 
     func scan(_ source: String) throws -> Result {
         let characters = Array(source)
+        let markerStem = markerPrefix + markerNonce
+        let reservedMarkerIndices = Self.reservedMarkerIndices(
+            in: characters,
+            markerStem: Array(markerStem)
+        )
         var output = ""
         var tokens: [Token] = []
         var nextMarkerIndex = 0
@@ -50,16 +60,16 @@ struct MarkdownMathScanner {
         var line = 1
         var column = 1
         var lineStart = 0
+        var logicalLineStart = 0
         var fence: (character: Character, length: Int)?
         var referenceContinuation: ReferenceContinuation?
 
         func marker() -> String {
-            var candidate: String
-            repeat {
-                candidate = "\(markerPrefix)\(markerNonce)\(nextMarkerIndex)TOKEN"
+            while reservedMarkerIndices.contains(nextMarkerIndex) {
                 nextMarkerIndex += 1
-            } while source.contains(candidate) || tokens.contains(where: { $0.placeholder == candidate })
-            return candidate
+            }
+            defer { nextMarkerIndex += 1 }
+            return "\(markerStem)\(nextMarkerIndex)TOKEN"
         }
 
         while index < characters.count {
@@ -71,6 +81,7 @@ struct MarkdownMathScanner {
                     start: index,
                     end: contentEnd
                 )
+                logicalLineStart = context.contentStart
                 if let activeFence = fence {
                     if Self.isFenceClosingLine(
                         characters,
@@ -129,9 +140,12 @@ struct MarkdownMathScanner {
                 if let activeReferenceContinuation = referenceContinuation {
                     if context.isBlank {
                         referenceContinuation = nil
-                    } else if activeReferenceContinuation == .destination
-                        || context.indentation > 0 {
-                        referenceContinuation = .optionalTitle
+                    } else if activeReferenceContinuation == .destination {
+                        referenceContinuation = Self.continuationAfterDestination(
+                            characters,
+                            start: context.contentStart,
+                            end: contentEnd
+                        )
                         output += String(characters[index..<end])
                         Self.advance(
                             characters,
@@ -143,17 +157,53 @@ struct MarkdownMathScanner {
                         )
                         index = end
                         continue
-                    } else {
+                    } else if activeReferenceContinuation == .optionalTitle {
+                        if let titleLine = Self.optionalTitleLine(
+                            characters,
+                            start: context.contentStart,
+                            end: contentEnd
+                        ) {
+                            referenceContinuation = titleLine.continuation
+                            output += String(characters[index..<end])
+                            Self.advance(
+                                characters,
+                                from: index,
+                                to: end,
+                                line: &line,
+                                column: &column,
+                                lineStart: &lineStart
+                            )
+                            index = end
+                            continue
+                        }
                         referenceContinuation = nil
+                    } else if case .title(let closing) = activeReferenceContinuation {
+                        referenceContinuation = Self.containsUnescaped(
+                            closing,
+                            in: characters,
+                            start: context.contentStart,
+                            end: contentEnd
+                        ) ? nil : activeReferenceContinuation
+                        output += String(characters[index..<end])
+                        Self.advance(
+                            characters,
+                            from: index,
+                            to: end,
+                            line: &line,
+                            column: &column,
+                            lineStart: &lineStart
+                        )
+                        index = end
+                        continue
                     }
                 }
 
-                if let needsDestination = Self.referenceDefinitionNeedsDestination(
+                if let referenceDefinition = Self.referenceDefinition(
                     characters,
                     start: context.contentStart,
                     end: contentEnd
                 ) {
-                    referenceContinuation = needsDestination ? .destination : .optionalTitle
+                    referenceContinuation = referenceDefinition.continuation
                     output += String(characters[index..<end])
                     Self.advance(
                         characters,
@@ -244,7 +294,7 @@ struct MarkdownMathScanner {
                 if let display = Self.displayFormula(
                     in: characters,
                     opening: index,
-                    lineStart: lineStart
+                    lineStart: logicalLineStart
                 ) {
                     if display.mixedWithText {
                         throw ScanError.misplacedDisplayFormula(
@@ -368,16 +418,7 @@ struct MarkdownMathScanner {
             let body = String(characters[(opening + 2)..<closing])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let consumedEnd = closing + 2
-            let mixed = !prefixIsWhitespace
-                || !suffixIsWhitespace
-                || adjacentPreviousLineHasContent(
-                    in: characters,
-                    before: lineStart
-                )
-                || adjacentNextLineHasContent(
-                    in: characters,
-                    after: consumedEnd
-                )
+            let mixed = !prefixIsWhitespace || !suffixIsWhitespace
             return DisplayMatch(
                 latex: body,
                 replacementStart: opening,
@@ -397,22 +438,23 @@ struct MarkdownMathScanner {
         if search < characters.count, characters[search].isNewline {
             search += 1
         }
-        let bodyStart = search
+        var bodyLines: [String] = []
         while search < characters.count {
             let candidateLineEnd = contentEndBeforeNewline(
                 in: characters,
                 lineEnd: lineEnd(in: characters, from: search)
             )
-            var firstNonWhitespace = search
-            while firstNonWhitespace < candidateLineEnd,
-                  characters[firstNonWhitespace].isWhitespace {
-                firstNonWhitespace += 1
-            }
-            if firstNonWhitespace + 2 <= candidateLineEnd,
-               characters[firstNonWhitespace] == "$",
-               characters[firstNonWhitespace + 1] == "$",
-               characters[(firstNonWhitespace + 2)..<candidateLineEnd].allSatisfy(\.isWhitespace) {
-                let body = String(characters[bodyStart..<search])
+            let context = lineContext(
+                characters,
+                start: search,
+                end: candidateLineEnd
+            )
+            let contentStart = context.contentStart
+            if contentStart + 2 <= candidateLineEnd,
+               characters[contentStart] == "$",
+               characters[contentStart + 1] == "$",
+               characters[(contentStart + 2)..<candidateLineEnd].allSatisfy(\.isWhitespace) {
+                let body = bodyLines.joined(separator: "\n")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 var consumedEnd = candidateLineEnd
                 if consumedEnd < characters.count, characters[consumedEnd].isNewline {
@@ -421,17 +463,12 @@ struct MarkdownMathScanner {
                 return DisplayMatch(
                     latex: body,
                     replacementStart: opening,
-                    replacementEnd: firstNonWhitespace + 2,
+                    replacementEnd: contentStart + 2,
                     consumedEnd: consumedEnd,
-                    mixedWithText: adjacentPreviousLineHasContent(
-                        in: characters,
-                        before: lineStart
-                    ) || adjacentNextLineHasContent(
-                        in: characters,
-                        after: consumedEnd
-                    )
+                    mixedWithText: false
                 )
             }
+            bodyLines.append(String(characters[contentStart..<candidateLineEnd]))
             search = candidateLineEnd
             if search < characters.count, characters[search].isNewline {
                 search += 1
@@ -605,52 +642,11 @@ struct MarkdownMathScanner {
         return after
     }
 
-    private static func adjacentPreviousLineHasContent(
-        in characters: [Character],
-        before lineStart: Int
-    ) -> Bool {
-        guard lineStart > 0 else { return false }
-        var end = lineStart
-        if characters[end - 1].isNewline {
-            end -= 1
-        }
-        var start = end
-        while start > 0, !characters[start - 1].isNewline {
-            start -= 1
-        }
-        return lineHasLogicalContent(characters, start: start, end: end)
-    }
-
-    private static func adjacentNextLineHasContent(
-        in characters: [Character],
-        after consumedEnd: Int
-    ) -> Bool {
-        var start = consumedEnd
-        if start > 0, !characters[start - 1].isNewline {
-            start = lineEnd(in: characters, from: start)
-        }
-        guard start < characters.count else { return false }
-        let end = contentEndBeforeNewline(
-            in: characters,
-            lineEnd: lineEnd(in: characters, from: start)
-        )
-        return lineHasLogicalContent(characters, start: start, end: end)
-    }
-
-    private static func lineHasLogicalContent(
+    private static func referenceDefinition(
         _ characters: [Character],
         start: Int,
         end: Int
-    ) -> Bool {
-        let context = lineContext(characters, start: start, end: end)
-        return !context.isBlank
-    }
-
-    private static func referenceDefinitionNeedsDestination(
-        _ characters: [Character],
-        start: Int,
-        end: Int
-    ) -> Bool? {
+    ) -> ReferenceDefinitionMatch? {
         var index = start
         var indentation = 0
         while index < end, characters[index] == " ", indentation < 4 {
@@ -672,11 +668,117 @@ struct MarkdownMathScanner {
                 guard index > labelStart else { return nil }
                 let colon = index + 1
                 guard colon < end, characters[colon] == ":" else { return nil }
-                return characters[(colon + 1)..<end].allSatisfy(\.isWhitespace)
+                let contentStart = colon + 1
+                if characters[contentStart..<end].allSatisfy(\.isWhitespace) {
+                    return ReferenceDefinitionMatch(continuation: .destination)
+                }
+                return ReferenceDefinitionMatch(
+                    continuation: continuationAfterDestination(
+                        characters,
+                        start: contentStart,
+                        end: end
+                    )
+                )
             }
             index += 1
         }
         return nil
+    }
+
+    private static func continuationAfterDestination(
+        _ characters: [Character],
+        start: Int,
+        end: Int
+    ) -> ReferenceContinuation? {
+        var index = start
+        while index < end, characters[index].isWhitespace {
+            index += 1
+        }
+        guard index < end else { return .destination }
+
+        if characters[index] == "<" {
+            index += 1
+            while index < end {
+                if characters[index] == "\\" {
+                    index = min(index + 2, end)
+                    continue
+                }
+                if characters[index] == ">" {
+                    index += 1
+                    break
+                }
+                index += 1
+            }
+        } else {
+            while index < end, !characters[index].isWhitespace {
+                index += 1
+            }
+        }
+
+        while index < end, characters[index].isWhitespace {
+            index += 1
+        }
+        guard index < end else { return .optionalTitle }
+        return titleContinuation(characters, opening: index, end: end)
+    }
+
+    private static func optionalTitleLine(
+        _ characters: [Character],
+        start: Int,
+        end: Int
+    ) -> ReferenceDefinitionMatch? {
+        var index = start
+        while index < end, characters[index].isWhitespace {
+            index += 1
+        }
+        guard index < end else { return nil }
+        let character = characters[index]
+        guard character == "\"" || character == "'" || character == "(" else {
+            return nil
+        }
+        return ReferenceDefinitionMatch(
+            continuation: titleContinuation(characters, opening: index, end: end)
+        )
+    }
+
+    private static func titleContinuation(
+        _ characters: [Character],
+        opening: Int,
+        end: Int
+    ) -> ReferenceContinuation? {
+        let closing: Character
+        switch characters[opening] {
+        case "\"": closing = "\""
+        case "'": closing = "'"
+        case "(": closing = ")"
+        default: return nil
+        }
+        return containsUnescaped(
+            closing,
+            in: characters,
+            start: opening + 1,
+            end: end
+        ) ? nil : .title(closing: closing)
+    }
+
+    private static func containsUnescaped(
+        _ character: Character,
+        in characters: [Character],
+        start: Int,
+        end: Int
+    ) -> Bool {
+        var index = start
+        while index < end {
+            if characters[index] == "\\" {
+                index = min(index + 2, end)
+                continue
+            }
+            if characters[index] == character {
+                return true
+            }
+            index += 1
+        }
+        return false
     }
 
     private static func isFenceClosingLine(
@@ -740,12 +842,21 @@ struct MarkdownMathScanner {
     ) -> Int? {
         var depth = 0
         var index = openingParenthesis
+        var quote: Character?
         while index < characters.count {
             if characters[index] == "\\" {
                 index = min(index + 2, characters.count)
                 continue
             }
-            if characters[index] == "(" {
+            if let activeQuote = quote {
+                if characters[index] == activeQuote {
+                    quote = nil
+                }
+            } else if (characters[index] == "\"" || characters[index] == "'"),
+                      index > openingParenthesis,
+                      characters[index - 1].isWhitespace {
+                quote = characters[index]
+            } else if characters[index] == "(" {
                 depth += 1
             } else if characters[index] == ")" {
                 depth -= 1
@@ -753,11 +864,48 @@ struct MarkdownMathScanner {
                     return index + 1
                 }
             } else if characters[index].isNewline {
-                return nil
+                var next = index + 1
+                while next < characters.count,
+                      characters[next].isWhitespace,
+                      !characters[next].isNewline {
+                    next += 1
+                }
+                if next < characters.count, characters[next].isNewline {
+                    return nil
+                }
             }
             index += 1
         }
         return nil
+    }
+
+    private static func reservedMarkerIndices(
+        in characters: [Character],
+        markerStem: [Character]
+    ) -> Set<Int> {
+        guard !markerStem.isEmpty else { return [] }
+        let suffix = Array("TOKEN")
+        var reserved: Set<Int> = []
+        var index = 0
+
+        while index + markerStem.count < characters.count {
+            let stemEnd = index + markerStem.count
+            if characters[index..<stemEnd].elementsEqual(markerStem) {
+                var digitsEnd = stemEnd
+                while digitsEnd < characters.count, characters[digitsEnd].isNumber {
+                    digitsEnd += 1
+                }
+                let suffixEnd = digitsEnd + suffix.count
+                if digitsEnd > stemEnd,
+                   suffixEnd <= characters.count,
+                   characters[digitsEnd..<suffixEnd].elementsEqual(suffix),
+                   let value = Int(String(characters[stemEnd..<digitsEnd])) {
+                    reserved.insert(value)
+                }
+            }
+            index += 1
+        }
+        return reserved
     }
 
     private static func runLength(

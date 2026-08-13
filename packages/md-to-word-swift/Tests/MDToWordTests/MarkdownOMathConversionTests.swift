@@ -178,6 +178,71 @@ final class MarkdownOMathConversionTests: XCTestCase {
         )
     }
 
+    func testMultilineInlineLinkDestinationPreservesRelationshipTarget() throws {
+        let markdown = "[link](\nhttps://example.com/$x$\n)"
+        let converter = MarkdownToWordConverter(mathMode: .omath)
+        let document = try converter.convertMarkdown(markdown)
+        let xml = try documentXML(markdown: markdown, converter: converter)
+
+        XCTAssertEqual(
+            document.hyperlinkReferences.first?.url,
+            "https://example.com/$x$"
+        )
+        XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Got: \(xml)")
+        XCTAssertFalse(xml.contains("<m:oMath"), "Got: \(xml)")
+    }
+
+    func testReferenceDefinitionOptionalTitleDoesNotBecomeMath() throws {
+        let sources = [
+            "Use [reference][ref].\n\n[ref]: https://example.com\n\"$x$\"",
+            "Use [reference][ref].\n\n[ref]: https://example.com\n\"$\\overbrace{x}$\"",
+        ]
+
+        for source in sources {
+            let converter = MarkdownToWordConverter(mathMode: .omath)
+            let document = try converter.convertMarkdown(source)
+            let xml = try documentXML(markdown: source, converter: converter)
+
+            XCTAssertEqual(document.hyperlinkReferences.first?.url, "https://example.com")
+            XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(source)")
+            XCTAssertFalse(xml.contains("<m:oMath"), "Source: \(source)")
+        }
+    }
+
+    func testDisplayPlacementUsesCommonMarkParagraphBoundaries() throws {
+        let rejected = [
+            "Before\n$$x$$\nAfter",
+            "Before\n$$\nx\n$$\nAfter",
+        ]
+        for source in rejected {
+            XCTAssertThrowsError(
+                try MarkdownToWordConverter(mathMode: .omath).convertMarkdown(source)
+            ) { error in
+                XCTAssertEqual(
+                    error as? MarkdownMathConversionError,
+                    .misplacedDisplayFormula(line: 2, column: 1),
+                    "Source: \(source)"
+                )
+            }
+        }
+
+        let accepted = [
+            "# Heading\n$$x$$\n\nAfter",
+            "Before\n\n$$x$$\n# After",
+            "- Before\n- $$x$$\n- After",
+            "- $$\n  x\n  $$",
+            "> $$\n> x\n> $$",
+        ]
+        for source in accepted {
+            let xml = try documentXML(
+                markdown: source,
+                converter: MarkdownToWordConverter(mathMode: .omath)
+            )
+            XCTAssertEqual(count("<m:oMathPara>", in: xml), 1, "Source: \(source)")
+            XCTAssertFalse(xml.contains("MDTOWORDMATHPLACEHOLDER"), "Source: \(source)")
+        }
+    }
+
     func testCodeBlocksNeverLeakGeneratedPlaceholders() throws {
         let sources = [
             "> ~~~text\n> $x$\n> ~~~",
