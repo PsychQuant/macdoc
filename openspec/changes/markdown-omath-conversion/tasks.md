@@ -50,3 +50,8 @@
 
 - [x] 10.1 Add exact RED regressions for `Visible <$x$> tail` and invalid quoted opening tags followed by a valid closer; prove the R5 question-mark wrapper either becomes a processing instruction or the permissive HTML pairing suppresses visible math.
 - [x] 10.2 Wrap placeholders in a private-use Unicode sentinel and require a syntactically valid named quoted attribute before AST-anchored opening-tag masking. GREEN evidence: focused scanner/converter 50/50, compiled CLI 14/14, root 59 total with 0 failures and 3 environment skips, and package 139 total with exactly the documented 42 baseline failures. The matrix includes `<span $x$>`, `<$x$>`, unnamed quoted attributes, invalid attribute names, and the existing valid quoted-HTML opaque case.
+
+## 11. R6 CommonMark attribute grammar and bounded malformed input
+
+- [x] 11.1 Add exact RED regressions for an unquoted attribute value containing forbidden `=`, missing whitespace between attributes, and 10,000 unterminated `<a` prefixes. Frozen R6 evidence: both invalid openings produce 0 OMath with literal `$x$`, while the scanner takes 2.925 seconds on the malformed-prefix case.
+- [x] 11.2 Match the complete CommonMark opening-tag attribute grammar before masking visible text and advance to a discovered physical-line boundary after an unterminated candidate. GREEN evidence: the two correctness regressions produce one token each, the valid `foo=?` control remains opaque, and the 10,000-prefix scanner case falls from 2.925 seconds to 0.017 seconds in debug and 0.003 seconds in release. Focused scanner/converter 51/51, compiled CLI 14/14, root 59 total with 0 failures and 3 environment skips, and package 140 total with exactly the documented 42 baseline failures.

@@ -75,9 +75,15 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 
 #### Scenario: Invalid HTML-like visible text remains math-eligible
 
-- **WHEN** CommonMark parses `$x$` as visible `Text` inside `<span $x$>`, `<$x$>`, or an invalid quoted opening tag followed by a closing tag
+- **WHEN** CommonMark parses `$x$` as visible `Text` inside `<span $x$>`, `<$x$>`, an opening tag whose unquoted value contains a forbidden character, or an opening tag whose attributes lack required whitespace
 - **THEN** `.omath` mode converts `$x$` to one inline OMath carrier
 - **AND** the visible angle-bracket text remains present without a generated placeholder
+
+#### Scenario: Unterminated HTML-like prefixes remain bounded
+
+- **WHEN** one physical line contains many `<tag` prefixes without a closing `>`
+- **THEN** source eligibility visits the line suffix a bounded number of times
+- **AND** conversion time does not grow quadratically with the number of prefixes
 
 #### Scenario: Visible text after invalid reference-like syntax remains eligible
 

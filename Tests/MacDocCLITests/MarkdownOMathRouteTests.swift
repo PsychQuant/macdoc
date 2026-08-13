@@ -298,6 +298,7 @@ struct MarkdownOMathRouteTests {
         let sources = [
             "<!--\n$\\overbrace{x}$\n-->\nVisible",
             #"<span title="> $x$">text</span>"#,
+            #"<span foo=? title="$x$">text</span>"#,
             "$*x*$",
         ]
 
@@ -328,6 +329,8 @@ struct MarkdownOMathRouteTests {
             "Visible <$x$> tail",
             "Visible <span \"$x$\"> tail </span>",
             "Visible <span title=\"$x$\" ?> tail </span>",
+            "Visible <span foo=bar=baz title=\"$x$\"> tail </span>",
+            "Visible <span title=\"$x$\"foo=\"bar\"> tail </span>",
         ]
         for source in sources {
             let workspace = try makeWorkspace()
