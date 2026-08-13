@@ -55,7 +55,7 @@ The scanner then performs a bounded linear replacement pass over source characte
 - inline math: one unescaped `$`, non-whitespace first and last formula characters, no newline, and a valid closing `$`;
 - display math: `$$...$$` occupying an entire logical paragraph, either on one trimmed line or with standalone opening and closing delimiter lines.
 
-Unmatched dollars remain literal. A matched display token found alongside non-whitespace paragraph content or spanning more than one original eligible paragraph is rejected rather than silently converted inline. A token placeholder is generated only after a linear pre-index proves its numeric suffix is absent from caller input. The placeholder is wrapped in punctuation that cannot turn invalid HTML-like visible text into an HTML attribute when the transformed source is parsed again.
+Unmatched dollars remain literal. A matched display token found alongside non-whitespace paragraph content or spanning more than one original eligible paragraph is rejected rather than silently converted inline. A token placeholder is generated only after a linear pre-index proves its numeric suffix is absent from caller input. The placeholder is wrapped in a private-use Unicode sentinel that cannot turn invalid HTML-like visible text into an HTML attribute, tag, autolink, or processing instruction when the transformed source is parsed again.
 
 Alternatives rejected:
 

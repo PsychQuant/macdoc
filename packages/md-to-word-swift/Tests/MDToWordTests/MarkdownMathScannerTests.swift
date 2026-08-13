@@ -169,7 +169,7 @@ final class MarkdownMathScannerTests: XCTestCase {
         let sources = [
             "<!--\n$x$\n-->",
             "<div>\n$x$\n</div>",
-            #"<span title=\"> $x$\">text</span>"#,
+            #"<span title="> $x$">text</span>"#,
             "$*x*$",
             "$**x**$",
         ]
@@ -182,15 +182,23 @@ final class MarkdownMathScannerTests: XCTestCase {
     }
 
     func testInvalidHTMLLikeVisibleTextRemainsMathEligible() throws {
-        let source = "Visible <span $x$> tail"
-        let result = try MarkdownMathScanner().scan(source)
+        let sources = [
+            "Visible <span $x$> tail",
+            "Visible <$x$> tail",
+            "Visible <span \"$x$\"> tail </span>",
+            "Visible <span ?=\"$x$\"> tail </span>",
+            "Visible <span title=\"$x$\" ?> tail </span>",
+        ]
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
 
-        XCTAssertEqual(result.tokens.count, 1)
-        XCTAssertEqual(result.tokens.first?.latex, "x")
-        XCTAssertEqual(
-            result.markdown,
-            "Visible <span \(try XCTUnwrap(result.tokens.first).placeholder)> tail"
-        )
+            XCTAssertEqual(result.tokens.count, 1, "Source: \(source)")
+            XCTAssertEqual(result.tokens.first?.latex, "x", "Source: \(source)")
+            XCTAssertTrue(
+                result.markdown.contains(try XCTUnwrap(result.tokens.first).placeholder),
+                "Source: \(source)"
+            )
+        }
     }
 
     func testMathTokenConsumptionRequiresExactlyOneCarrier() throws {
