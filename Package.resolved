@@ -19,6 +19,15 @@
       }
     },
     {
+      "identity" : "latex-math-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/latex-math-swift.git",
+      "state" : {
+        "revision" : "e222b567db1fb23fcd4816471964aad049b9079c",
+        "version" : "0.2.0"
+      }
+    },
+    {
       "identity" : "markdown-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/markdown-swift.git",
