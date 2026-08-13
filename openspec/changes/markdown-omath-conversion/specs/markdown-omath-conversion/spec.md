@@ -75,7 +75,7 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 
 #### Scenario: Invalid HTML-like visible text remains math-eligible
 
-- **WHEN** CommonMark parses `Visible <span $x$> tail` as one visible `Text` node rather than HTML
+- **WHEN** CommonMark parses `$x$` as visible `Text` inside `<span $x$>`, `<$x$>`, or an invalid quoted opening tag followed by a closing tag
 - **THEN** `.omath` mode converts `$x$` to one inline OMath carrier
 - **AND** the visible angle-bracket text remains present without a generated placeholder
 

@@ -297,7 +297,7 @@ struct MarkdownOMathRouteTests {
     func htmlAndFormattingBoundariesRemainLiteral() throws {
         let sources = [
             "<!--\n$\\overbrace{x}$\n-->\nVisible",
-            #"<span title=\"> $x$\">text</span>"#,
+            #"<span title="> $x$">text</span>"#,
             "$*x*$",
         ]
 
@@ -323,24 +323,31 @@ struct MarkdownOMathRouteTests {
 
     @Test("invalid HTML-like visible text remains math eligible")
     func invalidHTMLLikeVisibleTextEmitsMath() throws {
-        let workspace = try makeWorkspace()
-        defer { try? FileManager.default.removeItem(at: workspace) }
-        let input = workspace.appendingPathComponent("fixture.md")
-        let output = workspace.appendingPathComponent("fixture.docx")
-        try "Visible <span $x$> tail".write(to: input, atomically: true, encoding: .utf8)
+        let sources = [
+            "Visible <span $x$> tail",
+            "Visible <$x$> tail",
+            "Visible <span \"$x$\"> tail </span>",
+            "Visible <span title=\"$x$\" ?> tail </span>",
+        ]
+        for source in sources {
+            let workspace = try makeWorkspace()
+            defer { try? FileManager.default.removeItem(at: workspace) }
+            let input = workspace.appendingPathComponent("fixture.md")
+            let output = workspace.appendingPathComponent("fixture.docx")
+            try source.write(to: input, atomically: true, encoding: .utf8)
 
-        let result = try CLITestHelper.convert(
-            to: "docx",
-            input: input.path,
-            flags: ["--math", "omath", "--output", output.path]
-        )
+            let result = try CLITestHelper.convert(
+                to: "docx",
+                input: input.path,
+                flags: ["--math", "omath", "--output", output.path]
+            )
 
-        #expect(result.succeeded, "stderr: \(result.stderr)")
-        let xml = try archiveEntry(named: "word/document.xml", in: output)
-        #expect(xml.components(separatedBy: "<m:oMath>").count - 1 == 1)
-        #expect(xml.contains("&lt;span "))
-        #expect(xml.contains("&gt; tail"))
-        #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+            #expect(result.succeeded, "Source: \(source); stderr: \(result.stderr)")
+            let xml = try archiveEntry(named: "word/document.xml", in: output)
+            #expect(xml.components(separatedBy: "<m:oMath>").count - 1 == 1)
+            #expect(xml.contains("&lt;"))
+            #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+        }
     }
 
     private func makeWorkspace() throws -> URL {
