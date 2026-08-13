@@ -226,6 +226,101 @@ struct MarkdownOMathRouteTests {
         #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
     }
 
+    @Test("display math cannot cross original CommonMark blocks")
+    func crossBlockDisplayPreservesDestination() throws {
+        let sources = [
+            "$$\n\nx\n\n$$",
+            "- $$\n- x\n- $$",
+            "> $$\nx\n> $$",
+        ]
+
+        for source in sources {
+            let workspace = try makeWorkspace()
+            defer { try? FileManager.default.removeItem(at: workspace) }
+            let input = workspace.appendingPathComponent("fixture.md")
+            let output = workspace.appendingPathComponent("fixture.docx")
+            let sentinel = Data("KEEP".utf8)
+            try source.write(to: input, atomically: true, encoding: .utf8)
+            try sentinel.write(to: output)
+
+            let result = try CLITestHelper.convert(
+                to: "docx",
+                input: input.path,
+                flags: ["--math", "omath", "--output", output.path]
+            )
+
+            #expect(!result.succeeded, "Source unexpectedly succeeded: \(source)")
+            #expect(result.stdout.isEmpty)
+            #expect(try Data(contentsOf: output) == sentinel)
+        }
+    }
+
+    @Test("complex destinations remain byte-exact and placeholder-free")
+    func complexDestinationsRemainLiteral() throws {
+        let cases: [(source: String, target: String)] = [
+            (
+                "Use [ref].\n\n[\nref\n]: https://example.com/$x$",
+                "https://example.com/$x$"
+            ),
+            (
+                "[link](<https://example.com/a)$x$>)",
+                "https://example.com/a)$x$"
+            ),
+        ]
+
+        for testCase in cases {
+            let workspace = try makeWorkspace()
+            defer { try? FileManager.default.removeItem(at: workspace) }
+            let input = workspace.appendingPathComponent("fixture.md")
+            let output = workspace.appendingPathComponent("fixture.docx")
+            try testCase.source.write(to: input, atomically: true, encoding: .utf8)
+
+            let result = try CLITestHelper.convert(
+                to: "docx",
+                input: input.path,
+                flags: ["--math", "omath", "--output", output.path]
+            )
+
+            #expect(result.succeeded, "stderr: \(result.stderr)")
+            let relationships = try archiveEntry(
+                named: "word/_rels/document.xml.rels",
+                in: output
+            )
+            let xml = try archiveEntry(named: "word/document.xml", in: output)
+            #expect(relationships.contains("Target=\"\(testCase.target)\""))
+            #expect(!relationships.contains("MDTOWORDMATHPLACEHOLDER"))
+            #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+        }
+    }
+
+    @Test("HTML and formatting boundaries remain placeholder-free")
+    func htmlAndFormattingBoundariesRemainLiteral() throws {
+        let sources = [
+            "<!--\n$\\overbrace{x}$\n-->\nVisible",
+            #"<span title=\"> $x$\">text</span>"#,
+            "$*x*$",
+        ]
+
+        for source in sources {
+            let workspace = try makeWorkspace()
+            defer { try? FileManager.default.removeItem(at: workspace) }
+            let input = workspace.appendingPathComponent("fixture.md")
+            let output = workspace.appendingPathComponent("fixture.docx")
+            try source.write(to: input, atomically: true, encoding: .utf8)
+
+            let result = try CLITestHelper.convert(
+                to: "docx",
+                input: input.path,
+                flags: ["--math", "omath", "--output", output.path]
+            )
+
+            #expect(result.succeeded, "Source: \(source); stderr: \(result.stderr)")
+            let xml = try archiveEntry(named: "word/document.xml", in: output)
+            #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+            #expect(!xml.contains("<m:oMath"))
+        }
+    }
+
     private func makeWorkspace() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("macdoc-markdown-omath-cli-\(UUID().uuidString)", isDirectory: true)

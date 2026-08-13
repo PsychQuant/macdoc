@@ -98,6 +98,14 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertEqual(result.markdown, source)
     }
 
+    func testUnmatchedVisibleDisplayDoesNotPairWithOpaqueCodeDelimiter() throws {
+        let source = "Unmatched $$\n\n```text\n$$\n```"
+        let result = try MarkdownMathScanner().scan(source)
+
+        XCTAssertTrue(result.tokens.isEmpty)
+        XCTAssertEqual(result.markdown, source)
+    }
+
     func testDisplayDelimiterMixedWithTextIsRejected() {
         XCTAssertThrowsError(try MarkdownMathScanner().scan("before $$x$$ after")) { error in
             XCTAssertEqual(
@@ -121,10 +129,26 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertTrue(result.markdown.contains(result.tokens[0].placeholder))
     }
 
-    func testScannerDefersLogicalParagraphValidationToCommonMarkTree() throws {
-        let sources = [
-            "Before\n$$x$$\nAfter",
-            "Before\n$$\nx\n$$\nAfter",
+    func testOriginalCommonMarkParagraphGatesDisplayRecognition() throws {
+        let rejected: [(source: String, line: Int, column: Int)] = [
+            ("Before\n$$x$$\nAfter", 2, 1),
+            ("Before\n$$\nx\n$$\nAfter", 2, 1),
+            ("$$\n\nx\n\n$$", 1, 1),
+            ("- $$\n- x\n- $$", 1, 3),
+            ("> $$\nx\n> $$", 1, 3),
+        ]
+
+        for testCase in rejected {
+            XCTAssertThrowsError(try MarkdownMathScanner().scan(testCase.source)) { error in
+                XCTAssertEqual(
+                    error as? MarkdownMathScanner.ScanError,
+                    .misplacedDisplayFormula(line: testCase.line, column: testCase.column),
+                    "Source: \(testCase.source)"
+                )
+            }
+        }
+
+        let accepted = [
             "# Heading\n$$x$$\n\nAfter",
             "Before\n\n$$x$$\n# After",
             "- Before\n- $$x$$\n- After",
@@ -132,13 +156,68 @@ final class MarkdownMathScannerTests: XCTestCase {
             "> $$\n> x\n> $$",
         ]
 
-        for source in sources {
+        for source in accepted {
             let result = try MarkdownMathScanner().scan(source)
             XCTAssertEqual(result.tokens.count, 1, "Source: \(source)")
             guard result.tokens.count == 1 else { continue }
             XCTAssertEqual(result.tokens[0].kind, .display, "Source: \(source)")
             XCTAssertEqual(result.tokens[0].latex, "x", "Source: \(source)")
         }
+    }
+
+    func testOriginalCommonMarkOpaqueAndFormattingRangesRemainLiteral() throws {
+        let sources = [
+            "<!--\n$x$\n-->",
+            "<div>\n$x$\n</div>",
+            #"<span title=\"> $x$\">text</span>"#,
+            "$*x*$",
+            "$**x**$",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source)
+        }
+    }
+
+    func testCommonMarkDestinationAndReferenceMetadataRemainLiteral() throws {
+        let sources = [
+            "Use [ref].\n\n[\nref\n]: https://example.com/$x$",
+            "[link](<https://example.com/a)$x$>)",
+            "[ref]: https://example.com\n\"$x$\"",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source)
+        }
+    }
+
+    func testVisibleInvalidReferenceLikeTextRemainsEligible() throws {
+        let sources = [
+            "[ref]: invalid destination $x$",
+            "Use [ref].\n\n[ref]: https://example.com\n\"$x$\" ok",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertEqual(result.tokens.count, 1, "Source: \(source)")
+            XCTAssertEqual(result.tokens.first?.latex, "x", "Source: \(source)")
+        }
+    }
+
+    func testInvalidReferenceTitleRecoveryNeverConsumesMatchingDestinationFormula() throws {
+        let source = "Use [ref].\n\n[ref]: https://example.com/$x$\n\"$x$\" ok"
+        let result = try MarkdownMathScanner().scan(source)
+
+        XCTAssertEqual(result.tokens.map(\.latex), ["x"])
+        XCTAssertTrue(result.markdown.contains("https://example.com/$x$"))
+        XCTAssertEqual(
+            result.markdown.components(separatedBy: MarkdownMathScanner.defaultMarkerPrefix).count - 1,
+            1
+        )
     }
 
     func testReferenceDefinitionDestinationsRemainLiteralInContainersAndContinuations() throws {

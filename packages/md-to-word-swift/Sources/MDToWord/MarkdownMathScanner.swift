@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 struct MarkdownMathScanner {
     static let defaultMarkerPrefix = "MDTOWORDMATHPLACEHOLDER"
@@ -25,18 +26,258 @@ struct MarkdownMathScanner {
         case misplacedDisplayFormula(line: Int, column: Int)
     }
 
-    private enum ReferenceContinuation: Equatable {
-        case destination
-        case optionalTitle
-        case title(closing: Character)
-    }
-
-    private struct ReferenceDefinitionMatch {
-        let continuation: ReferenceContinuation?
-    }
-
     private let markerPrefix: String
     private let markerNonce: String
+
+    /// Original CommonMark source ranges are the authority for math eligibility.
+    /// A narrow raw-angle shield supplements ranges when cmark normalizes quoted tag spelling.
+    private struct SourceEligibility {
+        private struct Point: Hashable {
+            let line: Int
+            let column: Int
+        }
+
+        private let inlineIneligiblePrefix: [Int]
+        private let visibleOffsets: [Bool]
+        private let paragraphRanges: Set<Range<Int>>
+        private let displayRanges: Set<Range<Int>>
+
+        init(source: String, characters: [Character]) {
+            let offsets = Self.sourceOffsets(for: characters)
+            let document = Document(parsing: source)
+            var inlineRanges: [Range<Int>] = []
+            var fallbackInlineRanges: [Range<Int>] = []
+            var paragraphRanges: Set<Range<Int>> = []
+            var displayRanges: Set<Range<Int>> = []
+
+            func offsetRange(for markup: Markup) -> Range<Int>? {
+                guard let range = markup.range,
+                      let lower = offsets[
+                          Point(line: range.lowerBound.line, column: range.lowerBound.column)
+                      ],
+                      let upper = offsets[
+                          Point(line: range.upperBound.line, column: range.upperBound.column)
+                      ],
+                      lower <= upper else {
+                    return nil
+                }
+                return lower..<upper
+            }
+
+            func trimmingWhitespace(_ range: Range<Int>) -> Range<Int> {
+                var lower = range.lowerBound
+                var upper = range.upperBound
+                while lower < upper, characters[lower].isWhitespace {
+                    lower += 1
+                }
+                while lower < upper, characters[upper - 1].isWhitespace {
+                    upper -= 1
+                }
+                return lower..<upper
+            }
+
+            func isAutolink(_ link: Markdown.Link) -> Bool {
+                guard let range = offsetRange(for: link),
+                      range.lowerBound < range.upperBound else {
+                    return false
+                }
+                return characters[range.lowerBound] == "<"
+                    && characters[range.upperBound - 1] == ">"
+            }
+
+            func paragraphAllowsDisplay(_ paragraph: Markdown.Paragraph) -> Bool {
+                paragraph.children.allSatisfy { child in
+                    child is Text || child is SoftBreak || child is LineBreak
+                }
+            }
+
+            func recoverNormalizedTextRanges(
+                in paragraph: Markdown.Paragraph,
+                sourceRange: Range<Int>
+            ) {
+                guard paragraphAllowsDisplay(paragraph) else { return }
+                var needed: [String: Int] = [:]
+                for child in paragraph.children {
+                    guard let text = child as? Text else { continue }
+                    for candidate in Self.inlineCandidates(in: Array(text.string)) {
+                        needed[candidate.signature, default: 0] += 1
+                    }
+                }
+                guard !needed.isEmpty else { return }
+
+                let rawCandidates = Self.inlineCandidates(
+                    in: characters,
+                    range: sourceRange
+                )
+                for candidate in rawCandidates.reversed()
+                    where needed[candidate.signature, default: 0] > 0 {
+                    fallbackInlineRanges.append(candidate.range)
+                    needed[candidate.signature, default: 0] -= 1
+                }
+            }
+
+            func collect(_ markup: Markup, insideAutolink: Bool = false) {
+                if let paragraph = markup as? Markdown.Paragraph,
+                   let range = offsetRange(for: paragraph) {
+                    let contentRange = trimmingWhitespace(range)
+                    paragraphRanges.insert(contentRange)
+                    if paragraphAllowsDisplay(paragraph) {
+                        displayRanges.insert(contentRange)
+                        recoverNormalizedTextRanges(in: paragraph, sourceRange: range)
+                    }
+                }
+
+                let childrenInsideAutolink = insideAutolink
+                    || ((markup as? Markdown.Link).map(isAutolink) ?? false)
+                if markup is Text, !insideAutolink, let range = offsetRange(for: markup) {
+                    inlineRanges.append(range)
+                }
+                for child in markup.children {
+                    collect(child, insideAutolink: childrenInsideAutolink)
+                }
+            }
+
+            collect(document)
+            var visibleOffsets = [Bool](repeating: false, count: characters.count)
+            for range in inlineRanges + fallbackInlineRanges {
+                for offset in range where offset < visibleOffsets.count {
+                    visibleOffsets[offset] = true
+                }
+            }
+            for range in Self.angleRanges(in: characters) {
+                for offset in range where offset < visibleOffsets.count {
+                    visibleOffsets[offset] = false
+                }
+            }
+            var inlineIneligiblePrefix = [Int](repeating: 0, count: characters.count + 1)
+            for offset in characters.indices {
+                inlineIneligiblePrefix[offset + 1] = inlineIneligiblePrefix[offset]
+                    + (visibleOffsets[offset] ? 0 : 1)
+            }
+            self.inlineIneligiblePrefix = inlineIneligiblePrefix
+            self.visibleOffsets = visibleOffsets
+            self.paragraphRanges = paragraphRanges
+            self.displayRanges = displayRanges
+        }
+
+        func containsInline(_ range: Range<Int>) -> Bool {
+            guard !range.isEmpty,
+                  0 <= range.lowerBound,
+                  range.upperBound < inlineIneligiblePrefix.count else {
+                return false
+            }
+            return inlineIneligiblePrefix[range.upperBound]
+                == inlineIneligiblePrefix[range.lowerBound]
+        }
+
+        func containsVisibleText(at offset: Int) -> Bool {
+            visibleOffsets.indices.contains(offset) && visibleOffsets[offset]
+        }
+
+        func isParagraph(_ range: Range<Int>) -> Bool {
+            paragraphRanges.contains(range)
+        }
+
+        func allowsDisplay(_ range: Range<Int>) -> Bool {
+            displayRanges.contains(range)
+        }
+
+        private static func sourceOffsets(for characters: [Character]) -> [Point: Int] {
+            var result: [Point: Int] = [:]
+            var line = 1
+            var column = 1
+            for (offset, character) in characters.enumerated() {
+                result[Point(line: line, column: column)] = offset
+                if character.isNewline {
+                    line += 1
+                    column = 1
+                } else {
+                    column += String(character).utf8.count
+                }
+            }
+            result[Point(line: line, column: column)] = characters.count
+            return result
+        }
+
+        private static func angleRanges(in characters: [Character]) -> [Range<Int>] {
+            var result: [Range<Int>] = []
+            var index = 0
+            while index < characters.count {
+                guard characters[index] == "<", index + 1 < characters.count else {
+                    index += 1
+                    continue
+                }
+                let next = characters[index + 1]
+                guard next.isLetter || next == "/" || next == "!" || next == "?" else {
+                    index += 1
+                    continue
+                }
+
+                var cursor = index + 2
+                var quote: Character?
+                while cursor < characters.count, !characters[cursor].isNewline {
+                    let character = characters[cursor]
+                    if let activeQuote = quote {
+                        if character == activeQuote {
+                            quote = nil
+                        }
+                    } else if character == "\"" || character == "'" {
+                        quote = character
+                    } else if character == ">" {
+                        result.append(index..<(cursor + 1))
+                        index = cursor
+                        break
+                    }
+                    cursor += 1
+                }
+                index += 1
+            }
+            return result
+        }
+
+        private static func inlineCandidates(
+            in characters: [Character],
+            range: Range<Int>? = nil
+        ) -> [(range: Range<Int>, signature: String)] {
+            let bounds = range ?? characters.startIndex..<characters.endIndex
+            var result: [(range: Range<Int>, signature: String)] = []
+            var index = bounds.lowerBound
+            while index < bounds.upperBound {
+                guard characters[index] == "$" else {
+                    index += 1
+                    continue
+                }
+                var closing = index + 1
+                while closing < bounds.upperBound,
+                      !characters[closing].isNewline,
+                      characters[closing] != "$" {
+                    if characters[closing] == "\\" {
+                        closing = min(closing + 2, bounds.upperBound)
+                    } else {
+                        closing += 1
+                    }
+                }
+                guard closing < bounds.upperBound, characters[closing] == "$" else {
+                    index += 1
+                    continue
+                }
+                let bodyRange = (index + 1)..<closing
+                if let first = bodyRange.first.map({ characters[$0] }),
+                   let lastIndex = bodyRange.last,
+                   !first.isWhitespace,
+                   !characters[lastIndex].isWhitespace {
+                    let candidateRange = index..<(closing + 1)
+                    result.append(
+                        (candidateRange, String(characters[candidateRange]))
+                    )
+                    index = closing + 1
+                } else {
+                    index += 1
+                }
+            }
+            return result
+        }
+    }
 
     init(
         markerPrefix: String = Self.defaultMarkerPrefix,
@@ -48,6 +289,7 @@ struct MarkdownMathScanner {
 
     func scan(_ source: String) throws -> Result {
         let characters = Array(source)
+        let eligibility = SourceEligibility(source: source, characters: characters)
         let markerStem = markerPrefix + markerNonce
         let reservedMarkerIndices = Self.reservedMarkerIndices(
             in: characters,
@@ -61,8 +303,7 @@ struct MarkdownMathScanner {
         var column = 1
         var lineStart = 0
         var logicalLineStart = 0
-        var fence: (character: Character, length: Int)?
-        var referenceContinuation: ReferenceContinuation?
+        var logicalQuoteDepth = 0
 
         func marker() -> String {
             while reservedMarkerIndices.contains(nextMarkerIndex) {
@@ -82,197 +323,11 @@ struct MarkdownMathScanner {
                     end: contentEnd
                 )
                 logicalLineStart = context.contentStart
-                if let activeFence = fence {
-                    if Self.isFenceClosingLine(
-                        characters,
-                        start: context.contentStart,
-                        end: contentEnd,
-                        fence: activeFence
-                    ) {
-                        fence = nil
-                    }
-                    output += String(characters[index..<end])
-                    Self.advance(
-                        characters,
-                        from: index,
-                        to: end,
-                        line: &line,
-                        column: &column,
-                        lineStart: &lineStart
-                    )
-                    index = end
-                    continue
-                }
-
-                if context.isIndentedCode {
-                    output += String(characters[index..<end])
-                    Self.advance(
-                        characters,
-                        from: index,
-                        to: end,
-                        line: &line,
-                        column: &column,
-                        lineStart: &lineStart
-                    )
-                    index = end
-                    continue
-                }
-
-                if let openingFence = Self.fenceOpening(
-                    characters,
-                    start: context.contentStart,
-                    end: contentEnd
-                ) {
-                    fence = openingFence
-                    output += String(characters[index..<end])
-                    Self.advance(
-                        characters,
-                        from: index,
-                        to: end,
-                        line: &line,
-                        column: &column,
-                        lineStart: &lineStart
-                    )
-                    index = end
-                    continue
-                }
-
-                if let activeReferenceContinuation = referenceContinuation {
-                    if context.isBlank {
-                        referenceContinuation = nil
-                    } else if activeReferenceContinuation == .destination {
-                        referenceContinuation = Self.continuationAfterDestination(
-                            characters,
-                            start: context.contentStart,
-                            end: contentEnd
-                        )
-                        output += String(characters[index..<end])
-                        Self.advance(
-                            characters,
-                            from: index,
-                            to: end,
-                            line: &line,
-                            column: &column,
-                            lineStart: &lineStart
-                        )
-                        index = end
-                        continue
-                    } else if activeReferenceContinuation == .optionalTitle {
-                        if let titleLine = Self.optionalTitleLine(
-                            characters,
-                            start: context.contentStart,
-                            end: contentEnd
-                        ) {
-                            referenceContinuation = titleLine.continuation
-                            output += String(characters[index..<end])
-                            Self.advance(
-                                characters,
-                                from: index,
-                                to: end,
-                                line: &line,
-                                column: &column,
-                                lineStart: &lineStart
-                            )
-                            index = end
-                            continue
-                        }
-                        referenceContinuation = nil
-                    } else if case .title(let closing) = activeReferenceContinuation {
-                        referenceContinuation = Self.containsUnescaped(
-                            closing,
-                            in: characters,
-                            start: context.contentStart,
-                            end: contentEnd
-                        ) ? nil : activeReferenceContinuation
-                        output += String(characters[index..<end])
-                        Self.advance(
-                            characters,
-                            from: index,
-                            to: end,
-                            line: &line,
-                            column: &column,
-                            lineStart: &lineStart
-                        )
-                        index = end
-                        continue
-                    }
-                }
-
-                if let referenceDefinition = Self.referenceDefinition(
-                    characters,
-                    start: context.contentStart,
-                    end: contentEnd
-                ) {
-                    referenceContinuation = referenceDefinition.continuation
-                    output += String(characters[index..<end])
-                    Self.advance(
-                        characters,
-                        from: index,
-                        to: end,
-                        line: &line,
-                        column: &column,
-                        lineStart: &lineStart
-                    )
-                    index = end
-                    continue
-                }
+                logicalQuoteDepth = context.quoteDepth
             }
 
             if characters[index] == "\\", index + 1 < characters.count {
                 let end = index + 2
-                output += String(characters[index..<end])
-                Self.advance(
-                    characters,
-                    from: index,
-                    to: end,
-                    line: &line,
-                    column: &column,
-                    lineStart: &lineStart
-                )
-                index = end
-                continue
-            }
-
-            if characters[index] == "`" {
-                let runLength = Self.runLength(of: "`", in: characters, from: index)
-                if let end = Self.inlineCodeEnd(
-                    in: characters,
-                    after: index + runLength,
-                    delimiterLength: runLength
-                ) {
-                    output += String(characters[index..<end])
-                    Self.advance(
-                        characters,
-                        from: index,
-                        to: end,
-                        line: &line,
-                        column: &column,
-                        lineStart: &lineStart
-                    )
-                    index = end
-                    continue
-                }
-            }
-
-            if characters[index] == "<",
-               let end = Self.angleRegionEnd(in: characters, from: index) {
-                output += String(characters[index..<end])
-                Self.advance(
-                    characters,
-                    from: index,
-                    to: end,
-                    line: &line,
-                    column: &column,
-                    lineStart: &lineStart
-                )
-                index = end
-                continue
-            }
-
-            if characters[index] == "]",
-               index + 1 < characters.count,
-               characters[index + 1] == "(",
-               let end = Self.linkDestinationEnd(in: characters, from: index + 1) {
                 output += String(characters[index..<end])
                 Self.advance(
                     characters,
@@ -294,8 +349,44 @@ struct MarkdownMathScanner {
                 if let display = Self.displayFormula(
                     in: characters,
                     opening: index,
-                    lineStart: logicalLineStart
+                    lineStart: logicalLineStart,
+                    openingQuoteDepth: logicalQuoteDepth
                 ) {
+                    let sourceRange = index..<display.replacementEnd
+                    if !eligibility.allowsDisplay(sourceRange) {
+                        if eligibility.isParagraph(sourceRange) {
+                            let end = min(index + 2, characters.count)
+                            output += String(characters[index..<end])
+                            Self.advance(
+                                characters,
+                                from: index,
+                                to: end,
+                                line: &line,
+                                column: &column,
+                                lineStart: &lineStart
+                            )
+                            index = end
+                            continue
+                        }
+                        if eligibility.containsVisibleText(at: index) {
+                            throw ScanError.misplacedDisplayFormula(
+                                line: openingLine,
+                                column: openingColumn
+                            )
+                        }
+                        let end = min(index + 2, characters.count)
+                        output += String(characters[index..<end])
+                        Self.advance(
+                            characters,
+                            from: index,
+                            to: end,
+                            line: &line,
+                            column: &column,
+                            lineStart: &lineStart
+                        )
+                        index = end
+                        continue
+                    }
                     if display.mixedWithText {
                         throw ScanError.misplacedDisplayFormula(
                             line: openingLine,
@@ -327,6 +418,18 @@ struct MarkdownMathScanner {
                     continue
                 }
 
+                if eligibility.containsVisibleText(at: index),
+                   let closing = Self.laterDoubleDollarClosing(
+                       in: characters,
+                       after: index + 2
+                   ),
+                   eligibility.containsVisibleText(at: closing) {
+                    throw ScanError.misplacedDisplayFormula(
+                        line: openingLine,
+                        column: openingColumn
+                    )
+                }
+
                 let end = min(index + 2, characters.count)
                 output += String(characters[index..<end])
                 Self.advance(
@@ -348,7 +451,8 @@ struct MarkdownMathScanner {
                 if let first = body.first,
                    let last = body.last,
                    !first.isWhitespace,
-                   !last.isWhitespace {
+                   !last.isWhitespace,
+                   eligibility.containsInline(index..<(closing + 1)) {
                     let placeholder = marker()
                     output += placeholder
                     tokens.append(
@@ -400,7 +504,8 @@ struct MarkdownMathScanner {
     private static func displayFormula(
         in characters: [Character],
         opening: Int,
-        lineStart: Int
+        lineStart: Int,
+        openingQuoteDepth: Int
     ) -> DisplayMatch? {
         let openingLineEnd = contentEndBeforeNewline(
             in: characters,
@@ -449,6 +554,9 @@ struct MarkdownMathScanner {
                 start: search,
                 end: candidateLineEnd
             )
+            guard context.quoteDepth == openingQuoteDepth else {
+                return nil
+            }
             let contentStart = context.contentStart
             if contentStart + 2 <= candidateLineEnd,
                characters[contentStart] == "$",
@@ -517,30 +625,27 @@ struct MarkdownMathScanner {
         return nil
     }
 
-    private static func fenceOpening(
-        _ characters: [Character],
-        start: Int,
-        end: Int
-    ) -> (character: Character, length: Int)? {
+    private static func laterDoubleDollarClosing(
+        in characters: [Character],
+        after start: Int
+    ) -> Int? {
         var index = start
-        var indentation = 0
-        while index < end, characters[index] == " ", indentation < 4 {
+        while index + 1 < characters.count {
+            if characters[index] == "\\" {
+                index += 2
+                continue
+            }
+            if characters[index] == "$", characters[index + 1] == "$" {
+                return index
+            }
             index += 1
-            indentation += 1
         }
-        guard indentation <= 3, index < end else { return nil }
-        let character = characters[index]
-        guard character == "`" || character == "~" else { return nil }
-        let length = runLength(of: character, in: characters, from: index)
-        guard length >= 3 else { return nil }
-        return (character, length)
+        return nil
     }
 
     private struct LineContext {
         let contentStart: Int
-        let indentation: Int
-        let isIndentedCode: Bool
-        let isBlank: Bool
+        let quoteDepth: Int
     }
 
     private static func lineContext(
@@ -550,6 +655,7 @@ struct MarkdownMathScanner {
     ) -> LineContext {
         var index = start
         var indentation = 0
+        var quoteDepth = 0
 
         func consumeIndentation() {
             indentation = 0
@@ -570,14 +676,13 @@ struct MarkdownMathScanner {
         if indentation >= 4 {
             return LineContext(
                 contentStart: index,
-                indentation: indentation,
-                isIndentedCode: true,
-                isBlank: index == end
+                quoteDepth: quoteDepth
             )
         }
 
         while index < end {
             if characters[index] == ">" {
+                quoteDepth += 1
                 index += 1
                 if index < end, characters[index] == " " || characters[index] == "\t" {
                     index += 1
@@ -586,9 +691,7 @@ struct MarkdownMathScanner {
                 if indentation >= 4 {
                     return LineContext(
                         contentStart: index,
-                        indentation: indentation,
-                        isIndentedCode: true,
-                        isBlank: index == end
+                        quoteDepth: quoteDepth
                     )
                 }
                 continue
@@ -608,9 +711,7 @@ struct MarkdownMathScanner {
 
         return LineContext(
             contentStart: index,
-            indentation: indentation,
-            isIndentedCode: false,
-            isBlank: characters[index..<end].allSatisfy(\.isWhitespace)
+            quoteDepth: quoteDepth
         )
     }
 
@@ -642,243 +743,6 @@ struct MarkdownMathScanner {
         return after
     }
 
-    private static func referenceDefinition(
-        _ characters: [Character],
-        start: Int,
-        end: Int
-    ) -> ReferenceDefinitionMatch? {
-        var index = start
-        var indentation = 0
-        while index < end, characters[index] == " ", indentation < 4 {
-            index += 1
-            indentation += 1
-        }
-        guard indentation <= 3, index < end, characters[index] == "[" else {
-            return nil
-        }
-
-        index += 1
-        let labelStart = index
-        while index < end {
-            if characters[index] == "\\" {
-                index = min(index + 2, end)
-                continue
-            }
-            if characters[index] == "]" {
-                guard index > labelStart else { return nil }
-                let colon = index + 1
-                guard colon < end, characters[colon] == ":" else { return nil }
-                let contentStart = colon + 1
-                if characters[contentStart..<end].allSatisfy(\.isWhitespace) {
-                    return ReferenceDefinitionMatch(continuation: .destination)
-                }
-                return ReferenceDefinitionMatch(
-                    continuation: continuationAfterDestination(
-                        characters,
-                        start: contentStart,
-                        end: end
-                    )
-                )
-            }
-            index += 1
-        }
-        return nil
-    }
-
-    private static func continuationAfterDestination(
-        _ characters: [Character],
-        start: Int,
-        end: Int
-    ) -> ReferenceContinuation? {
-        var index = start
-        while index < end, characters[index].isWhitespace {
-            index += 1
-        }
-        guard index < end else { return .destination }
-
-        if characters[index] == "<" {
-            index += 1
-            while index < end {
-                if characters[index] == "\\" {
-                    index = min(index + 2, end)
-                    continue
-                }
-                if characters[index] == ">" {
-                    index += 1
-                    break
-                }
-                index += 1
-            }
-        } else {
-            while index < end, !characters[index].isWhitespace {
-                index += 1
-            }
-        }
-
-        while index < end, characters[index].isWhitespace {
-            index += 1
-        }
-        guard index < end else { return .optionalTitle }
-        return titleContinuation(characters, opening: index, end: end)
-    }
-
-    private static func optionalTitleLine(
-        _ characters: [Character],
-        start: Int,
-        end: Int
-    ) -> ReferenceDefinitionMatch? {
-        var index = start
-        while index < end, characters[index].isWhitespace {
-            index += 1
-        }
-        guard index < end else { return nil }
-        let character = characters[index]
-        guard character == "\"" || character == "'" || character == "(" else {
-            return nil
-        }
-        return ReferenceDefinitionMatch(
-            continuation: titleContinuation(characters, opening: index, end: end)
-        )
-    }
-
-    private static func titleContinuation(
-        _ characters: [Character],
-        opening: Int,
-        end: Int
-    ) -> ReferenceContinuation? {
-        let closing: Character
-        switch characters[opening] {
-        case "\"": closing = "\""
-        case "'": closing = "'"
-        case "(": closing = ")"
-        default: return nil
-        }
-        return containsUnescaped(
-            closing,
-            in: characters,
-            start: opening + 1,
-            end: end
-        ) ? nil : .title(closing: closing)
-    }
-
-    private static func containsUnescaped(
-        _ character: Character,
-        in characters: [Character],
-        start: Int,
-        end: Int
-    ) -> Bool {
-        var index = start
-        while index < end {
-            if characters[index] == "\\" {
-                index = min(index + 2, end)
-                continue
-            }
-            if characters[index] == character {
-                return true
-            }
-            index += 1
-        }
-        return false
-    }
-
-    private static func isFenceClosingLine(
-        _ characters: [Character],
-        start: Int,
-        end: Int,
-        fence: (character: Character, length: Int)
-    ) -> Bool {
-        var index = start
-        var indentation = 0
-        while index < end, characters[index] == " ", indentation < 4 {
-            index += 1
-            indentation += 1
-        }
-        guard indentation <= 3, index < end else { return false }
-        let length = runLength(of: fence.character, in: characters, from: index)
-        guard length >= fence.length else { return false }
-        return characters[(index + length)..<end].allSatisfy(\.isWhitespace)
-    }
-
-    private static func inlineCodeEnd(
-        in characters: [Character],
-        after start: Int,
-        delimiterLength: Int
-    ) -> Int? {
-        var index = start
-        while index < characters.count {
-            if characters[index] == "`" {
-                let length = runLength(of: "`", in: characters, from: index)
-                if length == delimiterLength {
-                    return index + length
-                }
-                index += length
-                continue
-            }
-            index += 1
-        }
-        return nil
-    }
-
-    private static func angleRegionEnd(
-        in characters: [Character],
-        from start: Int
-    ) -> Int? {
-        var index = start + 1
-        while index < characters.count {
-            if characters[index] == ">" {
-                return index + 1
-            }
-            if characters[index].isNewline {
-                return nil
-            }
-            index += 1
-        }
-        return nil
-    }
-
-    private static func linkDestinationEnd(
-        in characters: [Character],
-        from openingParenthesis: Int
-    ) -> Int? {
-        var depth = 0
-        var index = openingParenthesis
-        var quote: Character?
-        while index < characters.count {
-            if characters[index] == "\\" {
-                index = min(index + 2, characters.count)
-                continue
-            }
-            if let activeQuote = quote {
-                if characters[index] == activeQuote {
-                    quote = nil
-                }
-            } else if (characters[index] == "\"" || characters[index] == "'"),
-                      index > openingParenthesis,
-                      characters[index - 1].isWhitespace {
-                quote = characters[index]
-            } else if characters[index] == "(" {
-                depth += 1
-            } else if characters[index] == ")" {
-                depth -= 1
-                if depth == 0 {
-                    return index + 1
-                }
-            } else if characters[index].isNewline {
-                var next = index + 1
-                while next < characters.count,
-                      characters[next].isWhitespace,
-                      !characters[next].isNewline {
-                    next += 1
-                }
-                if next < characters.count, characters[next].isNewline {
-                    return nil
-                }
-            }
-            index += 1
-        }
-        return nil
-    }
-
     private static func reservedMarkerIndices(
         in characters: [Character],
         markerStem: [Character]
@@ -906,18 +770,6 @@ struct MarkdownMathScanner {
             index += 1
         }
         return reserved
-    }
-
-    private static func runLength(
-        of character: Character,
-        in characters: [Character],
-        from start: Int
-    ) -> Int {
-        var end = start
-        while end < characters.count, characters[end] == character {
-            end += 1
-        }
-        return end - start
     }
 
     private static func lineEnd(in characters: [Character], from start: Int) -> Int {
