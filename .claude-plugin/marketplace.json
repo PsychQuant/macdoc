@@ -9,14 +9,14 @@
   "plugins": [
     {
       "name": "che-word-mcp",
-      "version": "3.23.0",
+      "version": "4.0.0",
       "description": "Word (.docx) MCP server — Swift-native OOXML 讀寫，245 tools（段落/表格/樣式/註腳/追蹤修訂/方程式/內容控制/欄位/腳本管線 export_script·get_script_coverage·execute_script 等），無需安裝 Word。Built on ooxml-swift v2.0.1。release history 見 CHANGELOG。",
       "author": {
         "name": "Che Cheng"
       },
       "source": "./plugins/che-word-mcp",
       "category": "productivity",
-      "binary_version": "3.23.0"
+      "binary_version": "4.0.0"
     },
     {
       "name": "macdoc",

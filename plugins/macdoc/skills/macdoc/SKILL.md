@@ -116,6 +116,8 @@ macdoc word reverse form.docx --to-mdocx form.mdocx.swift [--coverage] [--force]
 macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against form.docx] [--force]
 ```
 
+> ⚠️ **以下兩項需要 macdoc CLI **0.7.0 以上**，而 0.7.0 目前尚未發布**（最新 release 是 0.6.0）。裝的是 0.6.0 的話：輸出檔已存在時會被無條件覆寫，且驗證失敗會在原檔已被破壞之後才回報。追蹤見 PsychQuant/che-word-mcp#180 / #181。
+
 **輸出檔已存在時預設拒絕**，要 `--force`。**驗證失敗什麼都不寫出**——輸出路徑保持原狀，也不會印「已寫入」（重建結果先落在同目錄的暫存路徑，驗過才搬進位）。這兩個保證都由 CLI 與 MCP 共用的入口提供，兩面行為一致。
 
 | 選項 | 屬於 | 說明 |
