@@ -24,6 +24,7 @@ description: |
 |---|---|
 | ✅ **保證** | byte-equal 重播。驗證通過 = 重建出的每個 XML part 與參考檔逐位元組相同 |
 | ✅ **保證** | 具名 slot 填寫。指定的段落換成新內容，其餘部分逐字不動 |
+| ✅ **保證** | 失敗不破壞。驗證沒過就什麼都不寫出——輸出路徑上原本有檔就原封不動，原本沒檔就不會憑空出現 |
 | ❌ **不保證** | 產物可讀。**任何輸入都不保證**產出人類可讀、可手改的 Swift |
 
 第三點是這個工具最容易被誤解的地方，下面「判讀 coverage」會講為什麼。
@@ -74,10 +75,12 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 ### 4. Render — 把腳本放回 docx
 
 ```bash
-macdoc word render form.mdocx.swift --to-docx rebuilt.docx
+macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--force]
 ```
 
-MCP：`execute_script(script_path, output_path)`
+MCP：`execute_script(script_path, output_path, overwrite?)`
+
+**輸出路徑已有檔案時預設拒絕。** CLI 要 `--force`，MCP 要 `overwrite: true`。重跑同一個輸出路徑（改完 slot 值再 render 一次就是）一定會遇到——不是錯誤，是要你確認。
 
 > **命名注意**：同一個操作在兩個面的名字不同——CLI 是 **`render`**，MCP 是 **`execute_script`**。MCP 那個名字是已發布 tool schema 的一部分，CLI 的名字由 `mdocx-grammar` spec 固定，所以兩邊都不動。底層是同一個實作。
 
@@ -90,6 +93,10 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx --verify-against form
 MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 驗證通過 → CLI exit 0 並印 `byte-equal 驗證通過`；不符 → exit 非零並列出不符的 part。
+
+**驗證失敗什麼都不寫出。** 重建結果先寫到輸出檔同目錄的暫存路徑，驗過才搬進位——所以不符時輸出路徑保持原狀，CLI 也不會印「已寫入」。驗證不是對一份已經發布的文件做的事後檢查。
+
+**MCP 這邊，驗證失敗是 tool error，不是回應欄位。** `verified: false` 不會出現在成功回應裡；不符時整個 tool call 失敗，錯誤文字列出不符的 part。所以不要去 inspect 回應裡的 verdict 來判斷失敗——失敗根本不會給你回應。
 
 **沒給參考檔就不會驗，也不會有任何驗證輸出。** MCP 這邊對應的是：回應**不會有** `verified` / `broken_parts` 欄位。只檢查 `broken_parts` 是否為空的 client 會把「沒驗」讀成「驗過且乾淨」——要判斷驗證結果，先確認 `verified` 欄位存在。
 
@@ -139,10 +146,11 @@ macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift \
   --slot 申請人=<paraId> --force
 
 # 3. 改腳本裡的 slot 參數值，然後重建
-macdoc word render 範本.mdocx.swift --to-docx 已填.docx
+#    （改一次 slot 值就重跑一次，第二次起輸出檔已存在 → 要 --force）
+macdoc word render 範本.mdocx.swift --to-docx 已填.docx --force
 
 # 4. 驗證「除了填的地方，其餘與範本逐位元組相同」
-macdoc word render 範本.mdocx.swift --to-docx 重建.docx --verify-against 範本.docx
+macdoc word render 範本.mdocx.swift --to-docx 重建.docx --verify-against 範本.docx --force
 ```
 
 第 4 步是這個工作流的核心價值：**證明**你只動了該動的地方。即使腳本本身不可讀（raw channel），這個保證依然成立。
