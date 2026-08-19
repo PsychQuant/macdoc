@@ -340,7 +340,7 @@ repo 名負責標示語言，module 名不必再說一次；在 Swift 檔案裡�
 
 | 類別 | 例 | 消費者 | 何時改 |
 |------|-----|--------|--------|
-| Converter，只有 macdoc 用 | `WordToMDSwift` | 少數 | 該套件本來就要發 breaking release 時順手 |
+| Converter，只有 macdoc 用 | `WordToMDSwift` → `WordToMD`（**已完成**，word-to-md-swift 1.0.0） | 少數 | 該套件本來就要發 breaking release 時順手 |
 | 廣用函式庫 | `OOXMLSwift` | 25+ 套件跨 3 repo | **不改** —— 為了美觀發一輪全圖 major bump 不划算 |
 
 判準是「這次改名有沒有搭上一班本來就要開的車」。沒有就別發車。
@@ -430,7 +430,7 @@ swift build
 - `Sources/CommonConverterSwift/Protocols/StreamingOutput.swift` - 串流輸出 protocol
 
 ### word-to-md-swift
-- `Sources/WordToMDSwift/WordConverter.swift` - Word → Markdown 轉換器
+- `Sources/WordToMD/WordConverter.swift` - Word → Markdown 轉換器（module 於 1.0.0 由 `WordToMDSwift` 更名）
 
 ### ooxml-swift
 - `Sources/OOXMLSwift/IO/DocxReader.swift` - Word 文件讀取
