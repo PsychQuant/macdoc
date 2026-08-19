@@ -12,5 +12,8 @@
       }
     ]
   },
-  "includeGitInstructions": false
+  "includeGitInstructions": false,
+  "worktree": {
+    "bgIsolation": "none"
+  }
 }

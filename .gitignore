@@ -147,3 +147,6 @@ openspec/.vector-search.db*
 # Plugin-scoped binary cache (#117) — downloaded MCP binaries + version sidecars
 plugins/.bin-cache/
 plugins/*/.bin-cache/
+
+# IDD parallel worktree isolation (idd-worktree.sh #167) — not tracked in main tree
+.claude/worktrees/
