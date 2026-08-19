@@ -116,6 +116,8 @@ macdoc word reverse form.docx --to-mdocx form.mdocx.swift [--coverage] [--force]
 macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against form.docx] [--force]
 ```
 
+**輸出檔已存在時預設拒絕**，要 `--force`。**驗證失敗什麼都不寫出**——輸出路徑保持原狀，也不會印「已寫入」（重建結果先落在同目錄的暫存路徑，驗過才搬進位）。這兩個保證都由 CLI 與 MCP 共用的入口提供，兩面行為一致。
+
 | 選項 | 屬於 | 說明 |
 |------|------|------|
 | `--coverage` | reverse | 印 per-part 的 DSL/raw 覆蓋率報告 |
@@ -123,7 +125,7 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 | `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）|
 | `--from-oplog` | reverse | 強制用 oplog sidecar |
 | `--verify-against <docx>` | render | 對照參考檔做 byte-equal 驗證；**不給就不驗** |
-| `--force` | 兩者 | 覆寫既有輸出 |
+| `--force` | 兩者 | 覆寫既有輸出（不給就拒絕，且不動既有檔案）|
 
 ### 這條迴路保證什麼、不保證什麼
 
