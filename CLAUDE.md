@@ -318,6 +318,33 @@ case .paragraph: // ...
 }
 ```
 
+### Module Naming — repo 帶 `-swift`，module 不帶
+
+**新套件的 target / product / `Sources/` 目錄名一律不加 `Swift` 後綴。** repo 叫
+`foo-to-bar-swift`，module 就叫 `FooToBar`。
+
+這是 Swift 生態系的慣例，不是本 repo 的偏好 —— Apple 自己的套件就是這個形狀：
+
+| Repo | Module |
+|------|--------|
+| `swift-markdown` | `Markdown` |
+| `swift-argument-parser` | `ArgumentParser` |
+| `swift-async-algorithms` | `AsyncAlgorithms` |
+
+repo 名負責標示語言，module 名不必再說一次；在 Swift 檔案裡寫 `import OOXMLSwift`
+是把「Swift」講兩遍。本 repo 的 29 個 target 已有 20 個是這個形狀（`HTMLToMD`、
+`PDFToDOCX`、`NoteToPDF`、`BibAPAToHTML`…），所以這是把既有多數寫下來，不是新規定。
+
+**既有的 9 個帶後綴者不做大掃除。** 改 module 名是對每個 consumer 的 breaking change
+（所有 `import` 都要跟著改），成本與消費者數量成正比：
+
+| 類別 | 例 | 消費者 | 何時改 |
+|------|-----|--------|--------|
+| Converter，只有 macdoc 用 | `WordToMDSwift` | 少數 | 該套件本來就要發 breaking release 時順手 |
+| 廣用函式庫 | `OOXMLSwift` | 25+ 套件跨 3 repo | **不改** —— 為了美觀發一輪全圖 major bump 不划算 |
+
+判準是「這次改名有沒有搭上一班本來就要開的車」。沒有就別發車。
+
 ### Protocol-Based Extensibility
 - `DocumentConverter` - 文件轉換協議
 - `ImageClassifier` - 圖片分類協議
