@@ -4,7 +4,7 @@
 
 Microsoft Word (.docx) MCP plugin. Wraps the [CheWordMCP](https://github.com/PsychQuant/che-word-mcp) Swift binary via auto-download wrapper. **Swift-native OOXML manipulation** — reads and writes .docx without requiring Microsoft Word installation. 245 tools（binary v4.0.0 `tools/list` 實測）cover the full Office.js OOXML Roadmap P0 set ([#43](https://github.com/PsychQuant/che-word-mcp/issues/43) closed 100%).
 
-Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift) v3.0.1.
+Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift). **版本以 binary repo 的 `Package.swift` 為準** —— 這裡不寫死版號，因為它在每次上游發布後就過期，本檔已為此改過三次。
 
 ## Components
 
@@ -67,7 +67,7 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 
 - Binary repo: [`PsychQuant/che-word-mcp`](https://github.com/PsychQuant/che-word-mcp)
 - Binary name: `CheWordMCP`
-- Underlying lib: [`PsychQuant/ooxml-swift`](https://github.com/PsychQuant/ooxml-swift) v3.0.1
+- Underlying lib: [`PsychQuant/ooxml-swift`](https://github.com/PsychQuant/ooxml-swift)（版本見 binary repo 的 `Package.swift`）
 - Release asset naming: asset filename must contain `CheWordMCP`
 
 ### Plugin vs Binary Version Sync
