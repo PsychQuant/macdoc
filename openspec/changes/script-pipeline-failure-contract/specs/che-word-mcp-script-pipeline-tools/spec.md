@@ -8,7 +8,7 @@ When the caller passes a reference docx path, the tool SHALL verify Stage-B byte
 
 The tool SHALL accept a boolean overwrite parameter that defaults to refusing. When a file already exists at the output path and the caller has not set that parameter, the tool SHALL fail, name the existing path, and leave that file unmodified. The tool SHALL NOT carry its own overwrite check; the parameter SHALL be passed through to the shared entry point.
 
-The response SHALL omit the written-path key when the shared entry point published nothing, in the same manner it already omits the verdict keys when no reference was supplied.
+The response SHALL NOT carry a JSON null for the written path. Note that this is a defensive requirement, not an observable one: a nil written path is produced only alongside a failing verdict, and a failing verdict raises before any response body is built, so no successful response can reach the nil case. The guarantee that nothing is falsely claimed as written is therefore enforced at the shared entry point's result type, where it IS observable and tested, rather than at this layer. A future maintainer MUST NOT weaken the raise-on-failing-verdict behavior in order to make this branch reachable — doing so would reintroduce the defect this capability exists to prevent.
 
 Script parse failures SHALL surface as MCP tool errors with the transcoder's location-bearing reason.
 
