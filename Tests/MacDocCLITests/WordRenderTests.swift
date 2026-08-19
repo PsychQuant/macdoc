@@ -233,6 +233,84 @@ final class WordRenderTests: XCTestCase {
         }
     }
 
+    // MARK: - Failed verification publishes nothing (change
+    // `script-pipeline-failure-contract`, task 4.2; che-word-mcp#181)
+
+    /// A failing verdict must leave a pre-existing output file untouched AND
+    /// must not announce a write. The old command wrote to the output path
+    /// first, printed "已寫入", and only then reported the failure — so the
+    /// operator was told a document had been written over one that was, in
+    /// fact, destroyed.
+    func testFailedVerificationLeavesExistingOutputUnmodifiedAndAnnouncesNoWrite() throws {
+        let dir = try makeTempDir()
+        let source = dir.appendingPathComponent("source.docx")
+        let other = dir.appendingPathComponent("other.docx")
+        try makeSyntheticDocx(at: source, text: "原始內容。")
+        try makeSyntheticDocx(at: other, text: "完全不同的內容。")
+        let script = dir.appendingPathComponent("source.mdocx.swift")
+        _ = try CLITestHelper.run(["word", "reverse", source.path, "--to-mdocx", script.path])
+
+        // A document already sitting at the output path.
+        let output = dir.appendingPathComponent("out.docx")
+        try makeSyntheticDocx(at: output, text: "先前就在輸出路徑上的文件。")
+        let before = try Data(contentsOf: output)
+
+        let result = try CLITestHelper.run(
+            ["word", "render", script.path,
+             "--to-docx", output.path,
+             "--verify-against", other.path,
+             "--force"])
+
+        XCTAssertNotEqual(result.exitCode, 0, "a mismatch must not exit 0")
+        XCTAssertEqual(try Data(contentsOf: output), before,
+                       "a failed verification must leave the existing file untouched")
+        XCTAssertFalse(result.stderr.contains("已寫入"),
+                       "no write may be announced when none happened: \(result.stderr)")
+    }
+
+    /// A failing verdict must not create a file where none existed.
+    func testFailedVerificationCreatesNoOutputFile() throws {
+        let dir = try makeTempDir()
+        let source = dir.appendingPathComponent("source.docx")
+        let other = dir.appendingPathComponent("other.docx")
+        try makeSyntheticDocx(at: source, text: "原始內容。")
+        try makeSyntheticDocx(at: other, text: "完全不同的內容。")
+        let script = dir.appendingPathComponent("source.mdocx.swift")
+        _ = try CLITestHelper.run(["word", "reverse", source.path, "--to-mdocx", script.path])
+        let output = dir.appendingPathComponent("out.docx")
+
+        let result = try CLITestHelper.run(
+            ["word", "render", script.path,
+             "--to-docx", output.path,
+             "--verify-against", other.path])
+
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path),
+                       "a failed verification must publish nothing")
+    }
+
+    /// The announced path is the path, not a debug rendering of an Optional.
+    /// `written` became optional in the shared entry point; interpolating it
+    /// directly still COMPILES and prints `Optional("…")`, so only a test on
+    /// the actual output catches the regression.
+    func testAnnouncedWritePathIsNotAnOptionalDescription() throws {
+        let dir = try makeTempDir()
+        let source = dir.appendingPathComponent("source.docx")
+        try makeSyntheticDocx(at: source)
+        let script = dir.appendingPathComponent("source.mdocx.swift")
+        _ = try CLITestHelper.run(["word", "reverse", source.path, "--to-mdocx", script.path])
+        let output = dir.appendingPathComponent("out.docx")
+
+        let result = try CLITestHelper.run(
+            ["word", "render", script.path, "--to-docx", output.path])
+
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertFalse(result.stderr.contains("Optional("),
+                       "the written path must be unwrapped: \(result.stderr)")
+        XCTAssertTrue(result.stderr.contains(output.path),
+                      "the announced path must be the output path: \(result.stderr)")
+    }
+
     /// Task 2.5 — the raw-channel case. A table-bearing real form reports
     /// 0.0% DSL coverage, so the byte-equal floor rests entirely on the raw
     /// channel. If raw replay ever regressed, this is what would catch it.

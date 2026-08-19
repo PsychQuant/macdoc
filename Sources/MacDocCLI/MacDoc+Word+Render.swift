@@ -43,35 +43,47 @@ extension MacDoc.Word {
             let inputURL = try validatedInputURL(input)
             let outputURL = URL(fileURLWithPath: toDocx)
 
-            guard !FileManager.default.fileExists(atPath: outputURL.path) || force else {
-                throw ValidationError("輸出檔案已存在: \(toDocx)（使用 --force 覆寫）")
-            }
-
-            // The shared entry point pins the reference BEFORE writing, so a
-            // missing reference is surfaced without a write side effect and
-            // `--to-docx` == `--verify-against` compares against pre-write
-            // bytes instead of this run's own output.
+            // No overwrite check here on purpose. The gate lives in the
+            // shared entry point, so the MCP face inherits it; a copy here
+            // would rebuild exactly the defect that left that face
+            // unprotected while this one had --force.
+            //
+            // The shared entry point also pins the reference BEFORE writing,
+            // and stages the rebuild beside the output so nothing is
+            // published until the verdict is known.
             let result: ScriptExecuteResult
             do {
                 result = try scriptPipelineExecute(
                     scriptPath: inputURL.path,
                     outputPath: outputURL.path,
-                    verifyAgainst: verifyAgainst)
+                    verifyAgainst: verifyAgainst,
+                    overwrite: force)
             } catch let error as TranscodeError {
                 throw ValidationError(Self.describe(error))
+            } catch ScriptPipelineError.outputExists(let path) {
+                // The library deliberately carries no advice about HOW to
+                // permit overwriting, because the answer differs per face.
+                // This is where the CLI's answer belongs.
+                throw ValidationError("輸出檔案已存在: \(path)（使用 --force 覆寫）")
             } catch let error as ScriptPipelineError {
                 throw ValidationError(error.errorDescription ?? "\(error)")
             }
 
-            FileHandle.standardError.write(Data("已寫入: \(result.written)\n".utf8))
-
-            guard let verified = result.verified else { return }
-            if verified {
-                FileHandle.standardError.write(Data("byte-equal 驗證通過\n".utf8))
-            } else {
+            // Verdict BEFORE the announcement. Announcing the write first and
+            // failing afterwards told the operator a document had been
+            // written — over one that had in fact just been destroyed.
+            if result.verified == false {
                 throw ValidationError(
-                    "byte-equal 驗證失敗，以下 part 與參考檔不符:\n"
+                    "byte-equal 驗證失敗，未寫出任何檔案。以下 part 與參考檔不符:\n"
                         + result.brokenParts.map { "  \($0)" }.joined(separator: "\n"))
+            }
+            if let written = result.written {
+                // Unwrapped: interpolating the optional directly still
+                // compiles and prints `Optional("…")` at the operator.
+                FileHandle.standardError.write(Data("已寫入: \(written)\n".utf8))
+            }
+            if result.verified == true {
+                FileHandle.standardError.write(Data("byte-equal 驗證通過\n".utf8))
             }
         }
 
