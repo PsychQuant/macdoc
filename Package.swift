@@ -50,7 +50,7 @@ let package = Package(
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
-                .product(name: "WordToMDSwift", package: "word-to-md-swift"),
+                .product(name: "WordToMD", package: "word-to-md-swift"),
                 .product(name: "PDFToMD", package: "PDFToMD"),
                 .product(name: "WordToHTML", package: "WordToHTML"),
                 .product(name: "HTMLToWord", package: "HTMLToWord"),
