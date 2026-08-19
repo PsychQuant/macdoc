@@ -21,7 +21,7 @@ extension MacDoc {
         static let configuration = CommandConfiguration(
             commandName: "word",
             abstract: "Word 文件工具（.mdocx 腳本轉換）",
-            subcommands: [Reverse.self]
+            subcommands: [Reverse.self, Render.self]
         )
     }
 }

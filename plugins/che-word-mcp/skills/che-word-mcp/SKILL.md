@@ -198,6 +198,32 @@ export_all_images(doc_id, output_dir)
 
 `compare_documents`, `compare_documents_markdown`, `export_text`, `export_markdown`
 
+### Script Pipeline
+
+`export_script`, `get_script_coverage`, `execute_script`
+
+把 docx 變成 `.mdocx.swift` 重建腳本、再放回 docx。三個工具都是 `macdoc` CLI 同一條 transcoder 的薄包裝，兩邊呼叫同一個實作。
+
+| Tool | 參數 | 回傳 |
+|------|------|------|
+| `export_script` | `source_path`, `output_path`, 選填 `slots: [{name, para_id}]` | JSON：`dsl_parts` / `form_gaps_empty` / `slot_count` / `output_path` |
+| `get_script_coverage` | `source_path` | JSON：每個 part 的 `channel`（`dsl`/`raw`）、`bytes`、`dslRatio`，加 aggregate |
+| `execute_script` | `script_path`, `output_path`, 選填 `verify_byte_equal_against` | JSON：`written`；**只有**傳了參考檔才有 `verified` / `broken_parts` |
+
+**CLI 對應**：`export_script` ↔ `macdoc word reverse`，`execute_script` ↔ **`macdoc word render`**。同一個操作在兩個面的名字不同——MCP 這邊的名字是已發布 tool schema 的一部分，CLI 那邊的名字由 `mdocx-grammar` spec 固定。
+
+**`verified` 缺席 ≠ 通過**：沒傳 `verify_byte_equal_against` 時回應**不會有** `verified` 與 `broken_parts` 欄位。只檢查 `broken_parts` 是否為空的 client 會把「沒驗」讀成「驗過且乾淨」——要判斷驗證結果，先確認 `verified` 這個欄位存在。
+
+`slots` 是 strict mode：指定失敗（paraId 不存在、名稱不合法、重複）直接報錯且不寫檔，不會靜默降級。
+
+#### 產物可讀嗎？先看 coverage
+
+腳本有兩條 channel：typed DSL（可讀）與 raw（整個 XML part 逐字塞進一行）。**DSL 升級是 per-part 全有全無**——文件含任一表格，整個 `word/document.xml` 就整份掉到 raw。
+
+實測真實官方表單（`REC-O-01`）：`0.0% DSL (0 / 190479 XML bytes across 16 parts)`，產出 24 行 / 212 KB，其中 document.xml 那行約 118 KB。**可完美重播，但不可讀、不可手改、無法有意義 diff。**
+
+所以先跑 `get_script_coverage` 再決定期待值。完整工作流見 macdoc plugin 的 `swiftify` skill。
+
 ## Tips
 
 1. **Track Changes is enforced by default.** `create_document` and `open_document` auto-enable track changes via `enforceTrackChangesIfNeeded`. Pass `track_changes: false` to `open_document` if you need to bypass enforcement (e.g., authoring tooling that controls revisions itself).

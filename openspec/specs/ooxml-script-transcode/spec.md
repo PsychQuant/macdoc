@@ -2,7 +2,11 @@
 
 ## Purpose
 
-TBD - created by archiving change 'word-aligned-state-sync'. Update Purpose after archive.
+The bidirectional codec between a `.docx` package and `.mdocx.swift` rebuild-script source, plus the execution of those scripts back into a package.
+
+Three concerns live here. **Export** lifts an existing document into a script: the raw part channel carries every XML part verbatim as a byte-equal floor, and the reverse extractor upgrades parts to typed DSL form only where a trial rebuild proves the upgrade byte-equal. **Import** parses a script back into an operation log. **Execution** replays that log onto an empty authoring document, writes the package, and — when the caller supplies a reference — compares the rebuilt part set for Stage-B byte equality.
+
+Every consumer of the script pipeline calls these entry points rather than reimplementing them. `macdoc word reverse` and `macdoc word render` on the CLI, and che-word-mcp's `export_script` / `get_script_coverage` / `execute_script` tools, are argument-parsing shells over this module; that shared implementation is what makes the two faces agree by construction rather than by convention.
 
 ## Requirements
 
