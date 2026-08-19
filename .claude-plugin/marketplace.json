@@ -27,7 +27,7 @@
       },
       "source": "./plugins/macdoc",
       "category": "productivity",
-      "binary_version": "0.5.0"
+      "binary_version": "0.6.0"
     },
     {
       "name": "che-pdf-mcp",
