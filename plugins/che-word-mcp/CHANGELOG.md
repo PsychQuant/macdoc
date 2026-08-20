@@ -9,6 +9,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+> **回填說明（2026-08-20）**：以下 4.0.x 條目是**事後從 commit 重建**的，不是當時寫下的。
+> 內容來自各次 bump 的 commit message（`ac9ea54` / `7ac1401` / `c30798f` / `b89790c` /
+> `7ffc050`），那些訊息本身寫得夠詳細，所以重建的是敘述、不是事實。
+>
+> **仍然缺的：3.21.0、3.21.1、3.22.0、3.23.0 四個版本沒有條目。** 那四次 bump 只留下
+> 一行 commit subject（marketplace sync / script-pipeline tools / binary+shell bump），
+> 資訊量不足以寫出對得起「紀錄」二字的條目。刻意留白並在此標明，勝過用 subject 擴寫成
+> 看起來完整、實際上是我推測的內容。要查那段請直接看
+> `git log -- plugins/che-word-mcp/`。
+
+## [4.0.5] - 2026-08-20
+
+### Changed
+
+- `binary_version` 4.0.2 → **4.0.3**（帶進 ooxml-swift 3.3.0）；shell 4.0.4 → 4.0.5。
+- README 修正兩處過期宣稱（見下方 Fixed）。
+- 本 CHANGELOG 回填 4.0.x 全線（見開頭回填說明）。
+
+### Fixed
+
+- **README「版本」段整段過期，且與自己矛盾**。相鄰兩行同時錯：`Plugin shell: v3.20.2`
+  （實際 4.0.4）與 `Binary: v3.20.0（CheWordMCP，242 tools）`（實際 4.0.2 / 245）。
+  後者還與本文第 3 行的「245 個工具」直接打架——使用者信哪個數字，取決於他從哪裡開始讀。
+
+  改法不是把數字換新，而是**移除寫死的版號**，改指向 `plugin.json` 的 `version` /
+  `binary_version`。理由與 4.0.3 移除 ooxml-swift 版號那次相同：每次 bump 都要記得回來
+  改的東西，遲早不會被改到——上面那兩行就是證據。
+
+  順帶記錄一個檢查缺口：plugin-update 的 README staleness 六信號抓到了 binary 那行
+  （靠工具數比對），但**沒抓到 shell 版號那行**，因為沒有任何信號在比那個字串。
+
+### 誠實邊界：binary 4.0.3 對現有工具表面沒有行為改變
+
+上游 ooxml-swift#106 修的是 **typed view**（`body.children`），不是位元組。本 server
+觸及該修法的唯一路徑是 `execute_script`，而它只回傳 `written` / `verified` /
+`broken_parts`，從不讀 `body.children`。所以這一版是乾淨的依賴前移，**不是**把某個修法
+送到使用者手上。價值在於下一個真正的修法不必同時扛一次未經測試的依賴跳版。
+
+## [4.0.4] - 2026-08-19
+
+### Changed
+
+- `binary_version` → **4.0.2**，帶進 ooxml-swift 3.2.0：cell inside borders 在 mutation
+  後存活，`tcBorders` 子元素依 schema sequence 輸出（PsychQuant/ooxml-swift#99）。
+
+Shell 之所以也跟著動到 4.0.4，是因為**只改 `binary_version` 不會觸發 `plugin update`**；
+不動 shell 版號，修正就停在一個沒人拉取的 release 裡。
+
+## [4.0.3] - 2026-08-19
+
+### Fixed
+
+- **CLAUDE.md 不再寫死 ooxml-swift 版號**。收尾的 doc-sync 掃描第三次抓到這行過期——它
+  點名一個上游版本，所以每次 ooxml-swift 發版都會讓它失效，再修一次只是預約第四次。改成
+  指向 binary repo 的 `Package.swift`，那才是真正的 source of truth。
+
+`binary_version` 維持 4.0.1（binary 未變）。
+
+## [4.0.2] - 2026-08-19
+
+### Changed
+
+- `binary_version` → **4.0.1**，帶進 ooxml-swift 3.1.0 的目錄保護修法
+  （PsychQuant/ooxml-swift#109）。
+
+Shell 到 4.0.2 而 binary 到 4.0.1：兩者刻意解耦，而這次必須分開動——binary 發版了但
+shell 本身沒有改動。不動 shell 版號，`plugin update` 就看不到新東西、wrapper 也不會
+重新檢查。
+
+## [4.0.1] - 2026-08-19
+
+### Fixed
+
+- CLAUDE.md 的更正在 shell 標成 4.0.0 之後才落地，已經更新過的人不會再拉到。
+
+`binary_version` 維持 4.0.0——binary 沒變，這兩個欄位刻意解耦。
+
+## [4.0.0] - 2026-08-19
+
+### Changed
+
+- 指向已簽章 + notarized 的 che-word-mcp **4.0.0** binary。沒有這一步，binary 存在但
+  沒有任何安裝器搆得到它，release 等於只做了一半。
+
+### Note
+
+同一次改動也在 macdoc 的兩份 skill 標註了相反方向的問題：那兩份文件描述了 overwrite gate
+與「失敗不破壞」，但**帶著這些行為的 macdoc CLI 當時尚未發布**（最新 tag 仍是 v0.6.0）。
+出貨的文件承諾多於出貨的二進位——這正是 #180 / #181 在講的缺陷本身。當時的處置是在文件裡
+明寫版本需求與「0.6.0 使用者實際會得到什麼」，而不是安靜放著。
+
 ## [3.20.2] - 2026-07-02
 
 ### Fixed

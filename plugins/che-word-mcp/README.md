@@ -398,8 +398,11 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 
 ## 版本
 
-- **Plugin shell**: v3.20.2
-- **Binary**: v3.20.0（`CheWordMCP`，242 tools）
+- **Plugin shell / Binary 版本**：見 `.claude-plugin/plugin.json` 的 `version` 與
+  `binary_version`。**這裡不再寫死版號** —— 寫死的那兩行曾同時過期（shell 停在 3.20.2、
+  binary 停在 3.20.0 且工具數寫 242 而非 245），而且與本文開頭的「245 個工具」互相矛盾。
+  每次 bump 都要記得回來改的東西，遲早不會被改到。
+- **工具數**：245（`tools/list` 實測）
 - **GitHub**: https://github.com/PsychQuant/che-word-mcp
 - **完整 CHANGELOG**: https://github.com/PsychQuant/che-word-mcp/blob/main/CHANGELOG.md
 
