@@ -19,6 +19,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.7] - 2026-08-20
+
+### Changed
+
+- `binary_version` 4.0.4 → **4.0.5**；shell 4.0.6 → 4.0.7。
+
+- **五個文件保護工具改為誠實失敗**（binary #172）。`protect_document` /
+  `unprotect_document` / `set_document_password` / `remove_document_password` /
+  `restrict_editing_region` 過去都回報成功卻什麼都沒寫；現在會失敗，並在訊息中指名缺少的
+  OOXML。
+
+  **這是刻意讓功能「變得不可用」**，因為它本來就不可用——差別只在使用者是否被告知。一位
+  在寄出前把文件設成唯讀保護的人，過去拿到的是一份未受保護的文件**外加一句成功訊息**；
+  他會從收件人口中發現。錯誤讓他多繞一步，假的成功讓他失去他正想保護的東西。
+
+  `set_document_password` 尤其值得提：它過去把**密碼長度**回傳出來，讀起來像密碼已被接收
+  並套用。
+
+### 驗證
+
+對**下載回來的 release binary** 實測：`protect_document` 與 `set_document_password`
+皆回 `isError: true`，訊息分別指名 `<w:documentProtection …/>` 與「整個 .docx 容器的
+OLE Compound Document 加密（非 OOXML part）」。sha256 相符、Gatekeeper 通過、tag 指向的
+commit 與推送的 HEAD 一致。
+
 ## [4.0.6] - 2026-08-20
 
 ### Changed
