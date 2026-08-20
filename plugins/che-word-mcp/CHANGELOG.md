@@ -19,6 +19,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.6] - 2026-08-20
+
+### Changed
+
+- `binary_version` 4.0.3 → **4.0.4**；shell 4.0.5 → 4.0.6。
+
+  與 4.0.5 那次不同，**這一版對使用者有實際行為改變**：
+
+  - **新建文件不再以「追蹤修訂模式 ON」出貨**（binary #170）。`create_document`
+    產出的文件不再在 `settings.xml` 帶 `<w:trackChanges/>`，收件人在 Word 打開時
+    「追蹤修訂」按鈕不再是亮的。建檔後第一件事做 `disable_track_changes` 的習慣可以
+    停了。要追蹤修訂改為明確傳 `track_changes: true`。
+  - **四個工具不再截斷沒人要求截斷的文字**（binary #178）。`get_paragraphs` /
+    `list_footnotes` / `list_endnotes` 預設回傳完整文字，且**不再對沒被截斷的內容
+    附加省略號**——內容只有 `Hi` 的段落不會再印成 `Hi...`。`list_all_formatted_text`
+    的 60 字上限一併移除。四者都接受 `summarize`。
+  - **欄間距不再被改寫**（binary 帶 ooxml-swift 3.4.0，#176）。A4 表單只做
+    `update_cell` / `replace_text` 這類非版面編輯後存檔，`<w:cols w:space>` 保持原值。
+
+### 驗證
+
+對**下載回來的 release binary** 實測（非本機建置）：`create_document` 回報
+`Track changes disabled`、存出的 `settings.xml` 無 `<w:trackChanges/>`、
+`get_paragraphs` 對兩字段落輸出 `[0] (Normal) Hi` 而非 `Hi...`。sha256 相符、
+Developer ID 簽章與 notarization 通過、tag 指向的 commit 與推送的 HEAD 一致。
+
 ## [4.0.5] - 2026-08-20
 
 ### Changed
