@@ -14,7 +14,7 @@ Use the Swift-native PresentationML server for `.pptx` work without launching Po
 | Inspect one file | Direct, read-only | `source_path` |
 | Create or edit | Session | `doc_id` after `create_presentation` or `open_presentation` |
 
-All `slide_index`, row, and column indices are zero-based. Use `get_slide_shapes` to discover IDs. `update_shape_text`, `set_shape_position`, `set_shape_size`, and `set_shape_fill` accept only entries reported as `Shape`, not picture/table/group IDs; use image or table tools for those elements. Geometry parameters are raw EMU integers; centimetre helpers are not shipped yet.
+All `slide_index`, row, and column indices are zero-based. Use `get_slide_shapes` to discover IDs. `update_shape_text`, `set_shape_position`, `set_shape_size`, and `set_shape_fill` accept only entries reported as `Shape`, not picture/table/group IDs. Use image tools for pictures and table tools for tables. Groups have no text/position/size/fill editor; `delete_shape` can remove one. Geometry parameters are raw EMU integers; centimetre helpers are not shipped yet.
 
 ## Read without opening a session
 
@@ -77,5 +77,5 @@ Read tools accept either `source_path` or `doc_id` when their schema offers both
 
 - Editing with `source_path`: open a session first.
 - Treating the second slide as index 2: use `slide_index: 1`.
-- Guessing a shape ID or its element kind: call `get_slide_shapes`; use Shape-only editors only on entries marked `Shape`.
+- Guessing a shape ID or its element kind: call `get_slide_shapes`; use Shape-only editors only on entries marked `Shape`, and do not treat a Group as editable.
 - Closing before saving: save the intended output path, then close.
