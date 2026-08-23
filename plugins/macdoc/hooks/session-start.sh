@@ -14,6 +14,11 @@
 
 set -u
 
+# The install target commonly lives in ~/bin, which may also lead PATH. Never
+# resolve trust-chain utilities through a user-writable directory (#161).
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH
+
 REPO="PsychQuant/macdoc"
 BINARY_NAME="macdoc"
 [ -n "${HOME:-}" ] || exit 0   # no HOME (exotic env) — nothing sane to do, never break session
@@ -21,6 +26,7 @@ INSTALL_DIR="${MACDOC_INSTALL_DIR:-$HOME/bin}"   # override for tests
 BINARY="$INSTALL_DIR/$BINARY_NAME"
 REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"'
 CODESIGN_BIN="/usr/bin/codesign"
+CURL_BIN="${MACDOC_CURL_BIN:-/usr/bin/curl}"
 
 note() { echo "macdoc plugin: $1" >&2; }
 soft_exit() { note "$1"; exit 0; }   # fail-soft: never break session start
@@ -29,7 +35,7 @@ verify_binary() {
     "$CODESIGN_BIN" --verify --strict -R "$REQUIREMENT" "$1" 2>/dev/null
 }
 
-[ "$(uname -m)" = "arm64" ] || exit 0   # arm64-only release; Intel builds from source (silent — not an error)
+[ "$(/usr/bin/uname -m)" = "arm64" ] || exit 0   # arm64-only release; Intel builds from source (silent — not an error)
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
@@ -49,7 +55,7 @@ WANT_SHA=$(grep -oE '"binary_sha256"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_J
 RESIDENT_VERIFIED=false
 if [ -x "$BINARY" ]; then
     if verify_binary "$BINARY"; then
-        RESIDENT_SHA=$(/usr/bin/shasum -a 256 "$BINARY" 2>/dev/null | awk '{print $1}')
+        RESIDENT_SHA=$(/usr/bin/shasum -a 256 "$BINARY" 2>/dev/null | /usr/bin/awk '{print $1}')
         [ "$RESIDENT_SHA" = "$WANT_SHA" ] && RESIDENT_VERIFIED=true
     fi
 fi
@@ -67,15 +73,15 @@ TMP=$(mktemp "$INSTALL_DIR/.${BINARY_NAME}.download.XXXXXX" 2>/dev/null) || soft
 trap 'rm -f "$TMP"' EXIT
 
 URL="https://github.com/$REPO/releases/download/v$WANT/$BINARY_NAME"
-curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP" 2>/dev/null \
+"$CURL_BIN" -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP" 2>/dev/null \
     || soft_exit "download failed for v$WANT; resident binary was not executed. Manual: https://github.com/$REPO/releases"
 
-EXPECTED=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/dev/null | head -1 | awk '{print $1}')
+EXPECTED=$("$CURL_BIN" -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk '{print $1}')
 [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] \
     || soft_exit "missing/malformed .sha256 asset — refusing to install unverified binary"
 [[ "$EXPECTED" == "$WANT_SHA" ]] \
     || soft_exit "release sha256 asset does not match pinned binary_sha256 — refusing to install"
-[[ "$(/usr/bin/shasum -a 256 "$TMP" | awk '{print $1}')" == "$WANT_SHA" ]] \
+[[ "$(/usr/bin/shasum -a 256 "$TMP" | /usr/bin/awk '{print $1}')" == "$WANT_SHA" ]] \
     || soft_exit "sha256 mismatch — refusing to install"
 verify_binary "$TMP" \
     || soft_exit "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install"
