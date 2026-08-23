@@ -48,3 +48,5 @@
 - Round 3 RED reproduced arbitrary injected error disclosure and acceptance of a 65,537-byte injected response.
 - TokenCounter package GREEN: 28 tests, 0 failures, including immediate 2,000,000-byte callback delivery with package retention fixed at 65,537 bytes, arbitrary-error redaction, independent injected-response size enforcement, and non-cooperative cancellation.
 - The previous impossible "network receive boundary" claim was corrected to the enforceable package-owned retention boundary; Foundation callback allocation remains explicitly outside package control.
+- Root suite with verified prerequisite #164 temporarily overlaid after a clean build: 53 XCTest, 0 failures, 4 fixture/environment skips; 26 Swift Testing, 0 failures. The overlay was aborted and is not part of #20.
+- `TokenCountCommandTests`: 22 tests, 0 failures, including cancellation before presentation; the cancelled command wrote no stdout, diagnostic, or output file.
