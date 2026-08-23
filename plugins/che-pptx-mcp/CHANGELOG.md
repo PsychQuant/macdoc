@@ -4,6 +4,12 @@ All notable changes to the che-pptx-mcp plugin shell will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- 新增 `che-pptx-mcp` skill（PsychQuant/macdoc#159）：提供 Direct／Session 工作流、具名 MCP tools、0-based index／EMU 慣例，以及 PDF／render 尚未支援的誠實邊界。
+
 ## [0.1.2] - 2026-07-02
 
 ### Changed
