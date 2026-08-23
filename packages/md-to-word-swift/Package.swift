@@ -10,9 +10,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.1"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", "2.0.0"..<"4.0.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
-        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "0.4.0"),
+        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.0.0"),
     ],
     targets: [
         .target(
@@ -28,7 +28,7 @@ let package = Package(
             name: "MDToWordTests",
             dependencies: [
                 "MDToWord",
-                .product(name: "WordToMDSwift", package: "word-to-md-swift"),
+                .product(name: "WordToMD", package: "word-to-md-swift"),
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
             ]

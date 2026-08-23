@@ -1,7 +1,7 @@
 import XCTest
 @testable import MDToWord
 import OOXMLSwift
-import WordToMDSwift
+import WordToMD
 import CommonConverterSwift
 
 /// End-to-End round-trip tests starting from .docx files.
