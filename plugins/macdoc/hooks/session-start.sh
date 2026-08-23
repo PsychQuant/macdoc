@@ -24,6 +24,10 @@ REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.
 note() { echo "macdoc plugin: $1" >&2; }
 soft_exit() { note "$1"; exit 0; }   # fail-soft: never break session start
 
+verify_binary() {
+    codesign --verify --strict -R "$REQUIREMENT" "$1" 2>/dev/null
+}
+
 [ "$(uname -m)" = "arm64" ] || exit 0   # arm64-only release; Intel builds from source (silent — not an error)
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,6 +38,18 @@ WANT=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON
     | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
 [ -n "$WANT" ] || exit 0   # no pinned CLI version — nothing to manage
 
+# Exec-time re-verification happens before even asking the resident binary for
+# its version. A binary that merely prints WANT must never reach a fast path
+# unless its Developer ID chain + Team requirement is valid (#161).
+RESIDENT_VERIFIED=false
+if [ -x "$BINARY" ]; then
+    if verify_binary "$BINARY"; then
+        RESIDENT_VERIFIED=true
+    else
+        note "existing binary failed signature verification — forcing one re-download attempt"
+    fi
+fi
+
 # --version with a 5s alarm (a hung/planted binary must not stall every
 # session start — fail-soft covers errors, not hangs; codex V114 HIGH-1).
 # Probe writes to a FILE, not a pipe: a killed probe may leave grandchildren
@@ -43,17 +59,17 @@ WANT=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON
 # re-download loop (codex V114 M-2).
 HAVE=""
 PROBE=$(mktemp "${TMPDIR:-/tmp}/.macdoc.probe.XXXXXX" 2>/dev/null) || PROBE=""
-if [ -n "$PROBE" ]; then
+if $RESIDENT_VERIFIED && [ -n "$PROBE" ]; then
     { perl -e 'alarm 5; exec @ARGV' -- "$BINARY" --version </dev/null >"$PROBE" 2>/dev/null; } 2>/dev/null || true
     HAVE=$(head -1 "$PROBE" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
     rm -f "$PROBE"
 fi
-[ "$HAVE" = "$WANT" ] && exit 0   # fast path: version matches, zero network
+$RESIDENT_VERIFIED && [ "$HAVE" = "$WANT" ] && exit 0   # verified fast path: version matches, zero network
 
 # Loop-guard sidecar: if a previous session already installed WANT but the
 # binary self-reports an unparsable/odd version, do not re-download forever.
 GUARD="$INSTALL_DIR/.${BINARY_NAME}.installed_version"
-[ -x "$BINARY" ] && [ "$(cat "$GUARD" 2>/dev/null)" = "$WANT" ] && exit 0
+$RESIDENT_VERIFIED && [ "$(cat "$GUARD" 2>/dev/null)" = "$WANT" ] && exit 0
 
 mkdir -p "$INSTALL_DIR" 2>/dev/null || soft_exit "cannot create $INSTALL_DIR — skipping auto-install"
 TMP=$(mktemp "$INSTALL_DIR/.${BINARY_NAME}.download.XXXXXX" 2>/dev/null) || soft_exit "mktemp failed — skipping auto-install"
@@ -68,7 +84,7 @@ EXPECTED=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/
     || soft_exit "missing/malformed .sha256 asset — refusing to install unverified binary"
 [[ "$(shasum -a 256 "$TMP" | awk '{print $1}')" == "$EXPECTED" ]] \
     || soft_exit "sha256 mismatch — refusing to install"
-codesign --verify --strict -R "$REQUIREMENT" "$TMP" 2>/dev/null \
+verify_binary "$TMP" \
     || soft_exit "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install"
 
 chmod +x "$TMP" || soft_exit "chmod failed"
