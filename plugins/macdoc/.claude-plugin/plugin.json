@@ -3,6 +3,7 @@
   "description": "macOS 原生文件處理 CLI — 格式轉換、VLM OCR（含 host profile 設定）、SRT 處理。v1.2.0: session-start hook 自動安裝 signed CLI binary（arm64）。",
   "version": "1.5.1",
   "binary_version": "0.7.0",
+  "binary_sha256": "9fe09f26b6c8f97f13520ec2f618b8918b475de9ebc8a9980fd64897b39ec298",
   "author": {
     "name": "Che Cheng"
   }
