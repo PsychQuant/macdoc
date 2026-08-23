@@ -22,6 +22,7 @@ description: |
 | `config` | 設定管理 | AI CLI 工具、OCR host/model 預設值 |
 | `pdf` | PDF→LaTeX | 學術 PDF 處理（較少用） |
 | `bib` | BibLaTeX→APA | 參考文獻格式轉換 |
+| `word` | docx ⇄ `.mdocx.swift` 腳本 | 把文件變成可重播的重建腳本、再放回 docx |
 
 ---
 
@@ -100,6 +101,51 @@ macdoc convert --to html --full --output lecture.html notes.md
 ```bash
 macdoc convert --to md --output output.md input.docx
 ```
+
+---
+
+## word — docx ⇄ `.mdocx.swift` 腳本
+
+兩個子命令構成一個封閉迴路：`reverse` 把 docx 變成重建腳本，`render` 把腳本放回 docx。
+
+```bash
+# docx → 腳本
+macdoc word reverse form.docx --to-mdocx form.mdocx.swift [--coverage] [--force]
+
+# 腳本 → docx（--verify-against 才會驗證，預設不驗）
+macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against form.docx] [--force]
+```
+
+> ⚠️ **以下兩項需要 macdoc CLI 0.7.0 以上**（已發布）。留在 0.6.0 的話：輸出檔已存在時會被無條件覆寫，驗證失敗會在原檔已被破壞之後才回報，且 `--to-docx` 指向既有目錄再加 `--force` 會把整個目錄換成一個檔案。見 PsychQuant/che-word-mcp#180 / #181、PsychQuant/ooxml-swift#109。
+
+**輸出檔已存在時預設拒絕**，要 `--force`。**驗證失敗什麼都不寫出**——輸出路徑保持原狀，也不會印「已寫入」（重建結果先落在同目錄的暫存路徑，驗過才搬進位）。這兩個保證都由 CLI 與 MCP 共用的入口提供，兩面行為一致。
+
+| 選項 | 屬於 | 說明 |
+|------|------|------|
+| `--coverage` | reverse | 印 per-part 的 DSL/raw 覆蓋率報告 |
+| `--slot <name>=<paraId>` | reverse | 指定段落成為腳本的具名參數（strict，不推斷）|
+| `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）|
+| `--from-oplog` | reverse | 強制用 oplog sidecar |
+| `--verify-against <docx>` | render | 對照參考檔做 byte-equal 驗證；**不給就不驗** |
+| `--force` | 兩者 | 覆寫既有輸出（不給就拒絕，且不動既有檔案）|
+
+### 這條迴路保證什麼、不保證什麼
+
+**保證**：byte-equal 重播。`--verify-against` 通過就代表重建出的每個 XML part 與參考檔逐位元組相同。
+
+**不保證**：產物可讀。腳本有兩條 channel——typed DSL（可讀）與 raw（把整個 XML part 逐字塞進一行 `// @op`）。**DSL 升級是 per-part 全有全無**：文件裡只要含一個表格，整個 `word/document.xml` 就整份掉到 raw channel。
+
+實測 `REC-O-01` 這類真實官方表單：
+
+```
+--- Aggregate: 0.0% DSL (0 / 190479 XML bytes across 16 parts) ---
+```
+
+產出是 24 行 / 212 KB，其中 `word/document.xml` 那一行就佔約 118 KB。**它能完美重播，但不能讀、不能手改、也無法有意義地做版控 diff**（改一個字會讓整條 118 KB 的行重新 escape）。
+
+所以**先跑 `--coverage` 再決定期待值**——不要因為文件看起來簡單就假設會拿到可讀的 Swift。
+
+> 完整工作流（含 slot 填寫與 MCP 對應工具）見 [`swiftify`](../swiftify/SKILL.md) skill；本節只是命令參考。
 
 ---
 

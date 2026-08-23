@@ -7,6 +7,3 @@
 [submodule "mcp/che-pptx-mcp"]
 	path = mcp/che-pptx-mcp
 	url = git@github.com:PsychQuant/che-pptx-mcp.git
-[submodule "cli/FastOCR"]
-	path = cli/FastOCR
-	url = https://github.com/PsychQuant/FastOCR.git

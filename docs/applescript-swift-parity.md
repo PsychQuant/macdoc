@@ -1,5 +1,11 @@
 # AppleScript–Swift Parity
 
+> 平台聲明
+> - 自動化／活應用程式層：macOS 專屬；狀態為 `design-only`，本文依據 2026-07 的 Excel for Mac 歷史觀察整理設計規則，當時的 macOS 與 Excel 精確版本未記錄，repository 內尚無真實應用程式驗收。
+> - Windows／Linux：AppleScript 與 Apple Events；狀態為 `not-supported`，COM／VSTO 或其他平台橋接須另案設計。
+> - 離線文件處理：不受本規則約束；能力狀態詞彙不適用，其跨平台狀態必須由各自文件聲明。
+> - 證據：PsychQuant/macdoc#135；標示規範見 `docs/platform-support.md`。
+
 一個關於「驅動活 App」類 MCP(che-excel-mcp 起)的設計規則。
 
 ---
