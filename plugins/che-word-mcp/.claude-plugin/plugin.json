@@ -1,8 +1,8 @@
 {
   "name": "che-word-mcp",
-  "description": "Word (.docx) MCP server — Swift-native OOXML 讀寫，245 tools（段落/表格/樣式/註腳/追蹤修訂/方程式/內容控制/欄位/腳本管線 export_script·get_script_coverage·execute_script 等），無需安裝 Word。Built on ooxml-swift v1.5.0。release history 見 CHANGELOG。",
-  "version": "3.22.0",
-  "binary_version": "3.22.0",
+  "description": "Word (.docx) MCP server — Swift-native OOXML 讀寫，245 tools（段落/表格/樣式/註腳/追蹤修訂/方程式/內容控制/欄位/腳本管線 export_script·get_script_coverage·execute_script 等），無需安裝 Word。Built on ooxml-swift v2.0.1。release history 見 CHANGELOG。",
+  "version": "4.0.7",
+  "binary_version": "4.0.5",
   "author": {
     "name": "Che Cheng"
   },
