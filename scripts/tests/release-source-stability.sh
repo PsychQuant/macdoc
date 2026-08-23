@@ -35,6 +35,7 @@ cat > "$FAKE_PATH/swift" <<'EOF'
 echo swift-build >> "$EVENT_LOG"
 case "${MUTATION_MODE:-none}" in
     file) echo changed-during-build >> source.txt ;;
+    primary) echo changed-in-primary-tree >> "$PRIMARY_REPO/source.txt" ;;
     head)
         echo committed-during-build >> source.txt
         /usr/bin/git add source.txt
@@ -91,7 +92,7 @@ run_release() {
     set +e
     (
         cd "$REPO"
-        EVENT_LOG="$EVENT_LOG" MUTATION_MODE="$1" PATH="$FAKE_PATH:$PATH" \
+        EVENT_LOG="$EVENT_LOG" MUTATION_MODE="$1" PRIMARY_REPO="$REPO" PATH="$FAKE_PATH:$PATH" \
             bash scripts/release-cli.sh 9.9.9
     ) >"$TEST_ROOT/output-$1.log" 2>&1
     RELEASE_RC=$?
@@ -110,7 +111,16 @@ if grep -q '^codesign$\|notarytool submit\|^gh-release-create:' "$EVENT_LOG"; th
     cat "$EVENT_LOG" >&2
     exit 1
 fi
-grep -q 'working tree changed during the build' "$TEST_ROOT/output-file.log"
+grep -q 'build tree changed during the build' "$TEST_ROOT/output-file.log"
+/usr/bin/git -C "$REPO" checkout -q -- source.txt
+
+run_release primary
+[[ "$RELEASE_RC" -eq 0 ]] || {
+    echo "FAIL: isolated release should ignore concurrent primary-tree edits; got $RELEASE_RC" >&2
+    cat "$TEST_ROOT/output-primary.log" >&2
+    exit 1
+}
+grep -q "^gh-release-create:.*--target $BASELINE_HEAD" "$EVENT_LOG"
 /usr/bin/git -C "$REPO" checkout -q -- source.txt
 
 run_release none
@@ -125,6 +135,6 @@ if grep -q '^codesign$\|notarytool submit\|^gh-release-create:' "$EVENT_LOG"; th
     cat "$EVENT_LOG" >&2
     exit 1
 fi
-grep -q 'working tree changed during the build' "$TEST_ROOT/output-head.log"
+grep -q 'build tree changed during the build' "$TEST_ROOT/output-head.log"
 
 echo "PASS: release refuses source/HEAD mutation before signing and pins release target"
