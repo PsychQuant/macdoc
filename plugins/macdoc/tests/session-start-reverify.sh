@@ -12,7 +12,9 @@ INSTALL_DIR="$TEST_ROOT/install"
 EVENT_LOG="$TEST_ROOT/events.log"
 RESIDENT="$INSTALL_DIR/macdoc"
 GUARD="$INSTALL_DIR/.macdoc.installed_version"
-CANDIDATE="$TEST_ROOT/candidate-macdoc"
+UNSIGNED_CANDIDATE="$TEST_ROOT/unsigned-candidate"
+SIGNED_FIXTURE="${MACDOC_SIGNED_FIXTURE:-$HOME/bin/macdoc}"
+REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"'
 mkdir -p "$FAKE_PATH" "$INSTALL_DIR"
 
 cat > "$FAKE_PATH/uname" <<'EOF'
@@ -20,15 +22,12 @@ cat > "$FAKE_PATH/uname" <<'EOF'
 echo arm64
 EOF
 
+# This deliberate bypass attempt must be ignored by production. Tests set the
+# old override variable, but SessionStart must still use /usr/bin/codesign.
 cat > "$FAKE_PATH/codesign" <<'EOF'
 #!/bin/bash
-target=""
-for target in "$@"; do :; done
-echo "codesign:$target" >> "$EVENT_LOG"
-if [ "$target" = "$RESIDENT_PATH" ]; then
-    exit "${RESIDENT_CODESIGN_EXIT:-0}"
-fi
-exit "${DOWNLOAD_CODESIGN_EXIT:-0}"
+echo fake-codesign >> "$EVENT_LOG"
+exit 0
 EOF
 
 cat > "$FAKE_PATH/curl" <<'EOF'
@@ -60,58 +59,87 @@ echo resident-executed >> "$EVENT_LOG"
 echo 'macdoc 0.7.0'
 EOF
 
-cat > "$CANDIDATE" <<'EOF'
+cat > "$UNSIGNED_CANDIDATE" <<'EOF'
 #!/bin/bash
 echo candidate-executed >> "$EVENT_LOG"
 echo 'macdoc 0.7.0'
 EOF
 
-chmod +x "$FAKE_PATH/uname" "$FAKE_PATH/codesign" "$FAKE_PATH/curl" "$RESIDENT" "$CANDIDATE"
+chmod +x "$FAKE_PATH/uname" "$FAKE_PATH/codesign" "$FAKE_PATH/curl" "$RESIDENT" "$UNSIGNED_CANDIDATE"
 
 run_hook() {
     : > "$EVENT_LOG"
     EVENT_LOG="$EVENT_LOG" \
-    RESIDENT_PATH="$RESIDENT" \
-    RESIDENT_CODESIGN_EXIT="$1" \
-    DOWNLOAD_CODESIGN_EXIT="$2" \
-    FAKE_CURL_MODE="$3" \
-    DOWNLOAD_SOURCE="$CANDIDATE" \
+    FAKE_CURL_MODE="$1" \
+    DOWNLOAD_SOURCE="$2" \
     MACDOC_CODESIGN_BIN="$FAKE_PATH/codesign" \
     MACDOC_INSTALL_DIR="$INSTALL_DIR" \
     PATH="$FAKE_PATH:$PATH" \
     bash "$HOOK" >/dev/null 2>&1
 }
 
-# A rejected resident must not execute, even if it prints the pinned version.
-rm -f "$GUARD"
-run_hook 1 0 fail
-grep -qx "codesign:$RESIDENT" "$EVENT_LOG"
-! grep -q 'executed' "$EVENT_LOG"
+assert_no_execution() {
+    if grep -q 'executed' "$EVENT_LOG"; then
+        echo "FAIL: SessionStart executed resident or candidate: $(tr '\n' ' ' < "$EVENT_LOG")" >&2
+        exit 1
+    fi
+}
+
+# A rejected resident must ignore a hostile verifier override, never execute,
+# and force exactly one download attempt even if its sidecar claims WANT.
+echo 0.7.0 > "$GUARD"
+run_hook fail "$UNSIGNED_CANDIDATE"
+assert_no_execution
+if grep -qx fake-codesign "$EVENT_LOG"; then
+    echo "FAIL: production honored MACDOC_CODESIGN_BIN instead of /usr/bin/codesign" >&2
+    exit 1
+fi
 [[ "$(grep -c '^curl-download$' "$EVENT_LOG")" -eq 1 ]] || {
     echo "FAIL: rejected resident must force exactly one download attempt" >&2
     exit 1
 }
 
-# A verified resident with a matching installer sidecar takes a zero-network
-# fast path without executing the binary during SessionStart.
-echo 0.7.0 > "$GUARD"
-run_hook 0 0 fail
-[[ "$(wc -l < "$EVENT_LOG" | tr -d ' ')" -eq 1 ]] || {
-    echo "FAIL: verified matching resident should only be signature-checked; got: $(tr '\n' ' ' < "$EVENT_LOG")" >&2
-    exit 1
-}
-grep -qx "codesign:$RESIDENT" "$EVENT_LOG"
-! grep -q 'executed\|curl-' "$EVENT_LOG"
-
-# A rejected resident can be replaced only by bytes whose release digest and
-# signature both pass. The candidate is installed but never executed by hook.
-run_hook 1 0 success
-grep -qx "codesign:$RESIDENT" "$EVENT_LOG"
+# An unsigned downloaded candidate may match its release digest, but codesign
+# must still reject it and leave the resident/sidecar unchanged.
+rm -f "$GUARD"
+run_hook success "$UNSIGNED_CANDIDATE"
+assert_no_execution
+[[ ! -f "$GUARD" ]]
 grep -qx curl-download "$EVENT_LOG"
 grep -qx curl-sha "$EVENT_LOG"
-[[ "$(grep -c '^codesign:' "$EVENT_LOG")" -eq 2 ]]
-! grep -q 'executed' "$EVENT_LOG"
-cmp -s "$RESIDENT" "$CANDIDATE"
+grep -q 'resident-executed' "$RESIDENT"
+
+# Full valid-path coverage needs a real Team-signed fixture. Keep the hostile
+# cases above mandatory; gate only the positive cases for CI machines without
+# the released binary.
+if ! /usr/bin/codesign --verify --strict -R "$REQUIREMENT" "$SIGNED_FIXTURE" 2>/dev/null; then
+    echo "SKIP: positive signed-fixture cases (set MACDOC_SIGNED_FIXTURE)"
+    echo "PASS: rejected resident/candidate are never executed"
+    exit 0
+fi
+
+# A verified resident with a matching installer sidecar takes a zero-network
+# fast path without executing the binary during SessionStart.
+cp "$SIGNED_FIXTURE" "$RESIDENT"
+chmod +x "$RESIDENT"
+echo 0.7.0 > "$GUARD"
+run_hook fail "$SIGNED_FIXTURE"
+assert_no_execution
+[[ ! -s "$EVENT_LOG" ]] || {
+    echo "FAIL: verified matching resident should not hit test doubles: $(tr '\n' ' ' < "$EVENT_LOG")" >&2
+    exit 1
+}
+
+# A rejected resident can be replaced only by signed bytes whose release
+# digest matches. The candidate is installed but never executed by the hook.
+cp "$UNSIGNED_CANDIDATE" "$RESIDENT"
+chmod +x "$RESIDENT"
+rm -f "$GUARD"
+run_hook success "$SIGNED_FIXTURE"
+assert_no_execution
+grep -qx curl-download "$EVENT_LOG"
+grep -qx curl-sha "$EVENT_LOG"
+cmp -s "$RESIDENT" "$SIGNED_FIXTURE"
 [[ "$(cat "$GUARD")" = "0.7.0" ]]
 
 echo "PASS: SessionStart never executes resident binary and installs only a verified candidate"
