@@ -43,7 +43,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
         // Direct dependency for `macdoc word reverse` (script transcoder:
         // ScriptExporter / SidecarStore / DocxReader live in OOXMLSwift).
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "1.4.0"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.0.0"),
     ],
     targets: [
         .executableTarget(
@@ -51,7 +51,7 @@ let package = Package(
             dependencies: [
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
-                .product(name: "WordToMDSwift", package: "word-to-md-swift"),
+                .product(name: "WordToMD", package: "word-to-md-swift"),
                 .product(name: "PDFToMD", package: "PDFToMD"),
                 .product(name: "WordToHTML", package: "WordToHTML"),
                 .product(name: "HTMLToWord", package: "HTMLToWord"),

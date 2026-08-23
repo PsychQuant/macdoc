@@ -2,7 +2,11 @@
 
 ## Purpose
 
-TBD - created by archiving change 'word-aligned-state-sync'. Update Purpose after archive.
+The bidirectional codec between a `.docx` package and `.mdocx.swift` rebuild-script source, plus the execution of those scripts back into a package.
+
+Three concerns live here. **Export** lifts an existing document into a script: the raw part channel carries every XML part verbatim as a byte-equal floor, and the reverse extractor upgrades parts to typed DSL form only where a trial rebuild proves the upgrade byte-equal. **Import** parses a script back into an operation log. **Execution** replays that log onto an empty authoring document, writes the package, and — when the caller supplies a reference — compares the rebuilt part set for Stage-B byte equality.
+
+Every consumer of the script pipeline calls these entry points rather than reimplementing them. `macdoc word reverse` and `macdoc word render` on the CLI, and che-word-mcp's `export_script` / `get_script_coverage` / `execute_script` tools, are argument-parsing shells over this module; that shared implementation is what makes the two faces agree by construction rather than by convention.
 
 ## Requirements
 
@@ -1153,4 +1157,93 @@ code:
   - .agents/skills/spectra-commit/SKILL.md
   - .agents/skills/spectra-ingest/SKILL.md
   - .agents/skills/spectra-archive/SKILL.md
+-->
+
+---
+### Requirement: Script execution orchestration is a shared transcode entry point
+
+The transcode module SHALL expose a public entry point that executes a `.mdocx.swift` rebuild script: parsing the script, replaying its operation log onto an empty authoring document, and writing the rebuilt package to a caller-supplied output path. When the caller supplies a reference document path, the entry point SHALL compare the rebuilt XML part set against that reference and report a verdict together with the paths of any parts that differ. When the caller supplies no reference, the returned verdict SHALL be absent rather than reported as a passing result.
+
+Every consumer of script execution — command-line and MCP alike — SHALL call this entry point rather than reimplement the orchestration.
+
+#### Scenario: Execution without a reference reports no verdict
+
+- **WHEN** the entry point runs with no reference document supplied
+- **THEN** the rebuilt document is written to the output path
+- **AND** the result carries no verification verdict
+- **AND** the result MUST NOT report an empty set of differing parts as evidence of byte equality
+
+#### Scenario: Execution with a matching reference reports byte equality
+
+- **GIVEN** a script exported from a reference document with no content substitution
+- **WHEN** the entry point runs with that reference supplied
+- **THEN** the result reports a passing verdict and names no differing parts
+
+#### Scenario: Execution with a diverging reference names the differing parts
+
+- **GIVEN** a script whose replay produces at least one part that differs from the reference
+- **WHEN** the entry point runs with that reference supplied
+- **THEN** the result reports a failing verdict
+- **AND** the result names each differing part by its part path
+
+#### Scenario: Unparseable script surfaces the transcoder reason
+
+- **WHEN** the entry point is given a script that does not parse
+- **THEN** the failure carries the transcoder's location-bearing reason rather than a generic parse failure
+
+
+<!-- @trace
+source: script-pipeline-surface
+updated: 2026-08-19
+code:
+  - .agents/skills/spectra-analyze/SKILL.md
+  - .agents/skills/spectra-commit/SKILL.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-drift/SKILL.md
+  - mcp/che-keynote-mcp/
+  - .agents/skills/spectra-audit/SKILL.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .codex/hooks.json
+  - .agents/skills/spectra-verify/SKILL.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .agents/skills/umbrella-open/SKILL.md
+  - .agents/skills/spectra-ingest/SKILL.md
+-->
+
+---
+### Requirement: The reference document is read before any output is written
+
+When a reference document is supplied, the script execution entry point SHALL read the reference document's parts into memory before writing anything to the output path.
+
+This ordering is required because the caller MAY supply the same path as both output and reference. Reading the reference after writing the output would compare the rebuilt document against itself, reporting byte equality unconditionally and defeating verification.
+
+#### Scenario: Output path and reference path are the same file
+
+- **GIVEN** a caller that supplies one path as both the output and the reference
+- **WHEN** the entry point runs
+- **THEN** the verdict reflects a comparison against the file's contents as they were before the write
+- **AND** the verdict MUST NOT be a passing result produced by comparing the rebuilt output against itself
+
+<!-- @trace
+source: script-pipeline-surface
+updated: 2026-08-19
+code:
+  - .agents/skills/spectra-analyze/SKILL.md
+  - .agents/skills/spectra-commit/SKILL.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-drift/SKILL.md
+  - mcp/che-keynote-mcp/
+  - .agents/skills/spectra-audit/SKILL.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .codex/hooks.json
+  - .agents/skills/spectra-verify/SKILL.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .agents/skills/umbrella-open/SKILL.md
+  - .agents/skills/spectra-ingest/SKILL.md
 -->
