@@ -348,6 +348,8 @@ struct AnthropicHTTPTokenCountTransport: AnthropicTokenCountTransport {
                 redirectPolicy: .reject,
                 bodyByteLimit: Self.responseByteLimit
             )
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as URLError where error.code == .timedOut {
             throw AnthropicTokenCountError.timedOut
         } catch let error as AnthropicTokenCountError {
@@ -379,6 +381,8 @@ struct AnthropicHTTPTokenCountTransport: AnthropicTokenCountTransport {
                 }
                 data.append(chunk)
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as AnthropicTokenCountError {
             throw error
         } catch let error as URLError where error.code == .timedOut {
@@ -626,6 +630,8 @@ private final class BoundedAnthropicSessionDelegate: NSObject,
         switch redirectPolicy {
         case .reject:
             completionHandler(nil)
+            task.cancel()
+            finish(.failure(AnthropicTokenCountError.redirectRejected))
         }
     }
 

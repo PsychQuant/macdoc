@@ -114,6 +114,31 @@ struct AnthropicTokenCounterTests {
         #expect(calls.first?.redirectPolicy == .reject)
     }
 
+    @Test("production URLSession redirect maps to redirectRejected")
+    func productionRedirectIsTyped() async {
+        RedirectingURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedirectingURLProtocol.self]
+        let loader = URLSessionAnthropicHTTPDataLoader(
+            session: URLSession(configuration: configuration)
+        )
+
+        do {
+            _ = try await loader.load(
+                URLRequest(url: URL(string: "https://redirect.unit.test/start")!),
+                redirectPolicy: .reject,
+                bodyByteLimit: 65_536
+            )
+            Issue.record("Expected redirect rejection")
+        } catch let error as AnthropicTokenCountError {
+            #expect(error == .redirectRejected)
+        } catch {
+            Issue.record("Expected AnthropicTokenCountError.redirectRejected, got \(error)")
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(RedirectingURLProtocol.stopCount >= 1)
+    }
+
     @Test("maps a 30-second request timeout without retrying")
     func mapsTimeoutWithoutRetry() async {
         let loader = RecordingAnthropicHTTPDataLoader(error: URLError(.timedOut))
@@ -126,6 +151,20 @@ struct AnthropicTokenCounterTests {
         let calls = await loader.recordedCalls()
         #expect(calls.count == 1)
         #expect(calls.first?.request.timeoutInterval == 30)
+    }
+
+    @Test("preserves loader cancellation instead of mapping it to provider failure")
+    func preservesLoaderCancellation() async {
+        let subject = AnthropicHTTPTokenCountTransport(loader: CancellingAnthropicHTTPDataLoader())
+
+        do {
+            _ = try await subject.countTokens(request: request())
+            Issue.record("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            Issue.record("Expected CancellationError, got \(error)")
+        }
     }
 
     @Test("accepts a response body at exactly the 64-KiB limit")
@@ -389,6 +428,16 @@ private actor RecordingAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
     }
 }
 
+private struct CancellingAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
+    func load(
+        _ request: URLRequest,
+        redirectPolicy: AnthropicRedirectPolicy,
+        bodyByteLimit: Int
+    ) async throws -> AnthropicHTTPResponse {
+        throw CancellationError()
+    }
+}
+
 private actor ResponseChunkProbe {
     private var chunks: [Data]
     private var reads = 0
@@ -589,6 +638,43 @@ private final class ImmediateOversizedBodyURLProtocol: URLProtocol, @unchecked S
         Self.state.recordDelivery(byteCount: body.count)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {
+        Self.state.recordStop()
+    }
+}
+
+private final class RedirectingURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let state = BoundedBodyURLProtocolState()
+
+    static var stopCount: Int { state.stopCount }
+    static func reset() { state.reset() }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "redirect.unit.test"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let sourceURL = request.url,
+              let targetURL = URL(string: "https://redirect-target.invalid/next"),
+              let response = HTTPURLResponse(
+                  url: sourceURL,
+                  statusCode: 302,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: ["Location": targetURL.absoluteString]
+              )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        var redirected = URLRequest(url: targetURL)
+        redirected.httpMethod = request.httpMethod
+        client?.urlProtocol(self, wasRedirectedTo: redirected, redirectResponse: response)
     }
 
     override func stopLoading() {
