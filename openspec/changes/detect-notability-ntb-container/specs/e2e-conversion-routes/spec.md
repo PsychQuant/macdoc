@@ -18,3 +18,8 @@ The E2E suite SHALL invoke the compiled macdoc executable with synthetic metadat
 
 - **WHEN** the synthetic modern archive is renamed with a `.note` suffix and requested as HTML
 - **THEN** the command returns the modern-container diagnostic rather than the legacy missing-session diagnostic
+
+#### Scenario: Compiled unsafe unknown .ntb rejection
+
+- **WHEN** the compiled command receives a malformed or metadata-over-limit `.ntb`
+- **THEN** the command returns the fixed safe-classification diagnostic without an input path and creates no destination
