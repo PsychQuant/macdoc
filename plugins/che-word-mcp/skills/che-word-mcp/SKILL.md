@@ -198,6 +198,40 @@ export_all_images(doc_id, output_dir)
 
 `compare_documents`, `compare_documents_markdown`, `export_text`, `export_markdown`
 
+### Script Pipeline
+
+`export_script`, `get_script_coverage`, `execute_script`
+
+把 docx 變成 `.mdocx.swift` 重建腳本、再放回 docx。三個工具都是 `macdoc` CLI 同一條 transcoder 的薄包裝，兩邊呼叫同一個實作。
+
+| Tool | 參數 | 回傳 |
+|------|------|------|
+| `export_script` | `source_path`, `output_path`, 選填 `slots: [{name, para_id}]` | JSON：`dsl_parts` / `form_gaps_empty` / `slot_count` / `output_path` |
+| `get_script_coverage` | `source_path` | JSON：每個 part 的 `channel`（`dsl`/`raw`）、`bytes`、`dsl_ratio`，加 `aggregate_ratio` |
+| `execute_script` | `script_path`, `output_path`, 選填 `verify_byte_equal_against`、`overwrite` | 成功時 JSON：`written`；**只有**傳了參考檔才有 `verified` / `broken_parts`。驗證失敗**不是**回應，是 tool error |
+
+**CLI 對應**：`export_script` ↔ `macdoc word reverse`，`execute_script` ↔ **`macdoc word render`**。同一個操作在兩個面的名字不同——MCP 這邊的名字是已發布 tool schema 的一部分，CLI 那邊的名字由 `mdocx-grammar` spec 固定。
+
+**`verified` 缺席 ≠ 通過**：沒傳 `verify_byte_equal_against` 時回應**不會有** `verified` 與 `broken_parts` 欄位。只檢查 `broken_parts` 是否為空的 client 會把「沒驗」讀成「驗過且乾淨」——要判斷驗證結果，先確認 `verified` 這個欄位存在。
+
+**驗證失敗是 tool error，不是回應欄位**：`verified: false` 不會出現在成功回應裡。不符時整個 tool call 失敗，錯誤文字列出每一個不符的 part。這是刻意的——舊行為把失敗的 verdict 放進一個**成功**回應，只判斷「呼叫有沒有成功」的 client 會把驗證失敗讀成通過。代價是不符的 part 清單降級成字串而非結構化陣列（追蹤中）。
+
+**失敗不寫出任何東西**：驗證失敗時 `output_path` 保持原狀——原本有檔就原封不動，原本沒檔就不會憑空出現。重建結果先寫到輸出檔同目錄的暫存路徑，驗過才搬進位。
+
+**`overwrite` 預設拒絕**：`output_path` 已存在時，沒帶 `overwrite: true` 就直接失敗並具名該路徑，檔案不動。這是**行為變更**——舊版無條件覆寫。把同一路徑同時當 `output_path` 與 `verify_byte_equal_against`（問「這份腳本能不能逐位元組重建這份文件？」）**必須**帶 `overwrite: true`，因為那必然指向既有檔案。
+
+`written` 只在真的 publish 了才出現；沒 publish 就整個欄位缺席，不會給你一個 `null`。
+
+`slots` 是 strict mode：指定失敗（paraId 不存在、名稱不合法、重複）直接報錯且不寫檔，不會靜默降級。
+
+#### 產物可讀嗎？先看 coverage
+
+腳本有兩條 channel：typed DSL（可讀）與 raw（整個 XML part 逐字塞進一行）。**DSL 升級是 per-part 全有全無**——文件含任一表格，整個 `word/document.xml` 就整份掉到 raw。
+
+實測真實官方表單（`REC-O-01`）：`0.0% DSL (0 / 190479 XML bytes across 16 parts)`，產出 24 行 / 212 KB，其中 document.xml 那行約 118 KB。**可完美重播，但不可讀、不可手改、無法有意義 diff。**
+
+所以先跑 `get_script_coverage` 再決定期待值。完整工作流見 macdoc plugin 的 `swiftify` skill。
+
 ## Tips
 
 1. **Track Changes is enforced by default.** `create_document` and `open_document` auto-enable track changes via `enforceTrackChangesIfNeeded`. Pass `track_changes: false` to `open_document` if you need to bypass enforcement (e.g., authoring tooling that controls revisions itself).
