@@ -64,9 +64,9 @@ Alternatives rejected:
 - Reimplementing reference definitions, HTML blocks, nested destinations, and container identity as scanner states drifts from CommonMark and permits placeholders to reach metadata.
 - Invoking Pandoc introduces a subprocess and a second conversion pipeline instead of using the maintained Swift parser.
 
-### Tokens become direct paragraph children with carrier-specific wrappers
+### Tokens become native children with carrier-specific wrappers
 
-Inline tokens are emitted as `Run.rawXML` containing one `<m:oMath>...</m:oMath>` fragment. Since `Run.rawXML` is serialized verbatim as a paragraph child, it is not wrapped in an invalid `<w:r>` container.
+Inline tokens are emitted as `Run.rawXML` containing one `<m:oMath>...</m:oMath>` fragment. In ordinary paragraph text, `Run.rawXML` is serialized verbatim as a direct paragraph child; inside a Markdown link label, it is serialized as a direct child of that paragraph's `<w:hyperlink>` carrier so the formula remains clickable. In neither case is OMath wrapped in an invalid `<w:r>` container.
 
 Display tokens create a paragraph whose `unrecognizedChildren` contains one direct `<m:oMathPara><m:oMath>...</m:oMath></m:oMathPara>` child and no synthetic text run. Both wrappers use `MathComponent.toOMML()` for their interior. The streaming XML route adds the standard math namespace whenever generated body XML contains an `m:` element; the DOCX writer route uses the OOXML writer's namespace-aware document serializer.
 

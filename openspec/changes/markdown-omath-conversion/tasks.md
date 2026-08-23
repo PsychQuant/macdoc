@@ -64,3 +64,10 @@
 
 - [x] 13.1 Add a 10,000-repetition `\$x\$` stress regression. RED took 10.849 seconds because every escaped dollar rescanned the remaining paragraph; raw normalized-text recovery now skips backslash-escaped characters in one forward traversal and the same debug test completes in 0.117 seconds with zero tokens and byte-identical literal Markdown.
 - [x] 13.2 Close the remaining normalized-text and renderer lookup variants. Even-backslash `\\$x\\$` candidate discovery now advances delimiter-to-delimiter, while renderer lookup bypasses empty token tables and searches only a full private sentinel/nonce prefix with a longest-placeholder bound. Final debug stress evidence for 10,000 repetitions: odd escape 0.057 s, even escape 0.079 s, public marker-prefix lookup 0.009 s.
+
+## 14. Final API-contract reconciliation
+
+- [x] 14.1 Preserve unmatched `$$` as literal when followed by a separate complete display formula, while the pending-delimiter state still rejects cross-container/list/blockquote pairs in one forward pass.
+- [x] 14.2 Carry the scanner's exact `PUA + marker prefix + generated nonce` search prefix into the renderer; single- and multi-token conversions retain exact matching without a single-token suffix bug.
+- [x] 14.3 Align the carrier contract with supported link-label math: ordinary inline OMath is a paragraph child, link-label OMath is a direct `w:hyperlink` child, and neither is wrapped in `w:r`.
+- [x] 14.4 Final focused verification: scanner/converter 55/55 and compiled CLI 15/15, including unmatched-then-complete display output with no internal placeholder; Spectra strict and CRLF-aware diff gate PASS.

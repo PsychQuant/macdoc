@@ -89,6 +89,31 @@ struct MarkdownOMathRouteTests {
         #expect(xml.components(separatedBy: "<m:oMath>").count - 1 == 1)
     }
 
+    @Test("unmatched display delimiter does not consume a later complete display")
+    func unmatchedThenCompleteDisplay() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        try "Unmatched $$ here\n\n$$x$$\n".write(
+            to: input,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(result.succeeded, "stderr: \(result.stderr)")
+        let xml = try archiveEntry(named: "word/document.xml", in: output)
+        #expect(xml.contains("Unmatched $$ here"))
+        #expect(xml.components(separatedBy: "<m:oMathPara>").count - 1 == 1)
+        #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+    }
+
     @Test("invalid math value fails before replacing destination")
     func invalidMathValuePreservesDestination() throws {
         let workspace = try makeWorkspace()

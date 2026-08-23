@@ -20,6 +20,7 @@ struct MarkdownMathScanner {
     struct Result: Equatable {
         let markdown: String
         let tokens: [Token]
+        let placeholderSearchPrefix: String?
     }
 
     enum ScanError: Error, Equatable {
@@ -500,6 +501,7 @@ struct MarkdownMathScanner {
         var lineStart = 0
         var logicalLineStart = 0
         var logicalQuoteDepth = 0
+        var pendingVisibleDisplay: (offset: Int, line: Int, column: Int)?
 
         func marker() -> String {
             while reservedMarkerIndices.contains(nextMarkerIndex) {
@@ -549,6 +551,21 @@ struct MarkdownMathScanner {
                     openingQuoteDepth: logicalQuoteDepth
                 ) {
                     let sourceRange = index..<display.replacementEnd
+                    let isIndependentCompleteDisplay = eligibility.allowsDisplay(sourceRange)
+                        && !display.mixedWithText
+                        && !display.latex.isEmpty
+                    if let pendingVisibleDisplay,
+                       !isIndependentCompleteDisplay {
+                        throw ScanError.misplacedDisplayFormula(
+                            line: pendingVisibleDisplay.line,
+                            column: pendingVisibleDisplay.column
+                        )
+                    }
+                    if isIndependentCompleteDisplay {
+                        // A complete later display is its own formula; any
+                        // earlier unmatched `$$` remains literal.
+                        pendingVisibleDisplay = nil
+                    }
                     if !eligibility.allowsDisplay(sourceRange) {
                         if eligibility.isParagraph(sourceRange) {
                             let end = min(index + 2, characters.count)
@@ -614,14 +631,18 @@ struct MarkdownMathScanner {
                     continue
                 }
 
-                if eligibility.containsVisibleText(at: index),
-                   let closing = Self.laterDoubleDollarClosing(
-                       in: characters,
-                       after: index + 2
-                   ),
-                   (eligibility.containsVisibleText(at: closing)
-                       || eligibility.sharesParagraph(index, closing)) {
+                let currentIsVisible = eligibility.containsVisibleText(at: index)
+                if let pendingVisibleDisplay,
+                   currentIsVisible
+                    || eligibility.sharesParagraph(pendingVisibleDisplay.offset, index) {
                     throw ScanError.misplacedDisplayFormula(
+                        line: pendingVisibleDisplay.line,
+                        column: pendingVisibleDisplay.column
+                    )
+                }
+                if currentIsVisible {
+                    pendingVisibleDisplay = (
+                        offset: index,
                         line: openingLine,
                         column: openingColumn
                     )
@@ -687,7 +708,11 @@ struct MarkdownMathScanner {
             index += 1
         }
 
-        return Result(markdown: output, tokens: tokens)
+        return Result(
+            markdown: output,
+            tokens: tokens,
+            placeholderSearchPrefix: tokens.isEmpty ? nil : "\u{E000}\(markerStem)"
+        )
     }
 
     private struct DisplayMatch {
@@ -810,24 +835,6 @@ struct MarkdownMathScanner {
     ) -> Int? {
         var index = start
         while index + 1 < end {
-            if characters[index] == "\\" {
-                index += 2
-                continue
-            }
-            if characters[index] == "$", characters[index + 1] == "$" {
-                return index
-            }
-            index += 1
-        }
-        return nil
-    }
-
-    private static func laterDoubleDollarClosing(
-        in characters: [Character],
-        after start: Int
-    ) -> Int? {
-        var index = start
-        while index + 1 < characters.count {
             if characters[index] == "\\" {
                 index += 2
                 continue

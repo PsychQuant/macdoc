@@ -129,6 +129,7 @@ public struct MarkdownToWordConverter: DocumentConverter {
         let extracted = FrontmatterExtractor.extract(from: source)
         let markdown: String
         let mathTokens: [RenderedMarkdownMathToken]
+        let mathPlaceholderSearchPrefix: String?
         if mathMode == .omath {
             let scanned: MarkdownMathScanner.Result
             do {
@@ -143,6 +144,7 @@ public struct MarkdownToWordConverter: DocumentConverter {
                 }
             }
             markdown = scanned.markdown
+            mathPlaceholderSearchPrefix = scanned.placeholderSearchPrefix
             mathTokens = try scanned.tokens.map { token in
                 do {
                     let components = try LaTeXMathParser.parse(token.latex)
@@ -172,13 +174,15 @@ public struct MarkdownToWordConverter: DocumentConverter {
         } else {
             markdown = extracted.body
             mathTokens = []
+            mathPlaceholderSearchPrefix = nil
         }
         var builder = MarkdownWordBuilder(
             options: options,
             baseURL: baseURL,
             sourceName: sourceName,
             frontmatter: extracted.metadata,
-            mathTokens: mathTokens
+            mathTokens: mathTokens,
+            mathPlaceholderSearchPrefix: mathPlaceholderSearchPrefix
         )
         var document = try builder.build(markdown: markdown)
         if !mathTokens.isEmpty {
@@ -287,7 +291,8 @@ private struct MarkdownWordBuilder {
         baseURL: URL?,
         sourceName: String?,
         frontmatter: [String: String],
-        mathTokens: [RenderedMarkdownMathToken]
+        mathTokens: [RenderedMarkdownMathToken],
+        mathPlaceholderSearchPrefix: String?
     ) {
         self.options = options
         self.baseURL = baseURL
@@ -297,9 +302,7 @@ private struct MarkdownWordBuilder {
         self.mathTokensByPlaceholder = Dictionary(
             uniqueKeysWithValues: mathTokens.map { ($0.placeholder, $0) }
         )
-        mathPlaceholderSearchPrefix = mathTokens.isEmpty
-            ? nil
-            : "\u{E000}\(MarkdownMathScanner.defaultMarkerPrefix)"
+        self.mathPlaceholderSearchPrefix = mathPlaceholderSearchPrefix
         maximumMathPlaceholderLength = mathTokens.map(\.placeholder.count).max() ?? 0
     }
 
