@@ -20,12 +20,13 @@ BINARY_NAME="macdoc"
 INSTALL_DIR="${MACDOC_INSTALL_DIR:-$HOME/bin}"   # override for tests
 BINARY="$INSTALL_DIR/$BINARY_NAME"
 REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"'
+CODESIGN_BIN="${MACDOC_CODESIGN_BIN:-/usr/bin/codesign}"
 
 note() { echo "macdoc plugin: $1" >&2; }
 soft_exit() { note "$1"; exit 0; }   # fail-soft: never break session start
 
 verify_binary() {
-    codesign --verify --strict -R "$REQUIREMENT" "$1" 2>/dev/null
+    "$CODESIGN_BIN" --verify --strict -R "$REQUIREMENT" "$1" 2>/dev/null
 }
 
 [ "$(uname -m)" = "arm64" ] || exit 0   # arm64-only release; Intel builds from source (silent — not an error)
@@ -45,31 +46,16 @@ RESIDENT_VERIFIED=false
 if [ -x "$BINARY" ]; then
     if verify_binary "$BINARY"; then
         RESIDENT_VERIFIED=true
-    else
-        note "existing binary failed signature verification — forcing one re-download attempt"
     fi
 fi
 
-# --version with a 5s alarm (a hung/planted binary must not stall every
-# session start — fail-soft covers errors, not hangs; codex V114 HIGH-1).
-# Probe writes to a FILE, not a pipe: a killed probe may leave grandchildren
-# holding an inherited pipe fd, and command substitution would then wait on
-# the pipe far past the alarm (empirically reproduced with a sleep-300 fake).
-# Normalize to the semver token so banner-style output doesn't force a
-# re-download loop (codex V114 M-2).
-HAVE=""
-PROBE=$(mktemp "${TMPDIR:-/tmp}/.macdoc.probe.XXXXXX" 2>/dev/null) || PROBE=""
-if $RESIDENT_VERIFIED && [ -n "$PROBE" ]; then
-    { perl -e 'alarm 5; exec @ARGV' -- "$BINARY" --version </dev/null >"$PROBE" 2>/dev/null; } 2>/dev/null || true
-    HAVE=$(head -1 "$PROBE" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
-    rm -f "$PROBE"
-fi
-$RESIDENT_VERIFIED && [ "$HAVE" = "$WANT" ] && exit 0   # verified fast path: version matches, zero network
-
-# Loop-guard sidecar: if a previous session already installed WANT but the
-# binary self-reports an unparsable/odd version, do not re-download forever.
+# SessionStart never executes the resident binary. Its version comes only from
+# the installer-written sidecar, after the resident bytes pass codesign. This
+# removes the verify-then-exec path-swap window; missing/stale sidecars cause a
+# verified replacement download rather than probing untrusted executable code.
 GUARD="$INSTALL_DIR/.${BINARY_NAME}.installed_version"
-$RESIDENT_VERIFIED && [ "$(cat "$GUARD" 2>/dev/null)" = "$WANT" ] && exit 0
+HAVE=$(tr -d '[:space:]' < "$GUARD" 2>/dev/null || true)
+$RESIDENT_VERIFIED && [ "$HAVE" = "$WANT" ] && exit 0
 
 mkdir -p "$INSTALL_DIR" 2>/dev/null || soft_exit "cannot create $INSTALL_DIR — skipping auto-install"
 TMP=$(mktemp "$INSTALL_DIR/.${BINARY_NAME}.download.XXXXXX" 2>/dev/null) || soft_exit "mktemp failed — skipping auto-install"
@@ -77,7 +63,7 @@ trap 'rm -f "$TMP"' EXIT
 
 URL="https://github.com/$REPO/releases/download/v$WANT/$BINARY_NAME"
 curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP" 2>/dev/null \
-    || soft_exit "download failed for v$WANT (keeping existing ${HAVE:-none}); manual: https://github.com/$REPO/releases"
+    || soft_exit "download failed for v$WANT; resident binary was not executed. Manual: https://github.com/$REPO/releases"
 
 EXPECTED=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/dev/null | head -1 | awk '{print $1}')
 [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] \
