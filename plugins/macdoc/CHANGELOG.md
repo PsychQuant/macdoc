@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.5.1] - 2026-09-01
+
+### Fixed
+
+- SessionStart 在執行常駐 `~/bin/macdoc --version` 或採用 sidecar fast path 前，先以 Developer ID requirement 重驗 binary（PsychQuant/macdoc#161）。簽章不符時不執行該檔，改強制嘗試一次下載；下載失敗仍維持 session fail-soft。
+
+### Tests
+
+- 新增 resident binary 對抗測試：偽造正確版本但 codesign 失敗的 binary 不得被執行；合法且版本相符的 binary 必須先驗簽、再執行版本探測，且維持零網路 fast path。
+
 ## [1.4.0] - 2026-08-19
 
 ### Changed
