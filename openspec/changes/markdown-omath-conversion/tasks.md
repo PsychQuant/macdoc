@@ -59,3 +59,7 @@
 ## 12. Current-main sync verification
 
 - [x] 12.1 Merge current `origin/main`, preserving its OOXML `2.0.0..<4.0.0` range plus the math dependency, and rerun the complete acceptance. Final evidence on 2026-08-24: focused scanner/converter 51/51; compiled CLI 14/14; full MDToWord 140 tests with exactly #155's documented 42 baseline failures; root 31 XCTest + 40 Swift Testing with 0 failures and 4 fixture/environment skips; `spectra validate --strict`, root/nested package describe, and the CRLF-aware diff gate PASS. Verified prerequisite #164 was temporarily overlaid only for the clean root run and then aborted.
+
+## 13. Escaped-dollar recovery complexity
+
+- [x] 13.1 Add a 10,000-repetition `\$x\$` stress regression. RED took 10.849 seconds because every escaped dollar rescanned the remaining paragraph; raw normalized-text recovery now skips backslash-escaped characters in one forward traversal and the same debug test completes in 0.117 seconds with zero tokens and byte-identical literal Markdown.
