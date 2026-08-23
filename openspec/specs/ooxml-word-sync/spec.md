@@ -1291,9 +1291,15 @@ The orchestrator SHALL provide `SyncOrchestrator.bootstrapFromDocx(url:)` that i
 
 #### Scenario: Fresh docx without sidecars
 
-- **GIVEN** `report.docx` exists with no `report.docx.oplog.jsonl` and no `report.docx.snapshot.json`
+- **GIVEN** `report.docx` exists with none of `report.docx.oplog.jsonl`, `report.docx.snapshot.json`, `report.oplog.jsonl`, or `report.snapshot.json`
 - **WHEN** `bootstrapFromDocx(url:)` runs
 - **THEN** sidecars are created with the docx's current state as the snapshot and an empty log; subsequent Swift mutations append to the new log
+
+#### Scenario: Legacy-only sidecars migrate on the next write
+
+- **GIVEN** `report.docx`, `report.oplog.jsonl`, and `report.snapshot.json` exist, while the full-name sidecars are absent
+- **WHEN** `bootstrapFromDocx(url:)` runs and the session subsequently persists sidecar state
+- **THEN** the orchestrator loads the legacy history and snapshot, writes the resulting state only to `report.docx.oplog.jsonl` and `report.docx.snapshot.json`, and neither overwrites nor deletes the legacy files
 
 #### Scenario: Existing sidecars are reused
 
