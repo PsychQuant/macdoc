@@ -29,6 +29,20 @@ final class MarkdownMathScannerTests: XCTestCase {
         }
     }
 
+    func testEscapedDollarRecoveryRemainsBounded() throws {
+        let source = String(repeating: #"\$x\$"#, count: 10_000)
+        let clock = ContinuousClock()
+        var result: MarkdownMathScanner.Result?
+
+        let elapsed = try clock.measure {
+            result = try MarkdownMathScanner().scan(source)
+        }
+
+        XCTAssertEqual(result?.tokens.count, 0)
+        XCTAssertEqual(result?.markdown, source)
+        XCTAssertLessThan(elapsed, .seconds(1))
+    }
+
     func testInlineTokenRecordsBodyKindAndOneBasedLocation() throws {
         let result = try MarkdownMathScanner().scan("First\n\nA $x^2$ B")
 
