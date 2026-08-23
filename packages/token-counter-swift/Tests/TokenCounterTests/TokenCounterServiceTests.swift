@@ -127,6 +127,34 @@ func claudeOnlyRequestDoesNotConstructOpenAIProvider() async throws {
     #expect(resourceProbe.callCount == 0)
 }
 
+@Test("Service cancellation wins over a non-cooperative injected transport")
+func serviceCancellationIsPreserved() async throws {
+    let gate = NonCooperativeTransportGate()
+    let service = try TokenCounterService(
+        anthropicAPIKey: "STUB_KEY",
+        anthropicTransport: NonCooperativeAnthropicTransport(gate: gate)
+    )
+    let operation = Task {
+        try await service.count(
+            text: "cancelled provider request",
+            models: [.claudeSonnet46]
+        )
+    }
+
+    await gate.waitUntilStarted()
+    operation.cancel()
+    await gate.release(Data(#"{"input_tokens":9}"#.utf8))
+
+    do {
+        _ = try await operation.value
+        Issue.record("Expected service cancellation")
+    } catch is CancellationError {
+        // Expected.
+    } catch {
+        Issue.record("Expected CancellationError, got \(error)")
+    }
+}
+
 private enum ServiceStubError: Error, Sendable {
     case providerUnavailable
 }
@@ -174,6 +202,42 @@ private actor ProviderCallLog {
 private struct SuccessfulAnthropicTransport: AnthropicTokenCountTransport {
     func countTokens(request _: AnthropicTokenCountRequest) async throws -> Data {
         Data(#"{"input_tokens":9}"#.utf8)
+    }
+}
+
+private struct NonCooperativeAnthropicTransport: AnthropicTokenCountTransport {
+    let gate: NonCooperativeTransportGate
+
+    func countTokens(request _: AnthropicTokenCountRequest) async throws -> Data {
+        await gate.response()
+    }
+}
+
+private actor NonCooperativeTransportGate {
+    private var started = false
+    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var responseContinuation: CheckedContinuation<Data, Never>?
+
+    func response() async -> Data {
+        started = true
+        let waiters = startedWaiters
+        startedWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        return await withCheckedContinuation { continuation in
+            responseContinuation = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { continuation in
+            startedWaiters.append(continuation)
+        }
+    }
+
+    func release(_ data: Data) {
+        responseContinuation?.resume(returning: data)
+        responseContinuation = nil
     }
 }
 

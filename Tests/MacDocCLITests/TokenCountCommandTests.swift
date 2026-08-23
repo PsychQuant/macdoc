@@ -301,6 +301,44 @@ final class TokenCountCommandTests: XCTestCase {
         }
     }
 
+    func testCancellationBeforePresentationWritesNothing() async throws {
+        let input = try temporaryFile(named: "cancel.txt", data: Data("private".utf8))
+        let directory = input.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("cancelled-output.txt")
+        let gate = NonCooperativeCountGate()
+        let runner = TokenCountCommandRunner(
+            environment: { _ in nil },
+            count: { _, _, _ in await gate.count() }
+        )
+
+        let operation = Task {
+            try await runner.execute(
+                inputURL: input,
+                modelName: "gpt-4o",
+                allowNetwork: false,
+                outputURL: output,
+                stdout: { _ in XCTFail("cancelled command must not write stdout") },
+                stderr: { _ in XCTFail("cancelled command must not announce output") }
+            )
+        }
+        await gate.waitUntilStarted()
+        operation.cancel()
+        await gate.release([
+            TokenCount(model: .gpt4o, tokens: 1, source: .local),
+        ])
+
+        do {
+            try await operation.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected package/CLI cancellation contract.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
     func testInputPathSwapAfterOpenReadsTheAlreadyAuthorizedDescriptor() throws {
         let original = try temporaryFile(named: "source.txt", data: Data("AUTHORIZED".utf8))
         let directory = original.deletingLastPathComponent()
@@ -596,6 +634,34 @@ private actor CountInvocationProbe {
 
     func invocations() -> [Invocation] {
         recorded
+    }
+}
+
+private actor NonCooperativeCountGate {
+    private var started = false
+    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var resultContinuation: CheckedContinuation<[TokenCount], Never>?
+
+    func count() async -> [TokenCount] {
+        started = true
+        let waiters = startedWaiters
+        startedWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        return await withCheckedContinuation { continuation in
+            resultContinuation = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { continuation in
+            startedWaiters.append(continuation)
+        }
+    }
+
+    func release(_ result: [TokenCount]) {
+        resultContinuation?.resume(returning: result)
+        resultContinuation = nil
     }
 }
 

@@ -219,6 +219,41 @@ struct AnthropicTokenCounterTests {
         #expect(BoundedBodyURLProtocol.stopCount >= 1)
     }
 
+    @Test("production callback retains only limit plus one under immediate oversized delivery")
+    func productionCallbackRetentionIsHardBounded() async throws {
+        ImmediateOversizedBodyURLProtocol.reset()
+        let observation = BodyObservationProbe()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ImmediateOversizedBodyURLProtocol.self]
+        let loader = URLSessionAnthropicHTTPDataLoader(
+            session: URLSession(configuration: configuration),
+            bodyObservation: { callbackBytes, retainedBytes in
+                observation.record(
+                    callbackByteCount: callbackBytes,
+                    retainedByteCount: retainedBytes
+                )
+            }
+        )
+
+        do {
+            _ = try await loader.load(
+                URLRequest(url: URL(string: "https://immediate.unit.test/bounded")!),
+                redirectPolicy: .reject,
+                bodyByteLimit: 65_536
+            )
+            Issue.record("Expected immediate oversized response rejection")
+        } catch let error as AnthropicTokenCountError {
+            #expect(error == .responseTooLarge(limit: 65_536))
+        } catch {
+            Issue.record("Expected AnthropicTokenCountError, got \(error)")
+        }
+
+        #expect(ImmediateOversizedBodyURLProtocol.deliveredByteCount == 2_000_000)
+        #expect(observation.maximumCallbackByteCount > 65_537)
+        #expect(observation.maximumRetainedByteCount == 65_537)
+        #expect(ImmediateOversizedBodyURLProtocol.stopCount >= 1)
+    }
+
     @Test("rejects malformed, missing, negative, and non-integer input_tokens")
     func rejectsInvalidTokenCounts() async {
         let invalidPayloads: [(name: String, data: Data)] = [
@@ -519,6 +554,61 @@ private final class BoundedBodyURLProtocolState: @unchecked Sendable {
 
     func recordStop() {
         lock.withLock { stops += 1 }
+    }
+}
+
+private final class ImmediateOversizedBodyURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let state = BoundedBodyURLProtocolState()
+
+    static var deliveredByteCount: Int { state.deliveredByteCount }
+    static var stopCount: Int { state.stopCount }
+    static func reset() { state.reset() }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "immediate.unit.test"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                  url: url,
+                  statusCode: 200,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: ["Content-Type": "application/json"]
+              )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        let body = Data(repeating: 0x41, count: 2_000_000)
+        Self.state.recordDelivery(byteCount: body.count)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {
+        Self.state.recordStop()
+    }
+}
+
+private final class BodyObservationProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var callbackMaximum = 0
+    private var retainedMaximum = 0
+
+    var maximumCallbackByteCount: Int { lock.withLock { callbackMaximum } }
+    var maximumRetainedByteCount: Int { lock.withLock { retainedMaximum } }
+
+    func record(callbackByteCount: Int, retainedByteCount: Int) {
+        lock.withLock {
+            callbackMaximum = max(callbackMaximum, callbackByteCount)
+            retainedMaximum = max(retainedMaximum, retainedByteCount)
+        }
     }
 }
 
