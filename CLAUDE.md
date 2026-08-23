@@ -164,13 +164,12 @@ swift run macdoc config ai detect
 swift run macdoc config ai list
 swift run macdoc config ai set agent claude
 
-# OCR 設定管理（v1.1+：具名 host profile）
+# OCR 設定管理（v1.1+：具名 host profile；供 pdf-to-latex 內部頁級 OCR 使用）
 swift run macdoc config ocr list
 swift run macdoc config ocr add-host kyle localhost:11435  # 例：SSH tunnel 到遠端 Ollama
-swift run macdoc config ocr add-host local localhost:11434
-swift run macdoc config ocr set-default kyle              # 之後 ocr 命令不傳 --host 就用這個
-swift run macdoc config ocr set-model glm-ocr
-# 之後 `macdoc ocr file.pdf` 自動用 kyle profile，--host 也接受 profile 名
+swift run macdoc config ocr set-default kyle
+# 注意：通用文字辨識入口 `macdoc ocr` 已移除（#145），改用 bestocr——
+# 此處設定只影響 pdf-to-latex 管線內部的頁級 OCR
 
 # 建構個別套件
 cd packages/ooxml-swift && swift build
@@ -319,6 +318,33 @@ case .paragraph: // ...
 }
 ```
 
+### Module Naming — repo 帶 `-swift`，module 不帶
+
+**新套件的 target / product / `Sources/` 目錄名一律不加 `Swift` 後綴。** repo 叫
+`foo-to-bar-swift`，module 就叫 `FooToBar`。
+
+這是 Swift 生態系的慣例，不是本 repo 的偏好 —— Apple 自己的套件就是這個形狀：
+
+| Repo | Module |
+|------|--------|
+| `swift-markdown` | `Markdown` |
+| `swift-argument-parser` | `ArgumentParser` |
+| `swift-async-algorithms` | `AsyncAlgorithms` |
+
+repo 名負責標示語言，module 名不必再說一次；在 Swift 檔案裡寫 `import OOXMLSwift`
+是把「Swift」講兩遍。本 repo 的 29 個 target 已有 20 個是這個形狀（`HTMLToMD`、
+`PDFToDOCX`、`NoteToPDF`、`BibAPAToHTML`…），所以這是把既有多數寫下來，不是新規定。
+
+**既有的 9 個帶後綴者不做大掃除。** 改 module 名是對每個 consumer 的 breaking change
+（所有 `import` 都要跟著改），成本與消費者數量成正比：
+
+| 類別 | 例 | 消費者 | 何時改 |
+|------|-----|--------|--------|
+| Converter，只有 macdoc 用 | `WordToMDSwift` → `WordToMD`（**已完成**，word-to-md-swift 1.0.0） | 少數 | 該套件本來就要發 breaking release 時順手 |
+| 廣用函式庫 | `OOXMLSwift` | 25+ 套件跨 3 repo | **不改** —— 為了美觀發一輪全圖 major bump 不划算 |
+
+判準是「這次改名有沒有搭上一班本來就要開的車」。沒有就別發車。
+
 ### Protocol-Based Extensibility
 - `DocumentConverter` - 文件轉換協議
 - `ImageClassifier` - 圖片分類協議
@@ -376,10 +402,11 @@ swift build
 ### macdoc
 - `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
 - `Sources/MacDocCLI/MacDoc+Docx.swift` - `macdoc docx ...` 子命令（apply / plan / verify / diff —— manifest-driven .docx edit workflows，per openspec change `macdoc-docx-workflow-cli`，library 在 `packages/docx-workflow-swift`）
+- `Sources/MacDocCLI/MacDoc+Word+Render.swift` - `macdoc word render <script.mdocx.swift|.mdocx> --to-docx <out> [--verify-against <ref.docx>] [--force]`（腳本 → docx；`word reverse` 的反向半邊，補實 `mdocx-grammar` 早已具名卻從未實作的命令）。與 che-word-mcp 的 `execute_script` **呼叫同一個** shared entry point（ooxml-swift `Transcode/ScriptPipelineExecute.swift` 的 `scriptPipelineExecute`，v2.1.0 起），兩面因此由結構保證一致而非靠慣例。**`--verify-against` 是 opt-in**：不給就不驗、也不印任何驗證結論——沉默永遠不等於通過；給了則不符時 exit 非零並列出不符的 part。ordering contract：參考檔在**任何寫入之前**先讀進記憶體，因此 `--to-docx` 與 `--verify-against` 指向同一路徑時比對的是寫入前的位元組，不會自我比對出假通過。
 - `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force] [--coverage] [--paragraphs-only] [--slot name=paraId]…`（docx → `.mdocx.swift` 腳本反向轉換；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）。**預設 full-fidelity**（format-alignment-engine Phase C #130）：全 parts 騎在腳本上（raw channel byte-equal floor）+ typed DSL 升級（`ReverseExtractor` 的 trial-rebuild byte-equal gate 通過才升級，涵蓋 run rPr / paragraph pPr / sections / canonical tables 五層）；執行腳本重建出 Stage B byte-equal 的 docx。**真實 Word 文件的 document.xml 現在會升級**（word-canonical-forms #131，ooxml-swift v1.4.0）：新增 Word-canonical 詞彙（root namespace 雲、rsid 家族、`xml:space`、inline passthrough markers（bookmark/proofErr）、pPr/rPr 長尾、docGrid/section-type/pgSz、CRLF prolog）後，`90_template_ja.docx`（JPA 日文學術 template）的 document.xml 由 0% 升到 **per-part 100%**（aggregate 53.5%，餘量為尚無 typed 表示的 sibling parts）。`--paragraphs-only` 退回舊的段落 text+styleId 反向（無 byte-equal 保證）；有 oplog sidecar 時仍優先匯出現況 log。`--coverage` 印出 dual-track 覆蓋率報告：每個 part 的 DSL/raw split + aggregate %（DSL 份額 = byte-equal 證明過的 typed 重建；raw = 逐字搬運；基線數字見 [docs/format-alignment-baselines.md](docs/format-alignment-baselines.md)）。`--slot name=paraId`（可重複，Phase D + #131）：指定段落的文字成為腳本的 Swift 函式參數；**DSL-spellable 段落**走 script-text 參數，**raw-form 格式化段落**（真實 template 常見）走 op-level 替換（`// @slot` directive + 替換 `setRuns` run text），兩者都 strict mode 明確指定、不推斷；無 slot 時腳本逐字重建 byte-equal。**能拼寫 ≠ 理解渲染效果**（render-effect-semantics 第三層）：typed 欄位對排版的實際效果由 [docs/render-effect-registry.md](docs/render-effect-registry.md) 台帳記錄——每條 entry 須經 gated perturbation probe（`RUN_WORD_INTEGRATION=1 swift test --filter RenderEffectProbeTests`，真實 Word 渲染 + PDFKit 幾何量測）驗證方標 `verified`（no probe, no claim）；slot 換內容另有渲染驗收（RealTemplateUpgradeTests scenario (d)：頁數/頁框/被替換頁行距結構不變、未動頁 pixel-equal）
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
-- `Sources/MacDocCLI/MacDoc+OCR.swift` - OCR 子命令（top-level `macdoc ocr`，單檔 GLM-OCR）
+- `Sources/MacDocCLI/MacDoc+OCR.swift` - deprecation shim（#145）：`macdoc ocr` 已移除，印遷移訊息指向 bestocr 並以 exit 2 結束。通用文字辨識歸 PsychQuant/bestOCR 單點；pdf-to-latex 內部頁級 OCR（PageOCRRunner）不受影響，其委派屬第二期（bestOCR#55 介面定案後）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
 
@@ -403,7 +430,7 @@ swift build
 - `Sources/CommonConverterSwift/Protocols/StreamingOutput.swift` - 串流輸出 protocol
 
 ### word-to-md-swift
-- `Sources/WordToMDSwift/WordConverter.swift` - Word → Markdown 轉換器
+- `Sources/WordToMD/WordConverter.swift` - Word → Markdown 轉換器（module 於 1.0.0 由 `WordToMDSwift` 更名）
 
 ### ooxml-swift
 - `Sources/OOXMLSwift/IO/DocxReader.swift` - Word 文件讀取

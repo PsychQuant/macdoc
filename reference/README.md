@@ -23,7 +23,7 @@ git clone --depth 1 https://github.com/genspark-ai/genoffice.git   # 43M,只讀 
 | `python-docx/` | git repo | https://github.com/python-openxml/python-docx | Python + lxml 的 OOXML 函式庫。**典範:tree-backed wrapper**——每個 `Document` / `Paragraph` / `Run` 包一個 lxml `_Element`,typed accessor 讀寫該 element。`word-aligned-state-sync` 的 Phase 1 (typed views as tree projections) 直接對照它。詳見 `docs/docx-libraries-comparison.md` |
 | `mlx-swift-lm/` | git repo | https://github.com/ml-explore/mlx-swift-lm | Apple MLX Swift LLM runtime。`pdf-to-latex-swift` Phase 1 的 local GLM-OCR backend 用它載模型 |
 | `pandoc/` | git repo | https://github.com/jgm/pandoc | Haskell 文件轉換工具。macdoc 不依賴 pandoc,純粹參考它怎麼處理邊界情況(複雜 table、field、footnote 跨段落) |
-| `genoffice/` | git repo (shallow) | https://github.com/genspark-ai/genoffice | Genspark 的 AI-native office suite(Electron GUI)。**不是競品**——它沒有 MCP / CLI / public API,AI 綁自家雲端帳號;但 `packages/` 下的 engine 是純 TS、無 Electron 依賴,是**唯一同時涵蓋 docx + xlsx + pptx + pdf 的現代開源對照組**。看三件事:xlsx 缺口、patch-narrowly round-trip、pptx 功能廣度。Apache-2.0(`ee/` 另授權) |
+| `genoffice/` | git repo (shallow) | https://github.com/genspark-ai/genoffice | Genspark 的 AI-native office suite(Electron GUI)。**不是競品**——它沒有 MCP / CLI / public API,AI 綁自家雲端帳號;但 `packages/` 下的 engine 是純 TS、無 Electron 依賴,是**唯一同時涵蓋 docx + xlsx + pptx + pdf 的現代開源對照組**。看三件事:xlsx 缺口、patch-narrowly round-trip、pptx 功能廣度。深入分析見 `docs/genoffice-roundtrip-comparison.md`。Apache-2.0(`ee/` 另授權) |
 | `swift-argument-parser/` | git repo | https://github.com/apple/swift-argument-parser | Apple 官方 CLI 解析器。`macdoc` CLI 已是使用者,這裡留一份方便查 source-level 行為(尤其是 subcommand dispatch、ExitCode) |
 | `textutil-manpage.txt` | 單檔 | [textutil(1) macOS man page](https://ss64.com/mac/textutil.html) | macOS 內建 `textutil` 的 manual。`macdoc convert` 的 CLI 語法對齊 textutil(見 `.claude/rules/cli-design/textutil-compat.md`),改 CLI 前對一下 |
 
@@ -71,6 +71,10 @@ git clone --depth 1 https://github.com/genspark-ai/genoffice.git   # 43M,只讀 
 
 ### genoffice → xlsx 缺口 / patch-narrowly round-trip / pptx 功能廣度
 
+> **深入分析已完成**:round-trip 機制的逐檔閱讀(含 byte 保證邊界表、詞彙退化模式、三方對照)見
+> [`docs/genoffice-roundtrip-comparison.md`](../docs/genoffice-roundtrip-comparison.md)(#143 產物,
+> pin 在 snapshot `4da673d`)。本節的「對照點 2」為其入口摘要。
+
 先講清楚定位,免得誤判:genoffice 是**桌面 GUI 套裝軟體**(Electron,五個 app 共用 engine 層),macdoc 是 CLI + MCP 的管線工具,兩者不是同一個品類,也不互相取代。它沒有 MCP server、沒有 public API、沒有自動化 CLI,AI 走 Genspark 帳號的雲端(本機不存 API key)。
 
 **真正有參考價值的是 `packages/` 那層**——官方描述為「All pure TypeScript, no Electron dependency」,可以完全脫離 GUI 單獨閱讀。這是目前少見的、同時涵蓋 docx + xlsx + pptx + pdf 四種格式的現代開源實作。
@@ -87,7 +91,7 @@ macdoc 有 word / pptx / keynote / pdf,沒有 Excel。genoffice 的做法是 UI 
 
 **2. patch-narrowly / byte-preserving round-trip——跟 `ooxml-swift` op log 同目標、不同解法**
 
-genoffice 的 docx 存檔只重新產生被改動的段落,未觸碰的 block 保留原始 bytes,其餘 zip entry 逐 byte 複製。目的跟 `word-aligned-state-sync` 的 op log 一樣(存檔不破壞 Word 版面),但走的是「差異化重生」而非「op 重放」。
+genoffice 的 docx 存檔只重新產生被改動的段落,未觸碰的 block 保留原始 bytes,其餘 zip entry 逐 byte 複製(**解壓後內容層**;檔案級 bytes 因全檔重打包與 core.xml 更新幾乎必變,詳見 `docs/genoffice-roundtrip-comparison.md` §1-§2)。目的跟 `word-aligned-state-sync` 的 op log 一樣(存檔不破壞 Word 版面),但走的是「差異化重生」而非「op 重放」。
 - `genoffice/packages/docx-engine/src/patch.ts` — 核心 patch 邏輯
 - `genoffice/packages/docx-engine/src/text-patch.ts` — 文字層級的窄幅修改
 - `genoffice/packages/docx-engine/src/parse.ts` / `scan.ts` — 解析與掃描(patch 的前置)
