@@ -109,7 +109,8 @@ struct MarkdownMathScanner {
 
                 let rawCandidates = Self.inlineCandidates(
                     in: characters,
-                    range: sourceRange
+                    range: sourceRange,
+                    respectBackslashEscapes: true
                 )
                 for candidate in rawCandidates.reversed()
                     where needed[candidate.signature, default: 0] > 0 {
@@ -254,12 +255,17 @@ struct MarkdownMathScanner {
 
         private static func inlineCandidates(
             in characters: [Character],
-            range: Range<Int>? = nil
+            range: Range<Int>? = nil,
+            respectBackslashEscapes: Bool = false
         ) -> [(range: Range<Int>, signature: String)] {
             let bounds = range ?? characters.startIndex..<characters.endIndex
             var result: [(range: Range<Int>, signature: String)] = []
             var index = bounds.lowerBound
             while index < bounds.upperBound {
+                if respectBackslashEscapes, characters[index] == "\\" {
+                    index = min(index + 2, bounds.upperBound)
+                    continue
+                }
                 guard characters[index] == "$" else {
                     index += 1
                     continue

@@ -85,6 +85,12 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **THEN** source eligibility visits the line suffix a bounded number of times
 - **AND** conversion time does not grow quadratically with the number of prefixes
 
+#### Scenario: Escaped dollar recovery remains bounded
+
+- **WHEN** one paragraph contains 10,000 repetitions of the literal escaped spelling `\$x\$`
+- **THEN** no math token is produced and the source remains literal
+- **AND** raw normalized-text recovery completes within the linear performance budget
+
 #### Scenario: Visible text after invalid reference-like syntax remains eligible
 
 - **WHEN** a line beginning with reference-like or title-like syntax is parsed by CommonMark as visible text containing `$x$`
