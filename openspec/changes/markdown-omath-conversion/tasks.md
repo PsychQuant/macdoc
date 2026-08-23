@@ -55,3 +55,7 @@
 
 - [x] 11.1 Add exact RED regressions for an unquoted attribute value containing forbidden `=`, missing whitespace between attributes, and 10,000 unterminated `<a` prefixes. Frozen R6 evidence: both invalid openings produce 0 OMath with literal `$x$`, while the scanner takes 2.925 seconds on the malformed-prefix case.
 - [x] 11.2 Match the complete CommonMark opening-tag attribute grammar before masking visible text and advance to a discovered physical-line boundary after an unterminated candidate. GREEN evidence: the two correctness regressions produce one token each, the valid `foo=?` control remains opaque, and the 10,000-prefix scanner case falls from 2.925 seconds to 0.017 seconds in debug and 0.003 seconds in release. Focused scanner/converter 51/51, compiled CLI 14/14, root 59 total with 0 failures and 3 environment skips, and package 140 total with exactly the documented 42 baseline failures.
+
+## 12. Current-main sync verification
+
+- [x] 12.1 Merge current `origin/main`, preserving its OOXML `2.0.0..<4.0.0` range plus the math dependency, and rerun the complete acceptance. Final evidence on 2026-08-24: focused scanner/converter 51/51; compiled CLI 14/14; full MDToWord 140 tests with exactly #155's documented 42 baseline failures; root 31 XCTest + 40 Swift Testing with 0 failures and 4 fixture/environment skips; `spectra validate --strict`, root/nested package describe, and the CRLF-aware diff gate PASS. Verified prerequisite #164 was temporarily overlaid only for the clean root run and then aborted.
