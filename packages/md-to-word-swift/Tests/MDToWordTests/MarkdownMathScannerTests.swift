@@ -56,17 +56,23 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertLessThan(elapsed, .seconds(1))
     }
 
-    func testPublicMarkerPrefixLookupRemainsBounded() {
+    func testPublicMarkerPrefixLookupRemainsBounded() throws {
         let publicPrefix = MarkdownMathScanner.defaultMarkerPrefix
-        let placeholder = "\u{E000}\(publicPrefix)FIXED0TOKEN\u{E000}"
-        let token = RenderedMarkdownMathToken(
-            placeholder: placeholder,
-            omml: "<m:r/>",
-            kind: .inline,
-            line: 1,
-            column: 1
-        )
+        let scanned = try MarkdownMathScanner(markerNonce: "FIXED").scan("$x$ and $y$")
+        let tokens = Dictionary(uniqueKeysWithValues: scanned.tokens.map { token in
+            (
+                token.placeholder,
+                RenderedMarkdownMathToken(
+                    placeholder: token.placeholder,
+                    omml: "<m:r/>",
+                    kind: token.kind,
+                    line: token.line,
+                    column: token.column
+                )
+            )
+        })
         let text = String(repeating: publicPrefix, count: 10_000)
+        let searchPrefix = scanned.placeholderSearchPrefix
         let clock = ContinuousClock()
         var match: (range: Range<String.Index>, token: RenderedMarkdownMathToken)? = nil
 
@@ -74,12 +80,14 @@ final class MarkdownMathScannerTests: XCTestCase {
             match = MarkdownInlineMathMatcher.nextMatch(
                 in: text,
                 from: text.startIndex,
-                tokensByPlaceholder: [placeholder: token],
-                searchPrefix: "\u{E000}\(publicPrefix)",
-                maximumPlaceholderLength: placeholder.count
+                tokensByPlaceholder: tokens,
+                searchPrefix: searchPrefix,
+                maximumPlaceholderLength: tokens.keys.map(\.count).max() ?? 0
             )
         }
 
+        XCTAssertTrue(try XCTUnwrap(searchPrefix).contains("FIXED"))
+        XCTAssertFalse(try XCTUnwrap(searchPrefix).contains("0TOKEN"))
         XCTAssertNil(match)
         XCTAssertLessThan(elapsed, .seconds(1))
     }
@@ -161,6 +169,17 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertEqual(result.markdown, source)
     }
 
+    func testUnmatchedDisplayDoesNotConsumeLaterCompleteDisplay() throws {
+        let source = "Unmatched $$ here\n\n$$x$$\n"
+        let result = try MarkdownMathScanner().scan(source)
+
+        XCTAssertEqual(result.tokens.count, 1)
+        XCTAssertEqual(result.tokens[0].kind, .display)
+        XCTAssertEqual(result.tokens[0].latex, "x")
+        XCTAssertTrue(result.markdown.hasPrefix("Unmatched $$ here\n\n"))
+        XCTAssertTrue(result.markdown.contains(result.tokens[0].placeholder))
+    }
+
     func testDisplayDelimiterMixedWithTextIsRejected() {
         XCTAssertThrowsError(try MarkdownMathScanner().scan("before $$x$$ after")) { error in
             XCTAssertEqual(
@@ -194,7 +213,10 @@ final class MarkdownMathScannerTests: XCTestCase {
         ]
 
         for testCase in rejected {
-            XCTAssertThrowsError(try MarkdownMathScanner().scan(testCase.source)) { error in
+            XCTAssertThrowsError(
+                try MarkdownMathScanner().scan(testCase.source),
+                "Source: \(testCase.source)"
+            ) { error in
                 XCTAssertEqual(
                     error as? MarkdownMathScanner.ScanError,
                     .misplacedDisplayFormula(line: testCase.line, column: testCase.column),
