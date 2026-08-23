@@ -26,7 +26,7 @@ In `.omath` mode, the converter SHALL recognize inline math only from a pair of 
 
 The converter SHALL derive formula-eligible ranges from the original CommonMark tree before replacing source text. Inline formulas SHALL fit within one eligible original `Text` range. Display formulas SHALL fit within one eligible original `Paragraph` range whose inline descendants are limited to text and line breaks. Code, HTML, autolink, link/reference/image destinations, reference metadata, and delimiters split across formatting nodes SHALL remain non-math content. Source-range indexing, collision indexing, and replacement SHALL use a bounded number of linear passes over source characters. A placeholder SHALL be selected only after confirming that its numeric suffix does not occur in caller input.
 
-Every generated placeholder SHALL be consumed exactly once by an allowed visible inline or display carrier. A placeholder that is absent, repeated, or present in HTML, metadata, a relationship target, or any other non-carrier location SHALL cause conversion to fail before destination replacement.
+Every generated placeholder SHALL be consumed exactly once by an allowed visible inline or display carrier. When no formula token exists, ordinary text SHALL bypass placeholder lookup. When tokens exist, matching SHALL use the complete private sentinel and generated nonce prefix with a bounded maximum placeholder length; caller text containing only the public marker prefix SHALL remain literal in linear time. A placeholder that is absent, repeated, or present in HTML, metadata, a relationship target, or any other non-carrier location SHALL cause conversion to fail before destination replacement.
 
 #### Scenario: Inline recognition boundary table
 
@@ -90,6 +90,18 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **WHEN** one paragraph contains 10,000 repetitions of the literal escaped spelling `\$x\$`
 - **THEN** no math token is produced and the source remains literal
 - **AND** raw normalized-text recovery completes within the linear performance budget
+
+#### Scenario: Even-backslash normalized recovery remains bounded
+
+- **WHEN** one paragraph contains 10,000 repetitions of the unescaped even-backslash spelling `\\$x\\$`
+- **THEN** candidate discovery preserves the unescaped-dollar semantics
+- **AND** normalized and raw recovery complete within the linear performance budget
+
+#### Scenario: Public marker-prefix lookup remains bounded
+
+- **WHEN** visible text contains 10,000 repetitions of `MDTOWORDMATHPLACEHOLDER` that are not generated placeholders
+- **THEN** the text remains literal
+- **AND** renderer lookup completes within the linear performance budget
 
 #### Scenario: Visible text after invalid reference-like syntax remains eligible
 

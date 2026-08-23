@@ -14,6 +14,47 @@ struct RenderedMarkdownMathToken {
     let column: Int
 }
 
+enum MarkdownInlineMathMatcher {
+    static func nextMatch(
+        in text: String,
+        from cursor: String.Index,
+        tokensByPlaceholder: [String: RenderedMarkdownMathToken],
+        searchPrefix: String?,
+        maximumPlaceholderLength: Int
+    ) -> (range: Range<String.Index>, token: RenderedMarkdownMathToken)? {
+        guard !tokensByPlaceholder.isEmpty,
+              let searchPrefix,
+              maximumPlaceholderLength > 0 else {
+            return nil
+        }
+
+        var searchStart = cursor
+        while searchStart < text.endIndex,
+              let prefixRange = text.range(
+                  of: searchPrefix,
+                  range: searchStart..<text.endIndex
+              ) {
+            let boundedEnd = text.index(
+                prefixRange.lowerBound,
+                offsetBy: maximumPlaceholderLength,
+                limitedBy: text.endIndex
+            ) ?? text.endIndex
+            if let closingSentinel = text.range(
+                of: "\u{E000}",
+                range: prefixRange.upperBound..<boundedEnd
+            ) {
+                let range = prefixRange.lowerBound..<closingSentinel.upperBound
+                let candidate = String(text[range])
+                if let token = tokensByPlaceholder[candidate], token.kind == .inline {
+                    return (range, token)
+                }
+            }
+            searchStart = prefixRange.upperBound
+        }
+        return nil
+    }
+}
+
 enum MarkdownMathConsumptionValidator {
     static func validate(
         tokens: [RenderedMarkdownMathToken],
@@ -236,6 +277,8 @@ private struct MarkdownWordBuilder {
     private let frontmatter: [String: String]
     private let mathTokens: [RenderedMarkdownMathToken]
     private let mathTokensByPlaceholder: [String: RenderedMarkdownMathToken]
+    private let mathPlaceholderSearchPrefix: String?
+    private let maximumMathPlaceholderLength: Int
     private var consumedMathPlaceholders: [String: Int] = [:]
     private var inferredTitle = false
 
@@ -254,6 +297,10 @@ private struct MarkdownWordBuilder {
         self.mathTokensByPlaceholder = Dictionary(
             uniqueKeysWithValues: mathTokens.map { ($0.placeholder, $0) }
         )
+        mathPlaceholderSearchPrefix = mathTokens.isEmpty
+            ? nil
+            : "\u{E000}\(MarkdownMathScanner.defaultMarkerPrefix)"
+        maximumMathPlaceholderLength = mathTokens.map(\.placeholder.count).max() ?? 0
     }
 
     mutating func build(markdown: String) throws -> WordDocument {
@@ -807,6 +854,10 @@ private struct MarkdownWordBuilder {
         into runs: inout [Run],
         properties: RunProperties
     ) {
+        guard !mathTokensByPlaceholder.isEmpty else {
+            runs.append(Run(text: text, properties: properties))
+            return
+        }
         var cursor = text.startIndex
         while cursor < text.endIndex {
             guard let match = nextInlineMathMatch(in: text, from: cursor) else {
@@ -831,34 +882,13 @@ private struct MarkdownWordBuilder {
         in text: String,
         from cursor: String.Index
     ) -> (range: Range<String.Index>, token: RenderedMarkdownMathToken)? {
-        var searchStart = cursor
-        while searchStart < text.endIndex,
-              let prefixRange = text.range(
-                  of: MarkdownMathScanner.defaultMarkerPrefix,
-                  range: searchStart..<text.endIndex
-              ) {
-            if let suffixRange = text.range(
-                of: "TOKEN",
-                range: prefixRange.upperBound..<text.endIndex
-            ) {
-                var lowerBound = prefixRange.lowerBound
-                var upperBound = suffixRange.upperBound
-                if lowerBound > text.startIndex {
-                    let preceding = text.index(before: lowerBound)
-                    if text[preceding] == "\u{E000}" { lowerBound = preceding }
-                }
-                if upperBound < text.endIndex, text[upperBound] == "\u{E000}" {
-                    upperBound = text.index(after: upperBound)
-                }
-                let range = lowerBound..<upperBound
-                let candidate = String(text[range])
-                if let token = mathTokensByPlaceholder[candidate], token.kind == .inline {
-                    return (range, token)
-                }
-            }
-            searchStart = prefixRange.upperBound
-        }
-        return nil
+        MarkdownInlineMathMatcher.nextMatch(
+            in: text,
+            from: cursor,
+            tokensByPlaceholder: mathTokensByPlaceholder,
+            searchPrefix: mathPlaceholderSearchPrefix,
+            maximumPlaceholderLength: maximumMathPlaceholderLength
+        )
     }
 
     private func displayToken(in children: [Markup]) -> RenderedMarkdownMathToken? {
