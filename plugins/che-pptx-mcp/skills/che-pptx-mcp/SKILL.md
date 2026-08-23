@@ -14,7 +14,28 @@ Use the Swift-native PresentationML server for `.pptx` work without launching Po
 | Inspect one file | Direct, read-only | `source_path` |
 | Create or edit | Session | `doc_id` after `create_presentation` or `open_presentation` |
 
-All `slide_index`, row, and column indices are zero-based. Shape edits use the `shape_id` returned by `get_slide_shapes`. Geometry parameters are raw EMU integers; centimetre helpers are not shipped yet.
+All `slide_index`, row, and column indices are zero-based. Use `get_slide_shapes` to discover IDs. `update_shape_text`, `set_shape_position`, `set_shape_size`, and `set_shape_fill` accept only entries reported as `Shape`, not picture/table/group IDs; use image or table tools for those elements. Geometry parameters are raw EMU integers; centimetre helpers are not shipped yet.
+
+## Read without opening a session
+
+```text
+get_presentation_info(source_path: "/in/deck.pptx")
+get_slide_count(source_path: "/in/deck.pptx")
+get_slide_text(source_path: "/in/deck.pptx", slide_index: 0)
+```
+
+Direct mode is read-only. Open a session before any mutation.
+
+## Create a presentation
+
+```text
+1. create_presentation(doc_id: "deck")
+2. add_slide(doc_id: "deck")
+3. insert_text_shape(doc_id: "deck", slide_index: 0, text: "Title",
+                     x: 720000, y: 720000, width: 7200000, height: 900000)
+4. save_presentation(doc_id: "deck", path: "/out/new-deck.pptx")
+5. close_presentation(doc_id: "deck")
+```
 
 ## Edit an existing presentation
 
@@ -27,12 +48,13 @@ All `slide_index`, row, and column indices are zero-based. Shape edits use the `
 5. close_presentation(doc_id: "deck")
 ```
 
-Edits stay in memory until `save_presentation` unless the session was opened with `autosave: true`. Use a different output path to preserve the source.
+Edits stay in memory until `save_presentation` unless the session was opened with `autosave: true`. Use `autosave: false` and a different output path to preserve the source; autosave writes edits back to the opened path.
 
 ## Common tools
 
 | Task | Tools |
 |---|---|
+| Sessions | `create_presentation`, `open_presentation`, `save_presentation`, `close_presentation`, `list_open_presentations` |
 | Inspect | `get_presentation_info`, `get_slide_count`, `get_text`, `get_slide_text`, `get_slide_shapes`, `get_shape_text`, `search_text` |
 | Slides | `add_slide`, `delete_slide`, `duplicate_slide`, `reorder_slides` |
 | Shapes | `insert_text_shape`, `update_shape_text`, `delete_shape`, `set_shape_position`, `set_shape_size`, `set_shape_fill` |
@@ -54,5 +76,5 @@ Read tools accept either `source_path` or `doc_id` when their schema offers both
 
 - Editing with `source_path`: open a session first.
 - Treating the second slide as index 2: use `slide_index: 1`.
-- Guessing a shape ID: call `get_slide_shapes` and use its returned ID.
+- Guessing a shape ID or its element kind: call `get_slide_shapes`; use Shape-only editors only on entries marked `Shape`.
 - Closing before saving: save the intended output path, then close.

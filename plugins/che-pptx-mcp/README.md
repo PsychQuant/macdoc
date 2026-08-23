@@ -13,7 +13,7 @@ claude plugin install che-pptx-mcp@macdoc
 
 安裝後可由 `che-pptx-mcp` skill 取得具名工具流程、Direct／Session 模式、索引與 EMU 慣例：
 
-`plugins/che-pptx-mcp/skills/che-pptx-mcp/SKILL.md`
+[`skills/che-pptx-mcp/SKILL.md`](skills/che-pptx-mcp/SKILL.md)
 
 目前可讀寫 slides、shapes、tables、images、notes、theme，並匯出 Markdown。尚未提供 PDF 匯出、投影片 render／PNG preview 或 cm 幾何工具；`export_image` 只匯出簡報內嵌圖片，不是投影片預覽。
 
