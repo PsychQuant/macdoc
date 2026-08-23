@@ -55,7 +55,11 @@ code:
 ---
 ### Requirement: Script execution rebuilds with verifiable byte equality
 
-che-word-mcp SHALL provide an `execute_script` tool that parses a `.mdocx.swift` script (ScriptImporter), replays it onto an empty authoring document, and writes the rebuilt docx to the caller-supplied output path. When the caller passes a reference docx path, the tool SHALL verify Stage-B byte equality of the rebuilt XML part set against the reference and return the verdict; on a false verdict the response SHALL name the broken parts. Script parse failures SHALL surface as MCP tool errors with the transcoder's location-bearing reason.
+che-word-mcp SHALL provide an `execute_script` tool that rebuilds a docx from a `.mdocx.swift` script by calling the shared transcode execution entry point defined in `ooxml-script-transcode`. The tool SHALL NOT reimplement the orchestration — parsing, replay, package writing, and part comparison all belong to that shared entry point, which is the same code the `macdoc word render` CLI command calls.
+
+When the caller passes a reference docx path, the tool SHALL verify Stage-B byte equality of the rebuilt XML part set against the reference and return the verdict; on a false verdict the response SHALL name the broken parts. When the caller passes no reference, the response SHALL omit the verdict fields rather than report an empty broken-parts list. Script parse failures SHALL surface as MCP tool errors with the transcoder's location-bearing reason.
+
+The MCP tool name `execute_script` and the CLI command name `macdoc word render` designate the same operation on two faces. The names differ because the MCP tool name is an established part of a published tool schema; the CLI name is the one already fixed by `mdocx-grammar`.
 
 #### Scenario: Rebuild verifies byte-equal against the reference
 
@@ -69,14 +73,39 @@ che-word-mcp SHALL provide an `execute_script` tool that parses a `.mdocx.swift`
 - **WHEN** `execute_script` runs
 - **THEN** the rebuilt docx carries the new text at the designated position and every non-slot XML part remains byte-equal to the reference
 
+#### Scenario: Response shape is unchanged by the move to the shared entry point
+
+- **GIVEN** any inputs accepted by `execute_script` before the orchestration was promoted to the shared transcode module
+- **WHEN** `execute_script` runs on those inputs
+- **THEN** the response carries the same fields and values as before the promotion
+- **AND** the verdict fields remain absent when no reference is supplied
+
+#### Scenario: CLI and MCP faces agree on the same script
+
+- **GIVEN** one rebuild script and one reference document
+- **WHEN** `execute_script` runs and `macdoc word render` runs on the same script with the same reference
+- **THEN** both report the same verification verdict and the same set of differing parts
+
 
 <!-- @trace
-source: che-word-mcp-script-pipeline-parity
-updated: 2026-07-16
+source: script-pipeline-surface
+updated: 2026-08-19
 code:
-  - mcp/che-word-mcp/Sources/CheWordMCP/ScriptPipelineTools.swift
-  - mcp/che-word-mcp/Sources/CheWordMCP/Server.swift
-  - mcp/che-word-mcp/Tests/CheWordMCPTests/ScriptPipelineParityTests.swift
+  - .agents/skills/spectra-analyze/SKILL.md
+  - .agents/skills/spectra-commit/SKILL.md
+  - .agents/skills/spectra-propose/SKILL.md
+  - .agents/skills/spectra-apply/SKILL.md
+  - .agents/skills/spectra-ask/SKILL.md
+  - .agents/skills/spectra-debug/SKILL.md
+  - .agents/skills/spectra-drift/SKILL.md
+  - mcp/che-keynote-mcp/
+  - .agents/skills/spectra-audit/SKILL.md
+  - .agents/skills/spectra-discuss/SKILL.md
+  - .codex/hooks.json
+  - .agents/skills/spectra-verify/SKILL.md
+  - .agents/skills/spectra-archive/SKILL.md
+  - .agents/skills/umbrella-open/SKILL.md
+  - .agents/skills/spectra-ingest/SKILL.md
 -->
 
 ---
