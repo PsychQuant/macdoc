@@ -79,6 +79,11 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **THEN** `.omath` mode converts `$x$` to one inline OMath carrier
 - **AND** the visible angle-bracket text remains present without a generated placeholder
 
+#### Scenario: Unmatched display delimiter does not consume a later formula
+
+- **WHEN** visible literal text contains unmatched `$$` followed by a separate complete `$$x$$` display paragraph
+- **THEN** the first delimiter remains literal and the later paragraph becomes one display token
+
 #### Scenario: Unterminated HTML-like prefixes remain bounded
 
 - **WHEN** one physical line contains many `<tag` prefixes without a closing `>`
@@ -149,7 +154,7 @@ Every recognized formula SHALL be parsed by `LaTeXMathParser.parse(_:)` from `la
 
 ### Requirement: Inline and display math use native Word carriers
 
-An inline formula SHALL serialize as one direct paragraph child `<m:oMath>` containing the parsed OMML components. A display formula SHALL serialize as one direct paragraph child `<m:oMathPara>` containing one `<m:oMath>` and SHALL NOT generate a synthetic `<w:t>` run for the formula. Generated XML containing either carrier SHALL bind prefix `m` to `http://schemas.openxmlformats.org/officeDocument/2006/math`.
+An inline formula in ordinary paragraph text SHALL serialize as one direct paragraph child `<m:oMath>` containing the parsed OMML components. An inline formula in a Markdown link label SHALL serialize as one direct `<m:oMath>` child of that paragraph's `<w:hyperlink>` carrier and SHALL remain associated with the original relationship target. A display formula SHALL serialize as one direct paragraph child `<m:oMathPara>` containing one `<m:oMath>` and SHALL NOT generate a synthetic `<w:t>` run for the formula. No inline OMath SHALL be wrapped in `<w:r>`. Generated XML containing either carrier SHALL bind prefix `m` to `http://schemas.openxmlformats.org/officeDocument/2006/math`.
 
 #### Scenario: Mixed text and inline formula preserve source order
 
@@ -162,6 +167,12 @@ An inline formula SHALL serialize as one direct paragraph child `<m:oMath>` cont
 - **GIVEN** source `Before $x^2$ after`
 - **WHEN** it is converted in `.omath` mode
 - **THEN** the paragraph child sequence is `w:r`, `m:oMath`, `w:r`
+
+#### Scenario: Link-label inline carrier
+
+- **WHEN** `.omath` conversion receives `[$x$](https://example.com/math)`
+- **THEN** the paragraph contains `<w:hyperlink>` with one direct `<m:oMath>` child
+- **AND** the relationship target remains `https://example.com/math`
 
 #### Scenario: Display formula uses oMathPara
 
