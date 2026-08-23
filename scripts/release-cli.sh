@@ -42,12 +42,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 echo "→ [0/7] pre-flight: notary profile alive?"
 xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 \
     || { echo "error: notary profile '$NOTARY_PROFILE' unusable — run: xcrun notarytool store-credentials $NOTARY_PROFILE (interactive, user-only)" >&2; exit 3; }
-SOURCE_HEAD=$(git rev-parse HEAD) \
-    || { echo "error: cannot resolve source HEAD" >&2; exit 3; }
 SOURCE_STATUS=$(git status --porcelain) \
     || { echo "error: cannot inspect working tree status" >&2; exit 3; }
 [[ -z "$SOURCE_STATUS" ]] \
     || { echo "error: working tree not clean (including untracked files — they could leak into the build) — commit, stash, or clean first" >&2; exit 3; }
+SOURCE_HEAD=$(git rev-parse HEAD) \
+    || { echo "error: cannot resolve source HEAD" >&2; exit 3; }
 if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
     echo "error: local tag v$VERSION already exists" >&2; exit 3
 fi
@@ -69,6 +69,10 @@ cleanup() {
 trap cleanup EXIT
 git worktree add --detach "$BUILD_TREE" "$SOURCE_HEAD" >/dev/null \
     || { echo "error: cannot materialize isolated build tree for $SOURCE_HEAD" >&2; exit 3; }
+
+# Threat boundary: this isolates the artifact from concurrent edits in the
+# primary working tree and stale .build state. Compiler/build-plugin trust and
+# reproducible-toolchain attestation are separate supply-chain concerns.
 
 echo "→ [1/7] release build from isolated commit $SOURCE_HEAD (arm64 — MLX is Apple Silicon only)"
 (cd "$BUILD_TREE" && swift build -c release)
