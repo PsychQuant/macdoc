@@ -20,6 +20,7 @@ mkdir -p "$FAKE_PATH" "$INSTALL_DIR"
 
 cat > "$FAKE_PATH/uname" <<'EOF'
 #!/bin/bash
+echo fake-uname >> "$EVENT_LOG"
 echo arm64
 EOF
 
@@ -29,6 +30,12 @@ cat > "$FAKE_PATH/codesign" <<'EOF'
 #!/bin/bash
 echo fake-codesign >> "$EVENT_LOG"
 exit 0
+EOF
+
+cat > "$FAKE_PATH/awk" <<'EOF'
+#!/bin/bash
+echo fake-awk >> "$EVENT_LOG"
+exec /usr/bin/awk "$@"
 EOF
 
 cat > "$FAKE_PATH/curl" <<'EOF'
@@ -70,7 +77,7 @@ echo candidate-executed >> "$EVENT_LOG"
 echo 'macdoc 0.7.0'
 EOF
 
-chmod +x "$FAKE_PATH/uname" "$FAKE_PATH/codesign" "$FAKE_PATH/curl" "$RESIDENT" "$UNSIGNED_CANDIDATE"
+chmod +x "$FAKE_PATH/uname" "$FAKE_PATH/codesign" "$FAKE_PATH/awk" "$FAKE_PATH/curl" "$RESIDENT" "$UNSIGNED_CANDIDATE"
 
 run_hook() {
     : > "$EVENT_LOG"
@@ -78,6 +85,7 @@ run_hook() {
     FAKE_CURL_MODE="$1" \
     DOWNLOAD_SOURCE="$2" \
     FAKE_SHA_MODE="$3" \
+    MACDOC_CURL_BIN="$FAKE_PATH/curl" \
     MACDOC_CODESIGN_BIN="$FAKE_PATH/codesign" \
     MACDOC_INSTALL_DIR="$INSTALL_DIR" \
     PATH="$FAKE_PATH:$PATH" \
@@ -91,15 +99,19 @@ assert_no_execution() {
     fi
 }
 
+assert_trust_tools_not_hijacked() {
+    if grep -q '^fake-\(uname\|awk\|codesign\)$' "$EVENT_LOG"; then
+        echo "FAIL: SessionStart resolved a trust-chain tool through hostile PATH: $(tr '\n' ' ' < "$EVENT_LOG")" >&2
+        exit 1
+    fi
+}
+
 # A rejected resident must ignore a hostile verifier override, never execute,
 # and force exactly one download attempt even if its sidecar claims WANT.
 echo 0.7.0 > "$GUARD"
 run_hook fail "$UNSIGNED_CANDIDATE" actual
 assert_no_execution
-if grep -qx fake-codesign "$EVENT_LOG"; then
-    echo "FAIL: production honored MACDOC_CODESIGN_BIN instead of /usr/bin/codesign" >&2
-    exit 1
-fi
+assert_trust_tools_not_hijacked
 [[ "$(grep -c '^curl-download$' "$EVENT_LOG")" -eq 1 ]] || {
     echo "FAIL: rejected resident must force exactly one download attempt" >&2
     exit 1
@@ -109,6 +121,7 @@ fi
 rm -f "$GUARD"
 run_hook success "$UNSIGNED_CANDIDATE" wrong
 assert_no_execution
+assert_trust_tools_not_hijacked
 [[ ! -f "$GUARD" ]]
 grep -qx curl-download "$EVENT_LOG"
 grep -qx curl-sha "$EVENT_LOG"
@@ -134,6 +147,7 @@ chmod +x "$RESIDENT"
 echo 0.7.0 > "$GUARD"
 run_hook fail "$SIGNED_FIXTURE" actual
 assert_no_execution
+assert_trust_tools_not_hijacked
 [[ ! -s "$EVENT_LOG" ]] || {
     echo "FAIL: verified matching resident should not hit test doubles: $(tr '\n' ' ' < "$EVENT_LOG")" >&2
     exit 1
@@ -146,6 +160,7 @@ chmod +x "$RESIDENT"
 rm -f "$GUARD"
 run_hook success "$SIGNED_FIXTURE" actual
 assert_no_execution
+assert_trust_tools_not_hijacked
 grep -qx curl-download "$EVENT_LOG"
 grep -qx curl-sha "$EVENT_LOG"
 cmp -s "$RESIDENT" "$SIGNED_FIXTURE"
