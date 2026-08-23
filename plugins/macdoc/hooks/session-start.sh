@@ -25,21 +25,20 @@ BINARY_NAME="macdoc"
 INSTALL_DIR="${MACDOC_INSTALL_DIR:-$HOME/bin}"   # override for tests
 BINARY="$INSTALL_DIR/$BINARY_NAME"
 REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"'
-CODESIGN_BIN="/usr/bin/codesign"
-CURL_BIN="${MACDOC_CURL_BIN:-/usr/bin/curl}"
 
 note() { echo "macdoc plugin: $1" >&2; }
 soft_exit() { note "$1"; exit 0; }   # fail-soft: never break session start
-
-verify_binary() {
-    "$CODESIGN_BIN" --verify --strict -R "$REQUIREMENT" "$1" 2>/dev/null
-}
 
 [ "$(/usr/bin/uname -m)" = "arm64" ] || exit 0   # arm64-only release; Intel builds from source (silent — not an error)
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 [ -f "$PLUGIN_JSON" ] || exit 0
+VERIFY_LIB="$PLUGIN_ROOT/hooks/session-start-verify.sh"
+[ -f "$VERIFY_LIB" ] || soft_exit "verification library missing — refusing to trust or install a resident binary"
+# Runtime path is derived from this plugin root.
+# shellcheck disable=SC1090,SC1091
+. "$VERIFY_LIB"
 
 WANT=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
     | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
@@ -54,8 +53,8 @@ WANT_SHA=$(grep -oE '"binary_sha256"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_J
 # unless its Developer ID chain + Team requirement is valid (#161).
 RESIDENT_VERIFIED=false
 if [ -x "$BINARY" ]; then
-    if verify_binary "$BINARY"; then
-        RESIDENT_SHA=$(/usr/bin/shasum -a 256 "$BINARY" 2>/dev/null | /usr/bin/awk '{print $1}')
+    if macdoc_verify_binary "$BINARY" "$REQUIREMENT"; then
+        RESIDENT_SHA=$(macdoc_sha256_file "$BINARY")
         [ "$RESIDENT_SHA" = "$WANT_SHA" ] && RESIDENT_VERIFIED=true
     fi
 fi
@@ -73,18 +72,21 @@ TMP=$(mktemp "$INSTALL_DIR/.${BINARY_NAME}.download.XXXXXX" 2>/dev/null) || soft
 trap 'rm -f "$TMP"' EXIT
 
 URL="https://github.com/$REPO/releases/download/v$WANT/$BINARY_NAME"
-"$CURL_BIN" -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP" 2>/dev/null \
+/usr/bin/curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP" 2>/dev/null \
     || soft_exit "download failed for v$WANT; resident binary was not executed. Manual: https://github.com/$REPO/releases"
 
-EXPECTED=$("$CURL_BIN" -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk '{print $1}')
+EXPECTED=$(/usr/bin/curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk '{print $1}')
 [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] \
     || soft_exit "missing/malformed .sha256 asset — refusing to install unverified binary"
-[[ "$EXPECTED" == "$WANT_SHA" ]] \
-    || soft_exit "release sha256 asset does not match pinned binary_sha256 — refusing to install"
-[[ "$(/usr/bin/shasum -a 256 "$TMP" | /usr/bin/awk '{print $1}')" == "$WANT_SHA" ]] \
-    || soft_exit "sha256 mismatch — refusing to install"
-verify_binary "$TMP" \
-    || soft_exit "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install"
+macdoc_verify_candidate "$TMP" "$EXPECTED" "$WANT_SHA" "$REQUIREMENT"
+CANDIDATE_RC=$?
+case "$CANDIDATE_RC" in
+    0) ;;
+    10) soft_exit "release sha256 asset does not match pinned binary_sha256 — refusing to install" ;;
+    11) soft_exit "sha256 mismatch — refusing to install" ;;
+    12) soft_exit "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install" ;;
+    *) soft_exit "candidate verification failed unexpectedly — refusing to install" ;;
+esac
 
 chmod +x "$TMP" || soft_exit "chmod failed"
 mv "$TMP" "$BINARY" || soft_exit "install mv failed"
