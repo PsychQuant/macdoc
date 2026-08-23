@@ -10,12 +10,14 @@
 - [x] 2.1 Implement the typed models, count values, errors, provider adapters, and ordered `TokenCounterService` described by **Behavior and interfaces** and **Scope boundaries**; verify the service tests from 1.4 pass and unsupported or duplicate model requests have deterministic typed outcomes.
 - [x] 2.2 Bundle the audited `o200k_base.tiktoken` resource, verify its SHA-256 before parsing, construct the pinned pure-Swift `CoreBPE`, and prohibit runtime downloads or cache writes; verify the tests from 1.2 pass plus a sandboxed package test confirms GPT-4o counting creates no network, cache, or home-directory artifact.
 - [x] 2.3 Implement the fixed-endpoint Anthropic transport and error mapping required by **Require explicit consent for Anthropic disclosure** and **Failure modes**, including streaming response enforcement and content/credential redaction; verify all tests from 1.3 pass with the stub transport and no live credential.
+- [x] 2.4 Replace production `AsyncBytes` with direct data-delegate callback retention capped at 64 KiB plus one byte; independently bound injected `Data`, normalize arbitrary injected errors, and preserve cancellation.
 
 ## 3. CLI Admission, Rendering, and Atomic Output
 
 - [x] 3.1 Add failing compiled-command and command-factory tests for **Token counting command and supported models**, **Input admission and boundaries**, **Deterministic output and atomic presentation**, and **Token-route option validation**; cover exact 1,000,000/1,000,001-byte boundaries, invalid UTF-8, empty input, arbitrary extensions, option scoping, fixed numeric/table bytes, missing consent/key, and unchanged destinations, and verify the new assertions are red before CLI wiring.
 - [x] 3.2 Extend `macdoc convert` with `tokens`, `--model`, and `--allow-network`, validate the complete input before counting, and render only after every requested provider succeeds as specified by **Validate the complete input before counting** and **Render stable all-or-nothing CLI output**; verify the tests from 3.1 pass with empty stdout on every failure and absent or byte-unchanged `--output` destinations.
 - [x] 3.3 Connect the CLI to an injectable environment and Anthropic transport so tests can prove preflight makes zero requests and production reads `ANTHROPIC_API_KEY` only for consented Claude counts; verify success and every local/provider error through the command factory without exposing keys, headers, source text, or full response bodies.
+- [x] 3.4 Check cancellation after provider work and before presentation; verify a non-cooperative provider cannot cause stdout or file output after cancellation.
 
 ## 4. End-to-End Acceptance
 
@@ -40,3 +42,9 @@
 - Root and package `Package.resolved`, plus package manifest, pin `swift-tiktoken` revision `b4310ee520995ddff45b055de19e6605e0f8e5b6`.
 - `swift package describe --type json` passed in both roots; `git diff --check`, token-documentation evidence regression, and secret/private-path scan passed.
 - Evidence environment: macOS 27.0 arm64, Apple Swift 6.3.3. No live Anthropic call was made.
+
+### Verification addendum — 2026-08-24
+
+- Round 3 RED reproduced arbitrary injected error disclosure and acceptance of a 65,537-byte injected response.
+- TokenCounter package GREEN: 28 tests, 0 failures, including immediate 2,000,000-byte callback delivery with package retention fixed at 65,537 bytes, arbitrary-error redaction, independent injected-response size enforcement, and non-cooperative cancellation.
+- The previous impossible "network receive boundary" claim was corrected to the enforceable package-owned retention boundary; Foundation callback allocation remains explicitly outside package control.

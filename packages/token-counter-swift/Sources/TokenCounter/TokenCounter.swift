@@ -99,6 +99,7 @@ public struct TokenCounterService: Sendable {
     }
 
     public func count(text: String, models: [TokenModel]) async throws -> [TokenCount] {
+        try Task.checkCancellation()
         guard !models.isEmpty else {
             throw TokenCounterError.invalidRequest("At least one model is required.")
         }
@@ -119,7 +120,9 @@ public struct TokenCounterService: Sendable {
         ) { group in
             for item in planned {
                 group.addTask {
+                    try Task.checkCancellation()
                     let tokens = try await item.provider.count(text: text, model: item.model)
+                    try Task.checkCancellation()
                     guard tokens >= 0 else {
                         throw TokenCounterError.invalidTokenCount(item.model)
                     }
@@ -453,13 +456,32 @@ private struct AnthropicTokenCountingProvider: TokenCountingProvider {
         guard model == .claudeSonnet46 else {
             throw TokenCounterError.invalidRequest("Anthropic provider received the wrong model.")
         }
-        let data = try await transport.countTokens(
-            request: AnthropicTokenCountRequest(
-                model: model,
-                text: text,
-                apiKey: apiKey
+        try Task.checkCancellation()
+        let data: Data
+        do {
+            data = try await transport.countTokens(
+                request: AnthropicTokenCountRequest(
+                    model: model,
+                    text: text,
+                    apiKey: apiKey
+                )
             )
-        )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as AnthropicTokenCountError {
+            throw error
+        } catch {
+            // Public transports are untrusted extension points. Never allow an
+            // arbitrary error description to carry credentials, source text,
+            // headers, or provider bodies across the package boundary.
+            throw AnthropicTokenCountError.providerFailure(statusCode: 0)
+        }
+        try Task.checkCancellation()
+        guard data.count <= AnthropicHTTPTokenCountTransport.responseByteLimit else {
+            throw AnthropicTokenCountError.responseTooLarge(
+                limit: AnthropicHTTPTokenCountTransport.responseByteLimit
+            )
+        }
 
         struct Envelope: Decodable {
             let inputTokens: Int
@@ -477,8 +499,14 @@ private struct AnthropicTokenCountingProvider: TokenCountingProvider {
     }
 }
 
-struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
-    private let session: URLSession
+struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader, @unchecked Sendable {
+    typealias BodyObservation = @Sendable (
+        _ callbackByteCount: Int,
+        _ retainedByteCount: Int
+    ) -> Void
+
+    private let configuration: URLSessionConfiguration
+    private let bodyObservation: BodyObservation?
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -488,11 +516,13 @@ struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
         configuration.httpShouldSetCookies = false
         configuration.timeoutIntervalForRequest = AnthropicHTTPTokenCountTransport.requestTimeout
         configuration.timeoutIntervalForResource = AnthropicHTTPTokenCountTransport.requestTimeout
-        session = URLSession(configuration: configuration)
+        self.configuration = configuration
+        bodyObservation = nil
     }
 
-    init(session: URLSession) {
-        self.session = session
+    init(session: URLSession, bodyObservation: BodyObservation? = nil) {
+        configuration = session.configuration
+        self.bodyObservation = bodyObservation
     }
 
     func load(
@@ -500,45 +530,18 @@ struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
         redirectPolicy: AnthropicRedirectPolicy,
         bodyByteLimit: Int
     ) async throws -> AnthropicHTTPResponse {
-        let delegate = RejectingRedirectDelegate(policy: redirectPolicy)
-        let (bytes, rawResponse) = try await session.bytes(
-            for: request,
-            delegate: delegate
+        let delegate = BoundedAnthropicSessionDelegate(
+            redirectPolicy: redirectPolicy,
+            bodyByteLimit: bodyByteLimit,
+            bodyObservation: bodyObservation
         )
-        guard let response = rawResponse as? HTTPURLResponse else {
-            throw AnthropicTokenCountError.invalidResponse
-        }
-
-        let headers = response.allHeaderFields.reduce(into: [String: String]()) {
-            result, item in
-            guard let key = item.key as? String else { return }
-            result[key] = String(describing: item.value)
-        }
-        let bodyData: Data
-        if (200 ..< 300).contains(response.statusCode) {
-            // Consume directly from URLSession.AsyncBytes. Do not hand the
-            // sequence to an independently producing stream: that would let
-            // the producer enqueue an unbounded body ahead of the 64-KiB gate.
-            bodyData = try await Self.readBoundedBody(
-                from: bytes,
-                limit: bodyByteLimit,
-                cancel: { bytes.task.cancel() }
-            )
-        } else {
-            bytes.task.cancel()
-            bodyData = Data()
-        }
-        let body = AsyncThrowingStream<Data, Error> { continuation in
-            if !bodyData.isEmpty {
-                continuation.yield(bodyData)
-            }
-            continuation.finish()
-        }
-        return AnthropicHTTPResponse(
-            statusCode: response.statusCode,
-            headers: headers,
-            body: body
+        let session = URLSession(
+            configuration: configuration,
+            delegate: delegate,
+            delegateQueue: nil
         )
+        defer { session.finishTasksAndInvalidate() }
+        return try await delegate.load(request, using: session)
     }
 
     static func readBoundedBody<Bytes: AsyncSequence>(
@@ -563,13 +566,54 @@ struct URLSessionAnthropicHTTPDataLoader: AnthropicHTTPDataLoader {
     }
 }
 
-private final class RejectingRedirectDelegate: NSObject, URLSessionTaskDelegate,
-    @unchecked Sendable
+private final class BoundedAnthropicSessionDelegate: NSObject,
+    URLSessionDataDelegate, URLSessionTaskDelegate, @unchecked Sendable
 {
-    private let policy: AnthropicRedirectPolicy
+    private let redirectPolicy: AnthropicRedirectPolicy
+    private let bodyByteLimit: Int
+    private let bodyObservation: URLSessionAnthropicHTTPDataLoader.BodyObservation?
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<AnthropicHTTPResponse, Error>?
+    private var task: URLSessionDataTask?
+    private var response: HTTPURLResponse?
+    private var body = Data()
+    private var completed = false
+    private var cancelledByCaller = false
 
-    init(policy: AnthropicRedirectPolicy) {
-        self.policy = policy
+    init(
+        redirectPolicy: AnthropicRedirectPolicy,
+        bodyByteLimit: Int,
+        bodyObservation: URLSessionAnthropicHTTPDataLoader.BodyObservation?
+    ) {
+        self.redirectPolicy = redirectPolicy
+        self.bodyByteLimit = bodyByteLimit
+        self.bodyObservation = bodyObservation
+        body.reserveCapacity(min(bodyByteLimit + 1, 16_384))
+    }
+
+    func load(
+        _ request: URLRequest,
+        using session: URLSession
+    ) async throws -> AnthropicHTTPResponse {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = session.dataTask(with: request)
+                let start = lock.withLock { () -> Bool in
+                    guard !cancelledByCaller else { return false }
+                    self.continuation = continuation
+                    self.task = task
+                    return true
+                }
+                if start {
+                    task.resume()
+                } else {
+                    task.cancel()
+                    continuation.resume(throwing: CancellationError())
+                }
+            }
+        } onCancel: {
+            cancelFromCaller()
+        }
     }
 
     func urlSession(
@@ -579,9 +623,113 @@ private final class RejectingRedirectDelegate: NSObject, URLSessionTaskDelegate,
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        switch policy {
+        switch redirectPolicy {
         case .reject:
             completionHandler(nil)
         }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let response = response as? HTTPURLResponse else {
+            completionHandler(.cancel)
+            finish(.failure(AnthropicTokenCountError.invalidResponse))
+            return
+        }
+
+        lock.withLock { self.response = response }
+        guard (200 ..< 300).contains(response.statusCode) else {
+            completionHandler(.cancel)
+            finish(.success(makeResponse(response: response, bodyData: Data())))
+            return
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive data: Data
+    ) {
+        let result = lock.withLock { () -> (overflowed: Bool, retained: Int) in
+            guard !completed else { return (false, body.count) }
+            let retainedCapacity = max(0, bodyByteLimit + 1 - body.count)
+            if retainedCapacity > 0 {
+                body.append(data.prefix(retainedCapacity))
+            }
+            return (body.count > bodyByteLimit, body.count)
+        }
+        bodyObservation?(data.count, result.retained)
+        guard result.overflowed else { return }
+        dataTask.cancel()
+        finish(.failure(
+            AnthropicTokenCountError.responseTooLarge(limit: bodyByteLimit)
+        ))
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        if let error {
+            let callerCancelled = lock.withLock { cancelledByCaller }
+            finish(.failure(callerCancelled ? CancellationError() : error))
+            return
+        }
+
+        let snapshot = lock.withLock { (response, body) }
+        guard let response = snapshot.0 else {
+            finish(.failure(AnthropicTokenCountError.invalidResponse))
+            return
+        }
+        finish(.success(makeResponse(response: response, bodyData: snapshot.1)))
+    }
+
+    private func cancelFromCaller() {
+        let task = lock.withLock { () -> URLSessionDataTask? in
+            cancelledByCaller = true
+            return self.task
+        }
+        task?.cancel()
+        finish(.failure(CancellationError()))
+    }
+
+    private func finish(_ result: Result<AnthropicHTTPResponse, Error>) {
+        let continuation = lock.withLock {
+            guard !completed else { return nil as CheckedContinuation<AnthropicHTTPResponse, Error>? }
+            completed = true
+            let continuation = self.continuation
+            self.continuation = nil
+            self.task = nil
+            return continuation
+        }
+        continuation?.resume(with: result)
+    }
+
+    private func makeResponse(
+        response: HTTPURLResponse,
+        bodyData: Data
+    ) -> AnthropicHTTPResponse {
+        let headers = response.allHeaderFields.reduce(into: [String: String]()) {
+            result, item in
+            guard let key = item.key as? String else { return }
+            result[key] = String(describing: item.value)
+        }
+        let body = AsyncThrowingStream<Data, Error> { continuation in
+            if !bodyData.isEmpty {
+                continuation.yield(bodyData)
+            }
+            continuation.finish()
+        }
+        return AnthropicHTTPResponse(
+            statusCode: response.statusCode,
+            headers: headers,
+            body: body
+        )
     }
 }

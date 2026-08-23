@@ -59,7 +59,7 @@ Any count containing `claude-sonnet-4-6` SHALL require `--allow-network` and a n
 
 ### Requirement: Anthropic request and response contract
 
-The Anthropic provider SHALL send `POST https://api.anthropic.com/v1/messages/count_tokens` with `anthropic-version: 2023-06-01`, the selected model, and one user text message. It SHALL reject redirects, SHALL use 30-second request and resource timeouts, SHALL consume at most 64 KiB plus one overflow-detection byte at the network receive boundary, SHALL cancel immediately on overflow, SHALL NOT use an independently producing unbounded response bridge, SHALL NOT retry automatically, and SHALL accept only a 2xx JSON response containing a non-negative integer `input_tokens`.
+The Anthropic provider SHALL send `POST https://api.anthropic.com/v1/messages/count_tokens` with `anthropic-version: 2023-06-01`, the selected model, and one user text message. It SHALL reject redirects, SHALL use 30-second request and resource timeouts, SHALL retain at most 64 KiB plus one overflow-detection byte in package-owned response storage, SHALL cancel immediately on the first callback that crosses the limit, SHALL NOT use an independently producing unbounded response bridge, SHALL NOT retry automatically, and SHALL accept only a 2xx JSON response containing a non-negative integer `input_tokens`. Foundation-owned callback chunks MAY exceed the retained bound because URLSession exposes no callback-size control; the implementation SHALL copy only the bounded prefix before cancellation.
 
 #### Scenario: Parse a successful response
 
@@ -150,7 +150,7 @@ The CLI SHALL accept `--model` and `--allow-network` only with `--to tokens`. Th
 
 ### Requirement: Reusable service behavior
 
-The `TokenCounter` package SHALL expose typed model and count values, a public injectable Anthropic transport, public package-owned Anthropic errors, and an asynchronous service that returns one result per requested model in request order. Third-party tokenizer errors SHALL be normalized to a public package-owned error. Constructing or using a Claude-only service SHALL NOT load the GPT vocabulary. The service SHALL throw without returning a partial array if any model fails.
+The `TokenCounter` package SHALL expose typed model and count values, a public injectable Anthropic transport, public package-owned Anthropic errors, and an asynchronous service that returns one result per requested model in request order. Third-party tokenizer errors and arbitrary injected-transport errors SHALL be normalized to public package-owned errors without preserving arbitrary descriptions. Injected response `Data` SHALL be rejected above 64 KiB independently of transport behavior. Constructing or using a Claude-only service SHALL NOT load the GPT vocabulary. The service SHALL throw without returning a partial array if any model fails and SHALL preserve `CancellationError` rather than converting or publishing a cancelled success.
 
 #### Scenario: Preserve requested order
 
@@ -161,6 +161,21 @@ The `TokenCounter` package SHALL expose typed model and count values, a public i
 
 - **WHEN** any requested provider fails
 - **THEN** the service SHALL throw and SHALL NOT return the successful providers' partial results
+
+#### Scenario: Normalize an arbitrary injected error
+
+- **WHEN** a public injected Anthropic transport throws a non-package error whose description contains request data
+- **THEN** the service SHALL throw a redacted package-owned provider error without retaining that description
+
+#### Scenario: Reject an oversized injected response
+
+- **WHEN** a public injected Anthropic transport returns more than 64 KiB
+- **THEN** the service SHALL throw `responseTooLarge` before JSON decoding
+
+#### Scenario: Preserve cancellation before presentation
+
+- **WHEN** a token-count task is cancelled while a provider is running and that provider later returns success
+- **THEN** the service and CLI SHALL throw cancellation and SHALL NOT write stdout or an output file
 
 ### Requirement: User-facing privacy and platform documentation
 
