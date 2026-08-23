@@ -274,14 +274,14 @@ struct MarkdownMathScanner {
                 while closing < bounds.upperBound,
                       !characters[closing].isNewline,
                       characters[closing] != "$" {
-                    if characters[closing] == "\\" {
+                    if respectBackslashEscapes, characters[closing] == "\\" {
                         closing = min(closing + 2, bounds.upperBound)
                     } else {
                         closing += 1
                     }
                 }
                 guard closing < bounds.upperBound, characters[closing] == "$" else {
-                    index += 1
+                    index = closing
                     continue
                 }
                 let bodyRange = (index + 1)..<closing
@@ -295,7 +295,7 @@ struct MarkdownMathScanner {
                     )
                     index = closing + 1
                 } else {
-                    index += 1
+                    index = closing
                 }
             }
             return result

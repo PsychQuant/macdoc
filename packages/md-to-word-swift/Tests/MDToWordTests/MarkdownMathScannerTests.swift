@@ -43,6 +43,47 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertLessThan(elapsed, .seconds(1))
     }
 
+    func testEvenBackslashMathRecoveryRemainsBounded() throws {
+        let source = String(repeating: #"\\$x\\$"#, count: 10_000)
+        let clock = ContinuousClock()
+        var result: MarkdownMathScanner.Result?
+
+        let elapsed = try clock.measure {
+            result = try MarkdownMathScanner().scan(source)
+        }
+
+        XCTAssertEqual(result?.tokens.count, 10_000)
+        XCTAssertLessThan(elapsed, .seconds(1))
+    }
+
+    func testPublicMarkerPrefixLookupRemainsBounded() {
+        let publicPrefix = MarkdownMathScanner.defaultMarkerPrefix
+        let placeholder = "\u{E000}\(publicPrefix)FIXED0TOKEN\u{E000}"
+        let token = RenderedMarkdownMathToken(
+            placeholder: placeholder,
+            omml: "<m:r/>",
+            kind: .inline,
+            line: 1,
+            column: 1
+        )
+        let text = String(repeating: publicPrefix, count: 10_000)
+        let clock = ContinuousClock()
+        var match: (range: Range<String.Index>, token: RenderedMarkdownMathToken)? = nil
+
+        let elapsed = clock.measure {
+            match = MarkdownInlineMathMatcher.nextMatch(
+                in: text,
+                from: text.startIndex,
+                tokensByPlaceholder: [placeholder: token],
+                searchPrefix: "\u{E000}\(publicPrefix)",
+                maximumPlaceholderLength: placeholder.count
+            )
+        }
+
+        XCTAssertNil(match)
+        XCTAssertLessThan(elapsed, .seconds(1))
+    }
+
     func testInlineTokenRecordsBodyKindAndOneBasedLocation() throws {
         let result = try MarkdownMathScanner().scan("First\n\nA $x^2$ B")
 
