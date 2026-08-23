@@ -1,6 +1,16 @@
 # che-word-mcp
 
-**Word MCP Server** — Swift 原生 OOXML 操作，**242 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
+**Word MCP Server** — Swift 原生 OOXML 操作，**245 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
+
+當前版本：Plugin shell **v3.23.0** / Binary **v3.23.0**（Plugin shell + Binary 同步）— closes [PsychQuant/che-word-mcp#177](https://github.com/PsychQuant/che-word-mcp/issues/177)，`get_tables` 修正截斷政策違規：舊版無條件截斷回傳（表格列/欄/文字皆砍到 3），不提供 `summarize` 參數、不揭露省略——違反本 repo `summarize: Bool` 反向預設慣例（v3.1.0 起 `truncateText()` 的既有紀律，見 [#1](https://github.com/PsychQuant/che-word-mcp/issues/1)/[#5](https://github.com/PsychQuant/che-word-mcp/issues/5)）。新版預設回傳全部列/欄/完整文字，header 標最大寬度並標示不齊列（`(ragged: min..max columns per row)`）；`summarize: true` 才截斷至 3/3，並揭露全部三種省略類型。同族缺口（`get_paragraphs`/`list_footnotes`/`list_endnotes`/`list_all_formatted_text`）另追蹤於 [#178](https://github.com/PsychQuant/che-word-mcp/issues/178)。
+
+同時 bump `ooxml-swift` dep **v1.5.0 → v2.0.1**——major bump 源自合併上游 [PsychQuant/ooxml-swift#96](https://github.com/PsychQuant/ooxml-swift/pull/96)（完整 lossless round-trip pipeline，9 個 public API 移除）+ [#97](https://github.com/PsychQuant/ooxml-swift/pull/97)（table properties 跨 mutation 保存）；review 過程中另發現並修復兩個真實 regression：[ooxml-swift#84](https://github.com/PsychQuant/ooxml-swift/issues/84)（`sectPr` 的 `pgSz`/`pgMar`/`footerReference`/`docGrid` 未被 reader 解析，mutation 後靜默變成 US Letter 預設值、CJK 行格線關閉、頁尾連結消失）與 [ooxml-swift#104](https://github.com/PsychQuant/ooxml-swift/issues/104)（`appendParagraph` op-log 分支呼叫 `resyncBodyFromDocumentTree()` 只重建 `p`/`tbl` 型別，靜默丟棄 bookmark/rawBlockElement 等其餘 body children、既有 body index 全部位移——本 repo `Issue61V315PointReleaseTests` 的 4 個 fail 是唯一抓到這個 regression 的訊號，ooxml-swift 自己的測試套件在該次 merge 前後全綠）。**教訓：上游全綠 ≠ 下游可用**——四變體對照表（`tcBorders`/`tcMar`/`tblCellMar`/`tblLook`/`tblLayout` + `sectPr` 元素）方法論貫穿整條修復鏈，`ooxml-swift#101`/`#106` 另追蹤殘餘缺口。
+
+**Downstream 影響**：`ntu-rec` plugin 的 `rec-fill` 代填軌保真封鎖已於本版解除（[macdoc#142](https://github.com/PsychQuant/macdoc/issues/142)）——實測走完整 MCP 工具鏈填一格真實 NTU-REC 官方表單，十個追蹤元素與原檔全數相符。
+
+**Tests**：322 passing che-word-mcp（0 failures）/ ooxml-swift 1373→1398 tests all green（沿途每個 commit 皆綠，兩個真實 regression 都是下游驗證抓到，非上游套件自身測試）。
+
+---
 
 當前版本：Plugin shell **v3.20.2** / Binary **v3.20.0**（#116 起解耦）— closes [PsychQuant/che-word-mcp#160](https://github.com/PsychQuant/che-word-mcp/issues/160) — 兩個新 MCP tools 暴露 [PsychQuant/ooxml-swift v0.24.0](https://github.com/PsychQuant/ooxml-swift/releases/tag/v0.24.0) 的 `spliceOMath` API 給 MCP callers，跨 document 拷貝 verbatim `<m:oMath>` XML 區塊。
 
@@ -388,8 +398,11 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 
 ## 版本
 
-- **Plugin shell**: v3.20.2
-- **Binary**: v3.20.0（`CheWordMCP`，242 tools）
+- **Plugin shell / Binary 版本**：見 `.claude-plugin/plugin.json` 的 `version` 與
+  `binary_version`。**這裡不再寫死版號** —— 寫死的那兩行曾同時過期（shell 停在 3.20.2、
+  binary 停在 3.20.0 且工具數寫 242 而非 245），而且與本文開頭的「245 個工具」互相矛盾。
+  每次 bump 都要記得回來改的東西，遲早不會被改到。
+- **工具數**：245（`tools/list` 實測）
 - **GitHub**: https://github.com/PsychQuant/che-word-mcp
 - **完整 CHANGELOG**: https://github.com/PsychQuant/che-word-mcp/blob/main/CHANGELOG.md
 
