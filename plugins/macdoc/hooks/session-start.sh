@@ -20,7 +20,7 @@ BINARY_NAME="macdoc"
 INSTALL_DIR="${MACDOC_INSTALL_DIR:-$HOME/bin}"   # override for tests
 BINARY="$INSTALL_DIR/$BINARY_NAME"
 REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"'
-CODESIGN_BIN="${MACDOC_CODESIGN_BIN:-/usr/bin/codesign}"
+CODESIGN_BIN="/usr/bin/codesign"
 
 note() { echo "macdoc plugin: $1" >&2; }
 soft_exit() { note "$1"; exit 0; }   # fail-soft: never break session start
