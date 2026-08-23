@@ -13,11 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- SessionStart 在執行常駐 `~/bin/macdoc --version` 或採用 sidecar fast path 前，先以 Developer ID requirement 重驗 binary（PsychQuant/macdoc#161）。簽章不符時不執行該檔，改強制嘗試一次下載；下載失敗仍維持 session fail-soft。
+- SessionStart 不再執行常駐 `~/bin/macdoc --version`（PsychQuant/macdoc#161）。它先以固定 `/usr/bin/codesign`（測試可明示 override）重驗 resident bytes，再只讀 installer sidecar 判斷版本；簽章不符、sidecar 缺失或版本不同時改嘗試一次 verified download。這消除驗簽後從可替換路徑執行的 swap window，下載失敗仍維持 session fail-soft。
 
 ### Tests
 
-- 新增 resident binary 對抗測試：偽造正確版本但 codesign 失敗的 binary 不得被執行；合法且版本相符的 binary 必須先驗簽、再執行版本探測，且維持零網路 fast path。
+- 新增 resident binary 對抗測試：簽章不符的 binary 不得被執行且只嘗試一次下載；合法且 sidecar 版本相符的 binary 只驗簽、不執行、不連網；下載候選必須同時通過 release digest 與 codesign 才能安裝。
 
 ## [1.4.0] - 2026-08-19
 
