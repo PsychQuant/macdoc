@@ -226,6 +226,15 @@
       }
     },
     {
+      "identity" : "word-to-md-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/word-to-md-swift.git",
+      "state" : {
+        "revision" : "53a451f2f0ed0f769ead03afc7ec9354ef8b6909",
+        "version" : "1.0.0"
+      }
+    },
+    {
       "identity" : "yams",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/jpsim/Yams.git",
