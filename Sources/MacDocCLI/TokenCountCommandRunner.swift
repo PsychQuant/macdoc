@@ -97,6 +97,7 @@ struct TokenCountCommandRunner: Sendable {
 
         let text = try Self.readAdmittedText(from: inputURL)
         let results = try await count(text, models, apiKey)
+        try Task.checkCancellation()
         guard results.count == models.count,
               results.map(\.model) == models,
               results.allSatisfy({ $0.tokens >= 0 })
@@ -128,6 +129,7 @@ struct TokenCountCommandRunner: Sendable {
             modelName: modelName,
             allowNetwork: allowNetwork
         )
+        try Task.checkCancellation()
         let data = Data(rendered.utf8)
         if let outputURL {
             try data.write(to: outputURL, options: .atomic)
