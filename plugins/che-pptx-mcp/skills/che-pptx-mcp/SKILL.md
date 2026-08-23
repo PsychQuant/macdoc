@@ -24,18 +24,19 @@ get_slide_count(source_path: "/in/deck.pptx")
 get_slide_text(source_path: "/in/deck.pptx", slide_index: 0)
 ```
 
-Direct mode is read-only. Open a session before any mutation.
+Direct mode is read-only. Use `create_presentation` to start a new session, or `open_presentation` before modifying an existing file.
 
 ## Create a presentation
 
 ```text
 1. create_presentation(doc_id: "deck")
-2. add_slide(doc_id: "deck")
-3. insert_text_shape(doc_id: "deck", slide_index: 0, text: "Title",
+2. insert_text_shape(doc_id: "deck", slide_index: 0, text: "Title",
                      x: 720000, y: 720000, width: 7200000, height: 900000)
-4. save_presentation(doc_id: "deck", path: "/out/new-deck.pptx")
-5. close_presentation(doc_id: "deck")
+3. save_presentation(doc_id: "deck", path: "/out/new-deck.pptx")
+4. close_presentation(doc_id: "deck")
 ```
+
+`create_presentation` starts with one blank slide at index 0; call `add_slide` only when another slide is needed.
 
 ## Edit an existing presentation
 
@@ -63,7 +64,7 @@ Edits stay in memory until `save_presentation` unless the session was opened wit
 | Notes/theme | `get_slide_notes`, `add_notes`, `set_transition`, `get_theme`, `get_slide_master`, `get_slide_layouts` |
 | Export | `export_markdown` |
 
-Read tools accept either `source_path` or `doc_id` when their schema offers both. Mutation tools require an open session and `doc_id`.
+Read tools accept either `source_path` or `doc_id` when their schema offers both. After `create_presentation` or `open_presentation` establishes a session, content mutation tools require its `doc_id`.
 
 ## Honest boundaries
 
