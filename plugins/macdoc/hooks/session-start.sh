@@ -38,6 +38,10 @@ PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 WANT=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
     | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
 [ -n "$WANT" ] || exit 0   # no pinned CLI version — nothing to manage
+WANT_SHA=$(grep -oE '"binary_sha256"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" 2>/dev/null \
+    | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
+[[ "$WANT_SHA" =~ ^[0-9a-fA-F]{64}$ ]] \
+    || soft_exit "missing/malformed binary_sha256 in plugin.json — refusing to trust or install a resident binary"
 
 # Exec-time re-verification happens before even asking the resident binary for
 # its version. A binary that merely prints WANT must never reach a fast path
@@ -45,7 +49,8 @@ WANT=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON
 RESIDENT_VERIFIED=false
 if [ -x "$BINARY" ]; then
     if verify_binary "$BINARY"; then
-        RESIDENT_VERIFIED=true
+        RESIDENT_SHA=$(/usr/bin/shasum -a 256 "$BINARY" 2>/dev/null | awk '{print $1}')
+        [ "$RESIDENT_SHA" = "$WANT_SHA" ] && RESIDENT_VERIFIED=true
     fi
 fi
 
@@ -68,7 +73,9 @@ curl -fsSL --proto '=https' --tlsv1.2 --max-time 300 "$URL" -o "$TMP" 2>/dev/nul
 EXPECTED=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 "$URL.sha256" 2>/dev/null | head -1 | awk '{print $1}')
 [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] \
     || soft_exit "missing/malformed .sha256 asset — refusing to install unverified binary"
-[[ "$(shasum -a 256 "$TMP" | awk '{print $1}')" == "$EXPECTED" ]] \
+[[ "$EXPECTED" == "$WANT_SHA" ]] \
+    || soft_exit "release sha256 asset does not match pinned binary_sha256 — refusing to install"
+[[ "$(/usr/bin/shasum -a 256 "$TMP" | awk '{print $1}')" == "$WANT_SHA" ]] \
     || soft_exit "sha256 mismatch — refusing to install"
 verify_binary "$TMP" \
     || soft_exit "code-signature verification failed (not Developer ID Team 6W377FS7BS) — refusing to install"

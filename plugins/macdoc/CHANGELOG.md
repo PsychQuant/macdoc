@@ -13,11 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- SessionStart 不再執行常駐 `~/bin/macdoc --version`（PsychQuant/macdoc#161）。它先以固定 `/usr/bin/codesign` 重驗 resident bytes，再只讀 installer sidecar 判斷版本；簽章不符、sidecar 缺失或版本不同時改嘗試一次 verified download。這消除驗簽後從可替換路徑執行的 swap window，下載失敗仍維持 session fail-soft。
+- SessionStart 不再執行常駐 `~/bin/macdoc --version`（PsychQuant/macdoc#161）。它先以固定 `/usr/bin/codesign` 與 plugin-pinned `binary_sha256` 重驗 exact release bytes，再只讀 installer sidecar 判斷版本；簽章／digest 不符、sidecar 缺失或版本不同時改嘗試一次 verified download。下載的 `.sha256` asset 也必須等於 plugin pin。這消除驗簽後從可替換路徑執行的 swap window，下載失敗仍維持 session fail-soft。
 
 ### Tests
 
-- 新增 resident binary 對抗測試：簽章不符的 binary 不得被執行且只嘗試一次下載；合法且 sidecar 版本相符的 binary 只驗簽、不執行、不連網；下載候選必須同時通過 release digest 與 codesign 才能安裝。
+- 新增 resident binary 對抗測試：簽章不符的 binary 不得被執行且只嘗試一次下載；合法且 digest／sidecar 相符的 binary 只驗簽、不執行、不連網；錯誤 release digest 必須在安裝前拒絕；候選必須同時通過 plugin pin、release digest 與 codesign 才能安裝。
 
 ## [1.4.0] - 2026-08-19
 

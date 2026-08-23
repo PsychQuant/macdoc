@@ -10,6 +10,7 @@ trap 'rm -rf "$TEST_ROOT"' EXIT
 FAKE_PATH="$TEST_ROOT/fake-path"
 INSTALL_DIR="$TEST_ROOT/install"
 EVENT_LOG="$TEST_ROOT/events.log"
+HOOK_STDERR="$TEST_ROOT/hook.stderr"
 RESIDENT="$INSTALL_DIR/macdoc"
 GUARD="$INSTALL_DIR/.macdoc.installed_version"
 UNSIGNED_CANDIDATE="$TEST_ROOT/unsigned-candidate"
@@ -49,7 +50,11 @@ if [ -n "$output" ]; then
     cp "$DOWNLOAD_SOURCE" "$output"
 else
     echo curl-sha >> "$EVENT_LOG"
-    shasum -a 256 "$DOWNLOAD_SOURCE" | awk '{print $1}'
+    if [ "${FAKE_SHA_MODE:-actual}" = "wrong" ]; then
+        echo 0000000000000000000000000000000000000000000000000000000000000000
+    else
+        shasum -a 256 "$DOWNLOAD_SOURCE" | awk '{print $1}'
+    fi
 fi
 EOF
 
@@ -72,10 +77,11 @@ run_hook() {
     EVENT_LOG="$EVENT_LOG" \
     FAKE_CURL_MODE="$1" \
     DOWNLOAD_SOURCE="$2" \
+    FAKE_SHA_MODE="$3" \
     MACDOC_CODESIGN_BIN="$FAKE_PATH/codesign" \
     MACDOC_INSTALL_DIR="$INSTALL_DIR" \
     PATH="$FAKE_PATH:$PATH" \
-    bash "$HOOK" >/dev/null 2>&1
+    bash "$HOOK" >/dev/null 2>"$HOOK_STDERR"
 }
 
 assert_no_execution() {
@@ -88,7 +94,7 @@ assert_no_execution() {
 # A rejected resident must ignore a hostile verifier override, never execute,
 # and force exactly one download attempt even if its sidecar claims WANT.
 echo 0.7.0 > "$GUARD"
-run_hook fail "$UNSIGNED_CANDIDATE"
+run_hook fail "$UNSIGNED_CANDIDATE" actual
 assert_no_execution
 if grep -qx fake-codesign "$EVENT_LOG"; then
     echo "FAIL: production honored MACDOC_CODESIGN_BIN instead of /usr/bin/codesign" >&2
@@ -99,15 +105,18 @@ fi
     exit 1
 }
 
-# An unsigned downloaded candidate may match its release digest, but codesign
-# must still reject it and leave the resident/sidecar unchanged.
+# A mismatched release digest must be rejected before candidate installation.
 rm -f "$GUARD"
-run_hook success "$UNSIGNED_CANDIDATE"
+run_hook success "$UNSIGNED_CANDIDATE" wrong
 assert_no_execution
 [[ ! -f "$GUARD" ]]
 grep -qx curl-download "$EVENT_LOG"
 grep -qx curl-sha "$EVENT_LOG"
 grep -q 'resident-executed' "$RESIDENT"
+grep -q 'release sha256 asset does not match pinned binary_sha256' "$HOOK_STDERR" || {
+    echo "FAIL: mismatched release digest did not trip the pinned-SHA gate" >&2
+    exit 1
+}
 
 # Full valid-path coverage needs a real Team-signed fixture. Keep the hostile
 # cases above mandatory; gate only the positive cases for CI machines without
@@ -123,7 +132,7 @@ fi
 cp "$SIGNED_FIXTURE" "$RESIDENT"
 chmod +x "$RESIDENT"
 echo 0.7.0 > "$GUARD"
-run_hook fail "$SIGNED_FIXTURE"
+run_hook fail "$SIGNED_FIXTURE" actual
 assert_no_execution
 [[ ! -s "$EVENT_LOG" ]] || {
     echo "FAIL: verified matching resident should not hit test doubles: $(tr '\n' ' ' < "$EVENT_LOG")" >&2
@@ -135,7 +144,7 @@ assert_no_execution
 cp "$UNSIGNED_CANDIDATE" "$RESIDENT"
 chmod +x "$RESIDENT"
 rm -f "$GUARD"
-run_hook success "$SIGNED_FIXTURE"
+run_hook success "$SIGNED_FIXTURE" actual
 assert_no_execution
 grep -qx curl-download "$EVENT_LOG"
 grep -qx curl-sha "$EVENT_LOG"
