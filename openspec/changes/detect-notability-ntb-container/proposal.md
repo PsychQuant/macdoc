@@ -4,9 +4,10 @@ Notability exports from at least app version 16.8.1 can use a ZIP-based `.ntb` g
 
 ## What Changes
 
-- Add metadata-only ZIP entry classification for legacy `Session.plist` and modern `noteBundle` containers without extracting or reading document payloads.
+- Add bounded, metadata-only ZIP entry classification for legacy `Session.plist` and modern `noteBundle` containers without extracting or reading document payloads.
 - Accept `.ntb` as a recognized note input only to emit a precise fail-loud unsupported-generation diagnostic for HTML and PDF targets.
 - Detect a modern container even when it has been renamed with a `.note` suffix, while preserving the existing legacy `.note` conversion path.
+- Reject malformed, ZIP64, or over-complex `.ntb` inputs locally so classification cannot trigger unbounded central-directory work or leak an input path through the legacy parser.
 - Add compiled CLI acceptance for exact diagnostics and no output creation.
 - Qualify README and conversion-matrix claims so interactive conversion is explicitly limited to legacy plist-based `.note`; modern `.ntb` is detected but not converted.
 
@@ -31,7 +32,7 @@ Notability exports from at least app version 16.8.1 can use a ZIP-based `.ntb` g
 
 - Affected specs: `notability-container-detection`, `e2e-conversion-routes`
 - Affected code:
-  - New: `Sources/MacDocCLI/NotabilityContainerDetector.swift`, `Tests/MacDocCLITests/NotabilityContainerDetectionTests.swift`
+  - New: `Sources/NotabilityContainerDetection/NotabilityContainerDetector.swift`, `Tests/MacDocCLITests/NotabilityContainerDetectionTests.swift`
   - Modified: `Package.swift`, `Sources/MacDocCLI/MacDoc+Convert.swift`, `README.md`, `CONVERSIONS.md`
   - Removed: none
-- Dependency surface: declare the already-resolved `ZIPFoundation` package as a direct `MacDocCLI` dependency so the CLI can enumerate archive entries without payload extraction.
+- Dependency surface: declare the already-resolved `ZIPFoundation` package and isolate it behind a lightweight `NotabilityContainerDetection` target used by the CLI and tests. This avoids linking the full executable target into XCTest merely to test the detector.

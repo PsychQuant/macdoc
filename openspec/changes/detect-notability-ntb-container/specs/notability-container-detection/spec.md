@@ -2,7 +2,7 @@
 
 ### Requirement: Classify Notability container generation from ZIP entry metadata
 
-MacDocCLI SHALL classify a readable Notability archive as legacy when a regular ZIP entry's final path component is `Session.plist`. If no legacy marker exists, it SHALL classify the archive as modern FlatBuffers when a regular entry's final path component is `noteBundle`. It SHALL otherwise classify the archive as unknown. Classification SHALL enumerate entry paths only and SHALL NOT extract or read entry payloads, `manifest.json`, note content, media, or indexes.
+MacDocCLI SHALL classify a safely enumerable classic single-disk Notability archive as legacy when a regular ZIP entry's final path component is `Session.plist`. If no legacy marker exists, it SHALL classify the archive as modern FlatBuffers when a regular entry's final path component is `noteBundle`. It SHALL otherwise classify the archive as unknown. Classification SHALL inspect at most 4,096 entries and 4,096 UTF-8 bytes per entry path, SHALL require exactly one canonical EOCD candidate from at most the final 65,557 bytes and require it to match ZIPFoundation's backward-scan choice, SHALL independently validate at most 16 MiB of central-directory records to their exact declared count and size, SHALL require each entry to begin on disk zero, SHALL reject ZIP64 version/sentinels/extra fields or incomplete enumeration as unknown, and SHALL NOT extract or read entry payloads, `manifest.json`, note content, media, or indexes.
 
 #### Scenario: Classify a legacy archive
 
@@ -16,8 +16,18 @@ MacDocCLI SHALL classify a readable Notability archive as legacy when a regular 
 
 #### Scenario: Preserve unknown archive handling
 
-- **WHEN** the file is not a readable ZIP or contains neither generation marker
-- **THEN** the detector classifies it as unknown and the established downstream parser remains responsible for the final malformed or missing-session diagnostic
+- **WHEN** the file is not a readable ZIP, exceeds the metadata safety bounds, cannot be enumerated completely, or contains neither generation marker
+- **THEN** the detector classifies it as unknown
+
+#### Scenario: Reject an unsafe unknown .ntb locally
+
+- **WHEN** an `.ntb` file is unknown because it is malformed or exceeds metadata safety bounds
+- **THEN** MacDocCLI fails before the legacy parser with `無法安全辨識 Notability .ntb 容器；目前僅支援舊版 plist-based .note（Session.plist）`, emits no stdout or path, and creates no destination
+
+#### Scenario: Preserve unknown legacy .note diagnostics
+
+- **WHEN** a `.note` file is unknown
+- **THEN** the established downstream parser remains responsible for the final malformed or missing-session diagnostic
 
 ### Requirement: Reject modern FlatBuffers note conversion precisely and before output
 

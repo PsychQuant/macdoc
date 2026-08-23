@@ -46,9 +46,16 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.0.0"),
     ],
     targets: [
+        .target(
+            name: "NotabilityContainerDetection",
+            dependencies: [
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ]
+        ),
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
+                "NotabilityContainerDetection",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "WordToMD", package: "word-to-md-swift"),
@@ -69,7 +76,6 @@ let package = Package(
                 .product(name: "DocxWorkflowLib", package: "DocxWorkflowLib"),
                 .product(name: "NoteToHTML", package: "note-to-html-swift"),
                 .product(name: "NoteToPDF", package: "note-to-pdf-swift"),
-                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
                 .product(name: "OCRCore", package: "ocr-swift"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
@@ -77,7 +83,7 @@ let package = Package(
         .testTarget(
             name: "MacDocCLITests",
             dependencies: [
-                "MacDocCLI",
+                "NotabilityContainerDetection",
                 .product(name: "NoteCore", package: "note-core-swift"),
                 // Authoring API for building synthetic docx fixtures in tests
                 // (WordReverseCoverageTests → emptyAuthoringDocument).

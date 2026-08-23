@@ -29,6 +29,8 @@ The root resolver already contains ZIPFoundation 0.9.20 transitively. MacDocCLI 
 
 The classification is `legacy` when any regular entry ends in `Session.plist`; otherwise it is `modernFlatBuffers` when any regular entry ends in `noteBundle`; otherwise it is `unknown`. Legacy takes precedence if both markers exist because the downstream parser has a concrete supported path and must not be denied by an unrelated extra entry.
 
+Before constructing `Archive`, the detector reads at most the final 65,557 bytes and requires exactly one classic single-disk EOCD candidate. That canonical record must also be the first complete EOCD signature ZIPFoundation will encounter while scanning backward; a later non-canonical signature is unsafe even when its declared comment length does not reach EOF. The central directory must be at most 16 MiB, end exactly at EOCD, contain at most 4,096 structurally complete `0x02014b50` records, and use at most 4,096 UTF-8 bytes per entry path. Each record must begin on disk zero and reject ZIP64 version, size/offset sentinels, or ZIP64 extra fields. ZIP64 (including records present without classic EOCD sentinels), multiple/divergent EOCD candidates, malformed/trailing central-directory bytes, a missing EOCD, or an incomplete ZIPFoundation iteration is classified as `unknown`. Comparing the completed iteration count with the independently parsed central directory prevents a damaged local header, forged EOCD count, or shadow directory from silently hiding a later `Session.plist`. These bounds keep the new `.ntb` route from scanning an attacker-controlled file from end to start or following an attacker-controlled ZIP64 entry count.
+
 Alternatives rejected:
 
 - Suffix-only classification cannot detect a modern container renamed to `.note` and contradicts the issue evidence that entry structure is authoritative.
@@ -37,7 +39,7 @@ Alternatives rejected:
 
 ### Gate both HTML and PDF note routes before converter construction
 
-The `.note` and `.ntb` HTML/PDF switch cases call one preflight function before invoking either converter. `modernFlatBuffers` throws a fixed `ValidationError` stating that a modern `.ntb` FlatBuffers container was detected and only legacy plist-based `.note` with `Session.plist` is supported. `legacy` continues to the converter. `unknown` also continues so the established invalid-ZIP or missing-session error remains authoritative for corrupt and unrelated inputs.
+The `.note` and `.ntb` HTML/PDF switch cases call one preflight function before invoking either converter. `modernFlatBuffers` throws a fixed `ValidationError` stating that a modern `.ntb` FlatBuffers container was detected and only legacy plist-based `.note` with `Session.plist` is supported. `legacy` continues to the converter. An unknown `.note` also continues so the established invalid-ZIP or missing-session error remains authoritative for the pre-existing route. An unknown `.ntb` is rejected locally with `無法安全辨識 Notability .ntb 容器；目前僅支援舊版 plist-based .note（Session.plist）`; it is not passed to the legacy parser, preventing the newly recognized suffix from re-entering an unbounded parser or disclosing the input basename.
 
 Alternatives rejected:
 
@@ -58,11 +60,11 @@ README and CONVERSIONS SHALL describe legacy `.note` HTML/PDF as implemented and
 
 **Behavior:** `macdoc convert --to html modern.ntb --output out` and the equivalent PDF command SHALL fail before creating `out`. A ZIP carrying `noteBundle` under a `.note` suffix SHALL fail identically. A ZIP carrying `Session.plist` SHALL retain the existing converter behavior.
 
-**Interface / data shape:** the detector is an internal MacDocCLI value with a classification enum containing `legacy`, `modernFlatBuffers`, and `unknown`. It accepts a file URL and returns a classification without exposing entry names or payloads to callers. The exact modern-container diagnostic is:
+**Interface / data shape:** the detector is package-scoped in the lightweight `NotabilityContainerDetection` target, with a classification enum containing `legacy`, `modernFlatBuffers`, and `unknown`. MacDocCLI and MacDocCLITests depend on that target without exposing it as a public product. It accepts a file URL and returns a classification without exposing entry names or payloads to callers. The exact modern-container diagnostic is:
 
 `偵測到新版 Notability .ntb 容器（noteBundle／FlatBuffers）；目前僅支援舊版 plist-based .note（Session.plist）`
 
-**Failure modes:** inability to open or classify an archive returns `unknown`; the existing converter then supplies the established invalid/missing-session diagnostic. The detector SHALL not log input paths, entry lists, manifest data, note contents, or archive bytes. A modern classification always fails locally without network activity.
+**Failure modes:** inability to open or safely classify an archive returns `unknown`. An unknown `.note` continues to the existing converter for its established invalid/missing-session diagnostic; an unknown `.ntb` fails locally with the fixed safe-classification diagnostic. The detector SHALL not log input paths, entry lists, manifest data, note contents, or archive bytes. A modern or unknown `.ntb` classification always fails locally without network activity.
 
 **Acceptance criteria:** RED tests first fail because `.ntb` is reported as an unsupported route and renamed `.note` receives the legacy missing-session diagnostic. After implementation, compiled CLI tests assert exact stderr, empty stdout, non-zero exit, and absent HTML/PDF destination; existing Note HTML/PDF smoke tests and the full root suite pass. Spectra validation and diff privacy scanning pass.
 
@@ -73,4 +75,6 @@ README and CONVERSIONS SHALL describe legacy `.note` HTML/PDF as implemented and
 - [Risk] A future container uses a different root marker. → Unknown archives fall through to established diagnostics; do not guess from app version.
 - [Risk] A malicious archive includes both markers. → Legacy precedence preserves the only supported parser path; ZIPFoundation payload extraction remains downstream and unchanged.
 - [Risk] Entry enumeration itself processes an attacker-controlled central directory. → Use ZIPFoundation's read-only archive API and never extract or read entry payloads in the detector.
+- [Risk] ZIPFoundation 0.9.20 scans backward without an EOCD bound, can select a non-canonical EOCD-looking ZIP comment, and silently ends iteration on a damaged local header. → Require our canonical EOCD to match ZIPFoundation's first complete signature, independently parse the bounded central directory to exact size/count/disk/ZIP64 constraints, and compare ZIPFoundation's completed iteration before trusting any marker.
 - [Risk] Direct dependency declaration can drift from the transitive resolver. → Use the existing 0.9.20-compatible package requirement and verify Package.resolved remains on the audited revision already present in the root lockfile.
+- [Risk] Making MacDocCLITests depend on the executable target loads its large OOXML graph into XCTest and can destabilize unrelated tests. → Keep detector code in a package-scoped lightweight target shared by the CLI and tests.
