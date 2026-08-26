@@ -73,6 +73,12 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 `paraId` 是段落的 `w14:paraId` 屬性值，可用 che-word-mcp 的讀取工具找出來。
 
+**Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。三個行為細節：
+
+- **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，多個 run 坍縮成一個 run、格式取文字最長那個 run 的 rPr——段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式的文件不適用 slot。
+- **Default 重播恆 byte-equal**：slot 值等於原文字時完全不動該 part（identity shortcut），所以第 5 步的 `--verify-against` 驗證照常成立，不需要任何新驗證模式。
+- **兩個 refuse 情境**：paraId 在 DSL log 與 raw part 都找不到（錯誤訊息會指出兩個查找域）；paraId 在 raw part 出現超過一次（直接拒絕、不猜第一個——填錯官方表單欄位比失敗更糟）。
+
 ### 4. Render — 把腳本放回 docx
 
 ```bash
@@ -131,7 +137,7 @@ macdoc convert 產的 2 段落簡單文件（0 個 paraId）
 **兩個最直覺的輸入都是 0.0%。** 所以：
 
 - 表格密集的官方表單 → **一定**是 raw。拿到的是「穿著 Swift 語法的 byte-equal 封存檔」
-- 它能完美重播、能填 slot、能驗證——**但不能讀、不能手改**
+- 它能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但不能讀、不能手改**
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條 118 KB 的單行整條重新 escape，diff 顯示「一行變了」
 
 如果你的目的是「產生人類可讀的 Swift 文件原始碼」，raw channel 的文件**達不到**，而且這不是設定問題——需要 ooxml-swift 支援 rich table 的 typed 表示與 sub-part 局部降級，兩者目前都不存在。
