@@ -73,9 +73,9 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 `paraId` 是段落的 `w14:paraId` 屬性值，可用 che-word-mcp 的讀取工具找出來。
 
-**Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。三個行為細節：
+**Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後；僅 `word/document.xml` 主 part——headers/footers 的 raw slot 不支援）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。三個行為細節：
 
-- **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，多個 run 坍縮成一個 run、格式取文字最長那個 run 的 rPr——段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式的文件不適用 slot。
+- **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，段內**所有其餘子內容**——多個 run、書籤錨點、超連結、內容控制項、修訂範圍標記——坍縮成一個 run，格式取文字最長那個 run 的 rPr（含藏在 hyperlink 等 inline 包裝內的 run）。段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式或段內錨點的文件不適用 slot。
 - **Default 重播恆 byte-equal**：slot 值等於原文字時完全不動該 part（identity shortcut），所以第 5 步的 `--verify-against` 驗證照常成立，不需要任何新驗證模式。
 - **三個 refuse 情境**：paraId 在 DSL log 與 raw part 都找不到（錯誤訊息指出兩個查找域）；paraId 由超過一個 `<w:p>` 承載（直接拒絕、不猜第一個）；paraId 存在但不在段落上（Word 也會把 `w14:paraId` 寫在表格列 `<w:tr>` 上——錯誤訊息會指出實際承載元素）。填錯官方表單欄位比失敗更糟。
 - **填值後輸出的保證邊界**：`--verify-against` 驗的是「腳本本身」（all-default 重播 byte-equal）；填了新值的輸出**不可能**過全包 byte-equal（值變了）。填值輸出的保證來自 render 本身：替換後會做 XML well-formedness 檢查，失敗直接報錯、不寫檔——render 成功即保證輸出是 well-formed 的 OOXML。要人工核對填了什麼，用 che-word-mcp 的 `compare_documents` 對照原檔。
@@ -153,15 +153,16 @@ macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift --coverage
 macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift \
   --slot applicant=<paraId> --force
 
-# 3. 改腳本裡的 slot 參數值，然後重建
+# 3. 先驗腳本：default 值重播必須與範本逐位元組相同
+#    （這一步在「改值之前」做——它證明的是腳本本身）
+macdoc word render 範本.mdocx.swift --to-docx 重建.docx --verify-against 範本.docx --force
+
+# 4. 改腳本裡的 slot 參數值，然後重建出已填表單
 #    （改一次 slot 值就重跑一次，第二次起輸出檔已存在 → 要 --force）
 macdoc word render 範本.mdocx.swift --to-docx 已填.docx --force
-
-# 4. 驗證「除了填的地方，其餘與範本逐位元組相同」
-macdoc word render 範本.mdocx.swift --to-docx 重建.docx --verify-against 範本.docx --force
 ```
 
-第 4 步是這個工作流的核心價值：**證明**你只動了該動的地方。即使腳本本身不可讀（raw channel），這個保證依然成立。
+第 3 步是這個工作流的核心保證：default 重播 byte-equal **證明**腳本除了 slot 之外逐位元組重建範本。第 4 步（填了新值）的輸出**不會**過 `--verify-against`——值變了，全包 byte-equal 必然不同；它的保證來自 render 本身：raw channel 的替換做完會驗 XML well-formedness，指定段落以外的 bytes 由第 3 步已證的腳本結構背書。要人工核對填了什麼，用 che-word-mcp 的 `compare_documents` 對照範本。
 
 ## 相關
 
