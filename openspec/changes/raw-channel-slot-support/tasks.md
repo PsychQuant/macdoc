@@ -30,3 +30,11 @@
 - [x] 6.2 Depth-aware surgery honoring `w:txbxContent` paragraph nesting and `w:pPrChange`/`w:rPrChange` self-nesting; XML 1.0 validity refusal for slot values; numeric character reference decoding in defaults. Verified by testTextboxNestedParagraphSubstitutionStaysWellFormed / testPPrChangeNestedPPrPreservedAndWellFormed / testControlCharacterValueRefuses / testNumericCharacterReferenceDefaultAndIdentity.
 - [x] 6.3 Import-time guard re-application (stale directive, duplicate, missing binding → `rawSlotExecutionFailure`) and post-surgery well-formedness verification. Verified by testImportStaleDirectiveFailsLoudly / testImportDuplicateParaIdFailsLoudly.
 - [x] 6.4 Full-fixture sweep regression pin: every unique REC-O-01 paraId through substitution — zero corruption (round 1 measured 21/109). Verified by testRECFixtureFullParaIdSweepZeroCorruption; full suite 1439 tests 0 failures.
+
+## 7. Verify round 2 hardening (overlap preflight, no-carry refusal, rPr fallback)
+
+- [x] 7.1 Overlap preflight in `apply`: all designated spans located against the original XML first; overlapping designations (outer paragraph + w:txbxContent-nested inner) refuse with both paraIds named — substitution order can never silently discard a binding. Verified by testOverlappingNestedSlotDesignationsRefuse.
+- [x] 7.2 `// @slot-raw` directives with no `word/document.xml` carryPart in the log refuse instead of no-op. Verified by testRawDirectiveWithoutDocumentCarryRefuses.
+- [x] 7.3 Malformed `// @slot-raw` lines throw at parse (supersedes round-1 silent-skip pin). Verified by testMalformedRawSlotDirectiveFailsLoudly.
+- [x] 7.4 Dominant-rPr selection restored to whole-subtree scan (depth-aware spans) so runs inside `w:hyperlink`/`w:sdt` wrappers contribute formatting. Verified by testHyperlinkWrappedRunContributesDominantRPr.
+- [x] 7.5 SKILL.md 典型情境 reordered (verify-default-first, then substitute; filled output's guarantee = render's post-surgery well-formedness + step-3-proven script structure); collapse semantic documents inline-content removal; main-part-only qualifier. Content review vs shipped behavior.
