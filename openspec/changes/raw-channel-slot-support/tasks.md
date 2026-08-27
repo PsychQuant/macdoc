@@ -23,3 +23,10 @@
 ## 5. Workflow documentation convergence
 
 - [x] 5.1 Update the swiftify SKILL.md raw-channel section from promise to present-tense behavior description: raw-channel slots by paraId, the collapse-to-dominant-run substitution semantic, the identity-shortcut default replay, and the two refusal modes (unknown paraId naming both domains, duplicate paraId). Verified by content review against the shipped behavior and the `swiftify-workflow` spec's coverage-first framing.
+
+## 6. Verify round 1 hardening (structure-aware locator, fail-loud import)
+
+- [x] 6.1 Replace lexical token search with a structure-aware scanner (quote-aware tags, comment/CDATA/PI skip, `<w:p>` nesting depth, attribute-position paraId) delivering the amended requirement "Raw-channel slot designation by paraId" third refusal (non-paragraph carrier named). Verified by testTableRowParaIdRefusesNamingCarrier / testParaIdOnlyInTextContentRefuses / testQuoteForgingValueCannotRedirectLaterSlot.
+- [x] 6.2 Depth-aware surgery honoring `w:txbxContent` paragraph nesting and `w:pPrChange`/`w:rPrChange` self-nesting; XML 1.0 validity refusal for slot values; numeric character reference decoding in defaults. Verified by testTextboxNestedParagraphSubstitutionStaysWellFormed / testPPrChangeNestedPPrPreservedAndWellFormed / testControlCharacterValueRefuses / testNumericCharacterReferenceDefaultAndIdentity.
+- [x] 6.3 Import-time guard re-application (stale directive, duplicate, missing binding → `rawSlotExecutionFailure`) and post-surgery well-formedness verification. Verified by testImportStaleDirectiveFailsLoudly / testImportDuplicateParaIdFailsLoudly.
+- [x] 6.4 Full-fixture sweep regression pin: every unique REC-O-01 paraId through substitution — zero corruption (round 1 measured 21/109). Verified by testRECFixtureFullParaIdSweepZeroCorruption; full suite 1439 tests 0 failures.

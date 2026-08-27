@@ -77,7 +77,8 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 - **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，多個 run 坍縮成一個 run、格式取文字最長那個 run 的 rPr——段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式的文件不適用 slot。
 - **Default 重播恆 byte-equal**：slot 值等於原文字時完全不動該 part（identity shortcut），所以第 5 步的 `--verify-against` 驗證照常成立，不需要任何新驗證模式。
-- **兩個 refuse 情境**：paraId 在 DSL log 與 raw part 都找不到（錯誤訊息會指出兩個查找域）；paraId 在 raw part 出現超過一次（直接拒絕、不猜第一個——填錯官方表單欄位比失敗更糟）。
+- **三個 refuse 情境**：paraId 在 DSL log 與 raw part 都找不到（錯誤訊息指出兩個查找域）；paraId 由超過一個 `<w:p>` 承載（直接拒絕、不猜第一個）；paraId 存在但不在段落上（Word 也會把 `w14:paraId` 寫在表格列 `<w:tr>` 上——錯誤訊息會指出實際承載元素）。填錯官方表單欄位比失敗更糟。
+- **填值後輸出的保證邊界**：`--verify-against` 驗的是「腳本本身」（all-default 重播 byte-equal）；填了新值的輸出**不可能**過全包 byte-equal（值變了）。填值輸出的保證來自 render 本身：替換後會做 XML well-formedness 檢查，失敗直接報錯、不寫檔——render 成功即保證輸出是 well-formed 的 OOXML。要人工核對填了什麼，用 che-word-mcp 的 `compare_documents` 對照原檔。
 
 ### 4. Render — 把腳本放回 docx
 
@@ -137,7 +138,7 @@ macdoc convert 產的 2 段落簡單文件（0 個 paraId）
 **兩個最直覺的輸入都是 0.0%。** 所以：
 
 - 表格密集的官方表單 → **一定**是 raw。拿到的是「穿著 Swift 語法的 byte-equal 封存檔」
-- 它能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但不能讀、不能手改**
+- 它能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條 118 KB 的單行整條重新 escape，diff 顯示「一行變了」
 
 如果你的目的是「產生人類可讀的 Swift 文件原始碼」，raw channel 的文件**達不到**，而且這不是設定問題——需要 ooxml-swift 支援 rich table 的 typed 表示與 sub-part 局部降級，兩者目前都不存在。
@@ -150,7 +151,7 @@ macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift --coverage
 
 # 2. 指定要填的位置
 macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift \
-  --slot 申請人=<paraId> --force
+  --slot applicant=<paraId> --force
 
 # 3. 改腳本裡的 slot 參數值，然後重建
 #    （改一次 slot 值就重跑一次，第二次起輸出檔已存在 → 要 --force）
