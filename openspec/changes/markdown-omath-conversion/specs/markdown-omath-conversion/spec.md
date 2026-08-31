@@ -194,6 +194,12 @@ Every recognized formula SHALL be parsed by `LaTeXMathParser.parse(_:)` from `la
 - **THEN** conversion throws `MarkdownMathConversionError.malformedFormula`
 - **AND** the error contains the one-based source line and column of the opening delimiter
 
+#### Scenario: Error columns use CommonMark UTF-8 semantics
+
+- **WHEN** `.omath` conversion receives `你$\\overbrace{x}$`
+- **THEN** conversion throws `MarkdownMathConversionError.unsupportedFormula`
+- **AND** the opening delimiter is reported at line 1, column 4
+
 ### Requirement: Inline and display math use native Word carriers
 
 An inline formula in ordinary paragraph text SHALL serialize as one direct paragraph child `<m:oMath>` containing the parsed OMML components. An inline formula in a Markdown link label SHALL serialize as one direct `<m:oMath>` child of that paragraph's `<w:hyperlink>` carrier and SHALL remain associated with the original relationship target. A display formula SHALL serialize as one direct paragraph child `<m:oMathPara>` containing one `<m:oMath>` and SHALL NOT generate a synthetic `<w:t>` run for the formula. No inline OMath SHALL be wrapped in `<w:r>`. Generated XML containing either carrier SHALL bind prefix `m` to `http://schemas.openxmlformats.org/officeDocument/2006/math`.
