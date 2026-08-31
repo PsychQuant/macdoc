@@ -49,11 +49,13 @@ struct MarkdownMathScanner {
             let document = Document(parsing: source)
             var inlineRanges: [Range<Int>] = []
             var fallbackInlineRanges: [Range<Int>] = []
+            var fallbackDisplayRanges: [Range<Int>] = []
             var opaqueRanges: [Range<Int>] = []
             var opaqueHTMLRanges: [Range<Int>] = []
             var closingHTMLTags: [Int: String] = [:]
             var paragraphRanges: Set<Range<Int>> = []
             var displayRanges: Set<Range<Int>> = []
+            var continuationSearchOffsets: [Int: Int] = [:]
 
             func offsetRange(for markup: Markup) -> Range<Int>? {
                 guard let range = markup.range,
@@ -98,7 +100,45 @@ struct MarkdownMathScanner {
                 return end
             }
 
-            func recoverMultilineLinkContinuationRange(_ markup: Markup) -> Range<Int>? {
+            func firstMatch(
+                of pattern: [Character],
+                in range: Range<Int>
+            ) -> Range<Int>? {
+                guard !pattern.isEmpty, !range.isEmpty else { return nil }
+                var prefix = [Int](repeating: 0, count: pattern.count)
+                var matched = 0
+                if pattern.count > 1 {
+                    for index in 1..<pattern.count {
+                        while matched > 0, pattern[index] != pattern[matched] {
+                            matched = prefix[matched - 1]
+                        }
+                        if pattern[index] == pattern[matched] {
+                            matched += 1
+                            prefix[index] = matched
+                        }
+                    }
+                }
+
+                matched = 0
+                for index in range {
+                    while matched > 0, characters[index] != pattern[matched] {
+                        matched = prefix[matched - 1]
+                    }
+                    if characters[index] == pattern[matched] {
+                        matched += 1
+                        if matched == pattern.count {
+                            let upper = index + 1
+                            return (upper - pattern.count)..<upper
+                        }
+                    }
+                }
+                return nil
+            }
+
+            func recoverMultilineLinkContinuationRange(
+                _ markup: Markup,
+                in paragraph: Range<Int>
+            ) -> Range<Int>? {
                 guard let sourceRange = markup.range,
                       let lower = offsets[
                           Point(
@@ -123,26 +163,24 @@ struct MarkdownMathScanner {
                    characters[continuationStart].isNewline {
                     continuationStart += 1
                 }
-                guard let paragraph = paragraphRanges.first(where: {
-                    $0.contains(lower) && continuationStart < $0.upperBound
-                }) else {
+                guard paragraph.contains(lower), continuationStart < paragraph.upperBound else {
                     return nil
                 }
-                let rawContinuation = String(
-                    characters[continuationStart..<paragraph.upperBound]
+
+                let destinationCharacters = Array(destination)
+                let search = max(
+                    continuationStart,
+                    continuationSearchOffsets[paragraph.lowerBound] ?? continuationStart
                 )
-                guard let match = rawContinuation.range(of: destination) else {
-                    return nil
+                if let candidate = firstMatch(
+                    of: destinationCharacters,
+                    in: search..<paragraph.upperBound
+                ) {
+                    continuationSearchOffsets[paragraph.lowerBound] = candidate.upperBound
+                    return candidate
                 }
-                let lowerDistance = rawContinuation.distance(
-                    from: rawContinuation.startIndex,
-                    to: match.lowerBound
-                )
-                let upperDistance = rawContinuation.distance(
-                    from: rawContinuation.startIndex,
-                    to: match.upperBound
-                )
-                return (continuationStart + lowerDistance)..<(continuationStart + upperDistance)
+                continuationSearchOffsets[paragraph.lowerBound] = paragraph.upperBound
+                return nil
             }
 
             func paragraphAllowsDisplay(_ paragraph: Markdown.Paragraph) -> Bool {
@@ -157,13 +195,18 @@ struct MarkdownMathScanner {
             ) {
                 guard paragraphAllowsDisplay(paragraph) else { return }
                 var needed: [String: Int] = [:]
+                var neededDisplayDelimiters = 0
                 for child in paragraph.children {
                     guard let text = child as? Text else { continue }
-                    for candidate in Self.inlineCandidates(in: Array(text.string)) {
+                    let textCharacters = Array(text.string)
+                    for candidate in Self.inlineCandidates(in: textCharacters) {
                         needed[candidate.signature, default: 0] += 1
                     }
+                    neededDisplayDelimiters += Self.doubleDollarCandidates(
+                        in: textCharacters
+                    ).count
                 }
-                guard !needed.isEmpty else { return }
+                guard !needed.isEmpty || neededDisplayDelimiters > 0 else { return }
 
                 let rawCandidates = Self.inlineCandidates(
                     in: characters,
@@ -174,6 +217,14 @@ struct MarkdownMathScanner {
                     where needed[candidate.signature, default: 0] > 0 {
                     fallbackInlineRanges.append(candidate.range)
                     needed[candidate.signature, default: 0] -= 1
+                }
+                for candidate in Self.doubleDollarCandidates(
+                    in: characters,
+                    range: sourceRange,
+                    respectBackslashEscapes: true
+                ).reversed() where neededDisplayDelimiters > 0 {
+                    fallbackDisplayRanges.append(candidate)
+                    neededDisplayDelimiters -= 1
                 }
             }
 
@@ -201,10 +252,16 @@ struct MarkdownMathScanner {
                 return String(raw[2..<nameEnd]).lowercased()
             }
 
-            func collect(_ markup: Markup, insideAutolink: Bool = false) {
+            func collect(
+                _ markup: Markup,
+                insideAutolink: Bool = false,
+                enclosingParagraph: Range<Int>? = nil
+            ) {
+                var currentParagraph = enclosingParagraph
                 if let paragraph = markup as? Markdown.Paragraph,
                    let range = offsetRange(for: paragraph) {
                     let contentRange = trimmingWhitespace(range)
+                    currentParagraph = contentRange
                     paragraphRanges.insert(contentRange)
                     if paragraphAllowsDisplay(paragraph) {
                         displayRanges.insert(contentRange)
@@ -225,7 +282,11 @@ struct MarkdownMathScanner {
                     if let range = offsetRange(for: markup) {
                         opaqueRanges.append(range)
                     } else if markup is Markdown.Link || markup is Image,
-                              let continuation = recoverMultilineLinkContinuationRange(markup) {
+                              let currentParagraph,
+                              let continuation = recoverMultilineLinkContinuationRange(
+                                  markup,
+                                  in: currentParagraph
+                              ) {
                         opaqueRanges.append(continuation)
                     }
                 }
@@ -237,7 +298,11 @@ struct MarkdownMathScanner {
                     }
                 }
                 for child in markup.children {
-                    collect(child, insideAutolink: childrenInsideAutolink)
+                    collect(
+                        child,
+                        insideAutolink: childrenInsideAutolink,
+                        enclosingParagraph: currentParagraph
+                    )
                 }
             }
 
@@ -247,7 +312,7 @@ struct MarkdownMathScanner {
                 closingTags: closingHTMLTags
             )
             var visibleOffsets = [Bool](repeating: false, count: characters.count)
-            for range in inlineRanges + fallbackInlineRanges {
+            for range in inlineRanges + fallbackInlineRanges + fallbackDisplayRanges {
                 for offset in range where offset < visibleOffsets.count {
                     visibleOffsets[offset] = true
                 }
@@ -296,11 +361,9 @@ struct MarkdownMathScanner {
         }
 
         func containsVisibleText(at offset: Int) -> Bool {
-            visibleOffsets.indices.contains(offset) && visibleOffsets[offset]
-        }
-
-        func isOpaque(at offset: Int) -> Bool {
-            opaqueOffsets.indices.contains(offset) && opaqueOffsets[offset]
+            visibleOffsets.indices.contains(offset)
+                && visibleOffsets[offset]
+                && !opaqueOffsets[offset]
         }
 
         func sharesParagraph(_ lhs: Int, _ rhs: Int) -> Bool {
@@ -380,6 +443,29 @@ struct MarkdownMathScanner {
                     index = closing + 1
                 } else {
                     index = closing
+                }
+            }
+            return result
+        }
+
+        private static func doubleDollarCandidates(
+            in characters: [Character],
+            range: Range<Int>? = nil,
+            respectBackslashEscapes: Bool = false
+        ) -> [Range<Int>] {
+            let bounds = range ?? characters.startIndex..<characters.endIndex
+            var result: [Range<Int>] = []
+            var index = bounds.lowerBound
+            while index + 1 < bounds.upperBound {
+                if respectBackslashEscapes, characters[index] == "\\" {
+                    index = min(index + 2, bounds.upperBound)
+                    continue
+                }
+                if characters[index] == "$", characters[index + 1] == "$" {
+                    result.append(index..<(index + 2))
+                    index += 2
+                } else {
+                    index += 1
                 }
             }
             return result
@@ -647,16 +733,18 @@ struct MarkdownMathScanner {
                characters[index + 1] == "$" {
                 let openingLine = line
                 let openingColumn = column
+                let currentIsVisible = eligibility.containsVisibleText(at: index)
                 let delimiterIsStandalone = rangeIsWhitespace(logicalLineStart..<index)
                     && rangeIsWhitespace((index + 2)..<currentContentEnd)
-                if let display = Self.displayFormula(
+                if currentIsVisible,
+                   let display = Self.displayFormula(
                     in: characters,
                     opening: index,
                     openingLineEnd: currentContentEnd,
                     lineStart: logicalLineStart,
                     openingQuoteDepth: logicalQuoteDepth,
                     rangeIsWhitespace: rangeIsWhitespace,
-                    closingIsEligible: { !eligibility.isOpaque(at: $0) }
+                    closingIsEligible: eligibility.containsVisibleText(at:)
                 ) {
                     let sourceRange = index..<display.replacementEnd
                     let isIndependentCompleteDisplay = eligibility.allowsDisplay(sourceRange)
@@ -665,7 +753,7 @@ struct MarkdownMathScanner {
                     if let pendingVisibleDisplay,
                        !isIndependentCompleteDisplay,
                        delimiterIsStandalone,
-                       !eligibility.isOpaque(at: index) {
+                       eligibility.containsVisibleText(at: index) {
                         throw ScanError.misplacedDisplayFormula(
                             line: pendingVisibleDisplay.line,
                             column: pendingVisibleDisplay.column
@@ -741,10 +829,9 @@ struct MarkdownMathScanner {
                     continue
                 }
 
-                let currentIsVisible = eligibility.containsVisibleText(at: index)
                 if let pendingVisibleDisplay,
                    delimiterIsStandalone,
-                   !eligibility.isOpaque(at: index) {
+                   currentIsVisible {
                     throw ScanError.misplacedDisplayFormula(
                         line: pendingVisibleDisplay.line,
                         column: pendingVisibleDisplay.column
@@ -846,7 +933,8 @@ struct MarkdownMathScanner {
         if let closing = doubleDollarClosing(
             in: characters,
             from: opening + 2,
-            before: openingLineEnd
+            before: openingLineEnd,
+            closingIsEligible: closingIsEligible
         ) {
             let suffixIsWhitespace = rangeIsWhitespace((closing + 2)..<openingLineEnd)
             let body = String(characters[(opening + 2)..<closing])
@@ -938,7 +1026,8 @@ struct MarkdownMathScanner {
     private static func doubleDollarClosing(
         in characters: [Character],
         from start: Int,
-        before end: Int
+        before end: Int,
+        closingIsEligible: (Int) -> Bool
     ) -> Int? {
         var index = start
         while index + 1 < end {
@@ -946,7 +1035,9 @@ struct MarkdownMathScanner {
                 index += 2
                 continue
             }
-            if characters[index] == "$", characters[index + 1] == "$" {
+            if characters[index] == "$",
+               characters[index + 1] == "$",
+               closingIsEligible(index) {
                 return index
             }
             index += 1

@@ -114,6 +114,31 @@ struct MarkdownOMathRouteTests {
         #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
     }
 
+    @Test("same-line opaque display delimiter remains literal")
+    func sameLineOpaqueDisplayDelimiter() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        try "Unmatched $$ here `$$`".write(
+            to: input,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(result.succeeded, "stderr: \(result.stderr)")
+        let xml = try archiveEntry(named: "word/document.xml", in: output)
+        #expect(xml.contains("Unmatched $$ here"))
+        #expect(!xml.contains("<m:oMath"))
+        #expect(!xml.contains("MDTOWORDMATHPLACEHOLDER"))
+    }
+
     @Test("invalid math value fails before replacing destination")
     func invalidMathValuePreservesDestination() throws {
         let workspace = try makeWorkspace()
@@ -294,6 +319,14 @@ struct MarkdownOMathRouteTests {
             (
                 "$$\n[link](\n$$\n)\n",
                 "$$"
+            ),
+            (
+                "$$\nUse [link][ref].\n\n[ref]:\n  $$\n",
+                "$$"
+            ),
+            (
+                "Unmatched $$ here [link](https://example.com/$$)",
+                "https://example.com/$$"
             ),
         ]
 

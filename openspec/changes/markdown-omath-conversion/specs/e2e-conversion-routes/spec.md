@@ -51,7 +51,7 @@ The compiled E2E suite SHALL exercise `macdoc convert` through the production co
 
 #### Scenario: Compiled route never writes placeholders into relationships or visible text
 
-- **WHEN** the compiled binary receives multiline reference labels, angle-bracket destinations containing `)`, HTML comments/blocks, quoted HTML attributes, or formatting-node-spanning delimiters
+- **WHEN** the compiled binary receives multiline reference labels, a reference continuation destination equal to `$$`, angle-bracket destinations containing `)`, HTML comments/blocks, quoted HTML attributes, or formatting-node-spanning delimiters
 - **THEN** exit code and formula behavior follow the library boundary contract
 - **AND** neither `word/document.xml` nor `word/_rels/document.xml.rels` contains `MDTOWORDMATHPLACEHOLDER`
 

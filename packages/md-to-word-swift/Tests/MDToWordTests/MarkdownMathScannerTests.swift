@@ -189,8 +189,12 @@ final class MarkdownMathScannerTests: XCTestCase {
             "$$\n[link](https://example.com/$$x$$)\n",
             "$$\n<span title=\"$$x$$\">text</span>\n",
             "$$\n[link](\n$$\n)\n",
+            "$$\nUse [link][ref].\n\n[ref]:\n  $$\n",
             "$$\n```text\n$$\n```\n",
             "$$\n<div>\n$$\n</div>\n",
+            "Unmatched $$ here `$$`\n",
+            "Unmatched $$ here [link](https://example.com/$$)\n",
+            "Unmatched $$ here <span title=\"$$\">text</span>\n",
         ]
 
         for source in sources {
@@ -386,6 +390,21 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(result).tokens.isEmpty)
         XCTAssertEqual(result?.markdown, source)
         XCTAssertLessThan(elapsed, .seconds(1))
+    }
+
+    func testMultilineLinkContinuationRecoveryRemainsBounded() throws {
+        let fixture = "[link](\nhttps://example.com/$x$\n)"
+        let source = Array(repeating: fixture, count: 4_000).joined(separator: "\n\n")
+        let clock = ContinuousClock()
+        var result: MarkdownMathScanner.Result?
+
+        let elapsed = try clock.measure {
+            result = try MarkdownMathScanner().scan(source)
+        }
+
+        XCTAssertTrue(try XCTUnwrap(result).tokens.isEmpty)
+        XCTAssertEqual(result?.markdown, source)
+        XCTAssertLessThan(elapsed, .seconds(2))
     }
 
     func testMathTokenConsumptionRequiresExactlyOneCarrier() throws {
