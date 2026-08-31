@@ -180,6 +180,41 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertTrue(result.markdown.contains(result.tokens[0].placeholder))
     }
 
+    func testUnmatchedDisplayIgnoresLaterOpaqueDoubleDollars() throws {
+        let sources = [
+            "Unmatched $$ here\n\nCode `$$x$$`\n",
+            "Unmatched $$ here\n\n[link](https://example.com/$$x$$)\n",
+            "Unmatched $$ here\n\n<span title=\"$$x$$\">text</span>\n",
+        ]
+
+        for source in sources {
+            let result = try MarkdownMathScanner().scan(source)
+            XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
+            XCTAssertEqual(result.markdown, source, "Source: \(source)")
+        }
+    }
+
+    func testMixedUnmatchedDisplaysRemainLiteralBeforeCompleteDisplay() throws {
+        let source = "First unmatched $$ here\n\nSecond unmatched $$ there\n\n$$x$$\n"
+        let result = try MarkdownMathScanner().scan(source)
+
+        XCTAssertEqual(result.tokens.count, 1)
+        XCTAssertEqual(result.tokens[0].kind, .display)
+        XCTAssertTrue(result.markdown.contains("First unmatched $$ here"))
+        XCTAssertTrue(result.markdown.contains("Second unmatched $$ there"))
+    }
+
+    func testMixedDisplayReportsItsOwnLocationAfterUnmatchedLiteral() {
+        let source = "First $$ here\n\nbefore $$x$$ after"
+
+        XCTAssertThrowsError(try MarkdownMathScanner().scan(source)) { error in
+            XCTAssertEqual(
+                error as? MarkdownMathScanner.ScanError,
+                .misplacedDisplayFormula(line: 3, column: 8)
+            )
+        }
+    }
+
     func testDisplayDelimiterMixedWithTextIsRejected() {
         XCTAssertThrowsError(try MarkdownMathScanner().scan("before $$x$$ after")) { error in
             XCTAssertEqual(

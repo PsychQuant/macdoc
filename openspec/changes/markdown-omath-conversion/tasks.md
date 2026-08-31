@@ -70,4 +70,5 @@
 - [x] 14.1 Preserve unmatched `$$` as literal when followed by a separate complete display formula, while the pending-delimiter state still rejects cross-container/list/blockquote pairs in one forward pass.
 - [x] 14.2 Carry the scanner's exact `PUA + marker prefix + generated nonce` search prefix into the renderer; single- and multi-token conversions retain exact matching without a single-token suffix bug.
 - [x] 14.3 Align the carrier contract with supported link-label math: ordinary inline OMath is a paragraph child, link-label OMath is a direct `w:hyperlink` child, and neither is wrapped in `w:r`.
-- [x] 14.4 Final focused verification: scanner/converter 55/55 and compiled CLI 15/15, including unmatched-then-complete display output with no internal placeholder; Spectra strict and CRLF-aware diff gate PASS.
+- [x] 14.4 Final focused verification: scanner/converter 58/58 and compiled CLI 15/15, including unmatched-then-complete display output with no internal placeholder; Spectra strict and CRLF-aware diff gate PASS.
+- [x] 14.5 Restrict pending display pairing to standalone visible delimiter lines and eligible same-paragraph/container matches. Exact regressions cover two mixed unmatched delimiters, a later complete display, current mixed-display source location, and opaque inline-code/link-destination/HTML `$$x$$` content.
