@@ -291,6 +291,10 @@ struct MarkdownOMathRouteTests {
                 "[link](<https://example.com/a)$x$>)",
                 "https://example.com/a)$x$"
             ),
+            (
+                "$$\n[link](\n$$\n)\n",
+                "$$"
+            ),
         ]
 
         for testCase in cases {
