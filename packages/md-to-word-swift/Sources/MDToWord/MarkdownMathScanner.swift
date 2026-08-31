@@ -544,6 +544,14 @@ struct MarkdownMathScanner {
                characters[index + 1] == "$" {
                 let openingLine = line
                 let openingColumn = column
+                let currentLineEnd = Self.contentEndBeforeNewline(
+                    in: characters,
+                    lineEnd: Self.lineEnd(in: characters, from: index)
+                )
+                let delimiterIsStandalone = characters[logicalLineStart..<index]
+                    .allSatisfy(\.isWhitespace)
+                    && characters[(index + 2)..<currentLineEnd]
+                        .allSatisfy(\.isWhitespace)
                 if let display = Self.displayFormula(
                     in: characters,
                     opening: index,
@@ -555,7 +563,9 @@ struct MarkdownMathScanner {
                         && !display.mixedWithText
                         && !display.latex.isEmpty
                     if let pendingVisibleDisplay,
-                       !isIndependentCompleteDisplay {
+                       !isIndependentCompleteDisplay,
+                       eligibility.containsVisibleText(at: index)
+                        || eligibility.sharesParagraph(pendingVisibleDisplay.offset, index) {
                         throw ScanError.misplacedDisplayFormula(
                             line: pendingVisibleDisplay.line,
                             column: pendingVisibleDisplay.column
@@ -640,7 +650,7 @@ struct MarkdownMathScanner {
                         column: pendingVisibleDisplay.column
                     )
                 }
-                if currentIsVisible {
+                if currentIsVisible, delimiterIsStandalone {
                     pendingVisibleDisplay = (
                         offset: index,
                         line: openingLine,
