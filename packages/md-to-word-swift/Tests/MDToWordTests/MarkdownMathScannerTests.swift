@@ -188,10 +188,19 @@ final class MarkdownMathScannerTests: XCTestCase {
             "$$\nCode `$$x$$`\n",
             "$$\n[link](https://example.com/$$x$$)\n",
             "$$\n<span title=\"$$x$$\">text</span>\n",
+            "$$\n[link](\n$$\n)\n",
+            "$$\n```text\n$$\n```\n",
+            "$$\n<div>\n$$\n</div>\n",
         ]
 
         for source in sources {
-            let result = try MarkdownMathScanner().scan(source)
+            let result: MarkdownMathScanner.Result
+            do {
+                result = try MarkdownMathScanner().scan(source)
+            } catch {
+                XCTFail("Source: \(source); error: \(error)")
+                continue
+            }
             XCTAssertTrue(result.tokens.isEmpty, "Source: \(source)")
             XCTAssertEqual(result.markdown, source, "Source: \(source)")
         }
@@ -350,6 +359,23 @@ final class MarkdownMathScannerTests: XCTestCase {
 
     func testDenseOpaqueDoubleDollarsRemainBounded() throws {
         let source = "`" + String(repeating: "$$x", count: 10_000) + "`"
+        let clock = ContinuousClock()
+        var result: MarkdownMathScanner.Result?
+
+        let elapsed = try clock.measure {
+            result = try MarkdownMathScanner().scan(source)
+        }
+
+        XCTAssertTrue(try XCTUnwrap(result).tokens.isEmpty)
+        XCTAssertEqual(result?.markdown, source)
+        XCTAssertLessThan(elapsed, .seconds(1))
+    }
+
+    func testUnicodeWhitespacePrefixedOpaqueDollarsRemainBounded() throws {
+        let source = "```text\n"
+            + String(repeating: "\u{00A0}", count: 5_000)
+            + String(repeating: "$$x", count: 5_000)
+            + "\n```\n"
         let clock = ContinuousClock()
         var result: MarkdownMathScanner.Result?
 

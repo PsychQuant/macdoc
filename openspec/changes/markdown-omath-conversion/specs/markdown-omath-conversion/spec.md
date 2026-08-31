@@ -90,6 +90,12 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **THEN** every unmatched/opaque delimiter remains literal and produces no cross-boundary error
 - **AND** a later separately complete display paragraph remains eligible
 
+#### Scenario: Multiline opaque standalone closing is ignored
+
+- **WHEN** an unmatched visible `$$` is followed by a standalone `$$` line inside a multiline link/image destination, fenced/indented code block, or HTML block
+- **THEN** the opaque delimiter is not accepted as the visible opener's closing delimiter
+- **AND** destination bytes and all literal delimiters remain unchanged
+
 #### Scenario: Unterminated HTML-like prefixes remain bounded
 
 - **WHEN** one physical line contains many `<tag` prefixes without a closing `>`
@@ -119,6 +125,12 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **WHEN** one physical line contains 10,000 `$$` pairs inside an opaque inline-code carrier
 - **THEN** every delimiter remains literal and produces no token
 - **AND** physical line-end discovery occurs a bounded number of times rather than once per delimiter
+
+#### Scenario: Unicode-whitespace-prefixed opaque dollars remain bounded
+
+- **WHEN** one opaque physical line begins with 5,000 NBSP characters followed by 5,000 dense `$$x` sequences
+- **THEN** every delimiter remains literal and produces no token
+- **AND** whitespace-prefix and suffix checks use the precomputed prefix index rather than rescanning the NBSP prefix
 
 #### Scenario: Visible text after invalid reference-like syntax remains eligible
 

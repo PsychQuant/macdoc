@@ -39,6 +39,7 @@ struct MarkdownMathScanner {
 
         private let inlineIneligiblePrefix: [Int]
         private let visibleOffsets: [Bool]
+        private let opaqueOffsets: [Bool]
         private let paragraphIdentifiers: [Int?]
         private let paragraphRanges: Set<Range<Int>>
         private let displayRanges: Set<Range<Int>>
@@ -48,6 +49,7 @@ struct MarkdownMathScanner {
             let document = Document(parsing: source)
             var inlineRanges: [Range<Int>] = []
             var fallbackInlineRanges: [Range<Int>] = []
+            var opaqueRanges: [Range<Int>] = []
             var opaqueHTMLRanges: [Range<Int>] = []
             var closingHTMLTags: [Int: String] = [:]
             var paragraphRanges: Set<Range<Int>> = []
@@ -86,6 +88,61 @@ struct MarkdownMathScanner {
                 }
                 return characters[range.lowerBound] == "<"
                     && characters[range.upperBound - 1] == ">"
+            }
+
+            func physicalLineEnd(from start: Int) -> Int {
+                var end = start
+                while end < characters.count, !characters[end].isNewline {
+                    end += 1
+                }
+                return end
+            }
+
+            func recoverMultilineLinkContinuationRange(_ markup: Markup) -> Range<Int>? {
+                guard let sourceRange = markup.range,
+                      let lower = offsets[
+                          Point(
+                              line: sourceRange.lowerBound.line,
+                              column: sourceRange.lowerBound.column
+                          )
+                      ] else {
+                    return nil
+                }
+                let destination: String?
+                if let link = markup as? Markdown.Link {
+                    destination = link.destination
+                } else if let image = markup as? Image {
+                    destination = image.source
+                } else {
+                    destination = nil
+                }
+                guard let destination, !destination.isEmpty else { return nil }
+
+                var continuationStart = physicalLineEnd(from: lower)
+                if continuationStart < characters.count,
+                   characters[continuationStart].isNewline {
+                    continuationStart += 1
+                }
+                guard let paragraph = paragraphRanges.first(where: {
+                    $0.contains(lower) && continuationStart < $0.upperBound
+                }) else {
+                    return nil
+                }
+                let rawContinuation = String(
+                    characters[continuationStart..<paragraph.upperBound]
+                )
+                guard let match = rawContinuation.range(of: destination) else {
+                    return nil
+                }
+                let lowerDistance = rawContinuation.distance(
+                    from: rawContinuation.startIndex,
+                    to: match.lowerBound
+                )
+                let upperDistance = rawContinuation.distance(
+                    from: rawContinuation.startIndex,
+                    to: match.upperBound
+                )
+                return (continuationStart + lowerDistance)..<(continuationStart + upperDistance)
             }
 
             func paragraphAllowsDisplay(_ paragraph: Markdown.Paragraph) -> Bool {
@@ -160,6 +217,18 @@ struct MarkdownMathScanner {
                 if markup is Text, !insideAutolink, let range = offsetRange(for: markup) {
                     inlineRanges.append(range)
                 }
+                if (markup is InlineCode
+                    || markup is CodeBlock
+                    || markup is HTMLBlock
+                    || markup is Markdown.Link
+                    || markup is Image) {
+                    if let range = offsetRange(for: markup) {
+                        opaqueRanges.append(range)
+                    } else if markup is Markdown.Link || markup is Image,
+                              let continuation = recoverMultilineLinkContinuationRange(markup) {
+                        opaqueRanges.append(continuation)
+                    }
+                }
                 if let inlineHTML = markup as? InlineHTML,
                    let range = recoverInlineHTMLRange(inlineHTML) {
                     opaqueHTMLRanges.append(range)
@@ -188,6 +257,15 @@ struct MarkdownMathScanner {
                     visibleOffsets[offset] = false
                 }
             }
+            var opaqueOffsets = [Bool](repeating: false, count: characters.count)
+            for range in opaqueRanges + opaqueHTMLRanges {
+                for offset in range where opaqueOffsets.indices.contains(offset) {
+                    opaqueOffsets[offset] = true
+                }
+            }
+            for offset in visibleOffsets.indices where visibleOffsets[offset] {
+                opaqueOffsets[offset] = false
+            }
             var inlineIneligiblePrefix = [Int](repeating: 0, count: characters.count + 1)
             for offset in characters.indices {
                 inlineIneligiblePrefix[offset + 1] = inlineIneligiblePrefix[offset]
@@ -201,6 +279,7 @@ struct MarkdownMathScanner {
             }
             self.inlineIneligiblePrefix = inlineIneligiblePrefix
             self.visibleOffsets = visibleOffsets
+            self.opaqueOffsets = opaqueOffsets
             self.paragraphIdentifiers = paragraphIdentifiers
             self.paragraphRanges = paragraphRanges
             self.displayRanges = displayRanges
@@ -218,6 +297,10 @@ struct MarkdownMathScanner {
 
         func containsVisibleText(at offset: Int) -> Bool {
             visibleOffsets.indices.contains(offset) && visibleOffsets[offset]
+        }
+
+        func isOpaque(at offset: Int) -> Bool {
+            opaqueOffsets.indices.contains(offset) && opaqueOffsets[offset]
         }
 
         func sharesParagraph(_ lhs: Int, _ rhs: Int) -> Bool {
@@ -486,6 +569,21 @@ struct MarkdownMathScanner {
 
     func scan(_ source: String) throws -> Result {
         let characters = Array(source)
+        var nonWhitespacePrefix = [Int](repeating: 0, count: characters.count + 1)
+        for offset in characters.indices {
+            nonWhitespacePrefix[offset + 1] = nonWhitespacePrefix[offset]
+                + (characters[offset].isWhitespace ? 0 : 1)
+        }
+
+        func rangeIsWhitespace(_ range: Range<Int>) -> Bool {
+            guard 0 <= range.lowerBound,
+                  range.upperBound < nonWhitespacePrefix.count else {
+                return false
+            }
+            return nonWhitespacePrefix[range.upperBound]
+                == nonWhitespacePrefix[range.lowerBound]
+        }
+
         let eligibility = SourceEligibility(source: source, characters: characters)
         let markerStem = markerPrefix + markerNonce
         let reservedMarkerIndices = Self.reservedMarkerIndices(
@@ -503,7 +601,7 @@ struct MarkdownMathScanner {
         var currentContentEnd = 0
         var logicalLineStart = 0
         var logicalQuoteDepth = 0
-        var pendingVisibleDisplay: (offset: Int, line: Int, column: Int)?
+        var pendingVisibleDisplay: (line: Int, column: Int)?
 
         func marker() -> String {
             while reservedMarkerIndices.contains(nextMarkerIndex) {
@@ -549,16 +647,16 @@ struct MarkdownMathScanner {
                characters[index + 1] == "$" {
                 let openingLine = line
                 let openingColumn = column
-                let delimiterIsStandalone = characters[logicalLineStart..<index]
-                    .allSatisfy(\.isWhitespace)
-                    && characters[(index + 2)..<currentContentEnd]
-                        .allSatisfy(\.isWhitespace)
+                let delimiterIsStandalone = rangeIsWhitespace(logicalLineStart..<index)
+                    && rangeIsWhitespace((index + 2)..<currentContentEnd)
                 if let display = Self.displayFormula(
                     in: characters,
                     opening: index,
                     openingLineEnd: currentContentEnd,
                     lineStart: logicalLineStart,
-                    openingQuoteDepth: logicalQuoteDepth
+                    openingQuoteDepth: logicalQuoteDepth,
+                    rangeIsWhitespace: rangeIsWhitespace,
+                    closingIsEligible: { !eligibility.isOpaque(at: $0) }
                 ) {
                     let sourceRange = index..<display.replacementEnd
                     let isIndependentCompleteDisplay = eligibility.allowsDisplay(sourceRange)
@@ -567,11 +665,7 @@ struct MarkdownMathScanner {
                     if let pendingVisibleDisplay,
                        !isIndependentCompleteDisplay,
                        delimiterIsStandalone,
-                       eligibility.containsVisibleText(at: index)
-                        || eligibility.sharesParagraph(
-                                pendingVisibleDisplay.offset,
-                                index
-                            ) {
+                       !eligibility.isOpaque(at: index) {
                         throw ScanError.misplacedDisplayFormula(
                             line: pendingVisibleDisplay.line,
                             column: pendingVisibleDisplay.column
@@ -650,11 +744,7 @@ struct MarkdownMathScanner {
                 let currentIsVisible = eligibility.containsVisibleText(at: index)
                 if let pendingVisibleDisplay,
                    delimiterIsStandalone,
-                   currentIsVisible
-                    || eligibility.sharesParagraph(
-                            pendingVisibleDisplay.offset,
-                            index
-                        ) {
+                   !eligibility.isOpaque(at: index) {
                     throw ScanError.misplacedDisplayFormula(
                         line: pendingVisibleDisplay.line,
                         column: pendingVisibleDisplay.column
@@ -662,7 +752,6 @@ struct MarkdownMathScanner {
                 }
                 if currentIsVisible, delimiterIsStandalone {
                     pendingVisibleDisplay = (
-                        offset: index,
                         line: openingLine,
                         column: openingColumn
                     )
@@ -748,17 +837,18 @@ struct MarkdownMathScanner {
         opening: Int,
         openingLineEnd: Int,
         lineStart: Int,
-        openingQuoteDepth: Int
+        openingQuoteDepth: Int,
+        rangeIsWhitespace: (Range<Int>) -> Bool,
+        closingIsEligible: (Int) -> Bool
     ) -> DisplayMatch? {
-        let prefixIsWhitespace = characters[lineStart..<opening].allSatisfy(\.isWhitespace)
+        let prefixIsWhitespace = rangeIsWhitespace(lineStart..<opening)
 
         if let closing = doubleDollarClosing(
             in: characters,
             from: opening + 2,
             before: openingLineEnd
         ) {
-            let suffixIsWhitespace = characters[(closing + 2)..<openingLineEnd]
-                .allSatisfy(\.isWhitespace)
+            let suffixIsWhitespace = rangeIsWhitespace((closing + 2)..<openingLineEnd)
             let body = String(characters[(opening + 2)..<closing])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let consumedEnd = closing + 2
@@ -772,8 +862,7 @@ struct MarkdownMathScanner {
             )
         }
 
-        let openerSuffixIsWhitespace = characters[(opening + 2)..<openingLineEnd]
-            .allSatisfy(\.isWhitespace)
+        let openerSuffixIsWhitespace = rangeIsWhitespace((opening + 2)..<openingLineEnd)
         guard prefixIsWhitespace, openerSuffixIsWhitespace else {
             return nil
         }
@@ -800,7 +889,8 @@ struct MarkdownMathScanner {
             if contentStart + 2 <= candidateLineEnd,
                characters[contentStart] == "$",
                characters[contentStart + 1] == "$",
-               characters[(contentStart + 2)..<candidateLineEnd].allSatisfy(\.isWhitespace) {
+               rangeIsWhitespace((contentStart + 2)..<candidateLineEnd),
+               closingIsEligible(contentStart) {
                 let body = bodyLines.joined(separator: "\n")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 var consumedEnd = candidateLineEnd
