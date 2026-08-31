@@ -114,6 +114,12 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **THEN** the text remains literal
 - **AND** renderer lookup completes within the linear performance budget
 
+#### Scenario: Dense opaque double dollars remain bounded
+
+- **WHEN** one physical line contains 10,000 `$$` pairs inside an opaque inline-code carrier
+- **THEN** every delimiter remains literal and produces no token
+- **AND** physical line-end discovery occurs a bounded number of times rather than once per delimiter
+
 #### Scenario: Visible text after invalid reference-like syntax remains eligible
 
 - **WHEN** a line beginning with reference-like or title-like syntax is parsed by CommonMark as visible text containing `$x$`

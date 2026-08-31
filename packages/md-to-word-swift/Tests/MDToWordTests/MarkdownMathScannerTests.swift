@@ -185,6 +185,9 @@ final class MarkdownMathScannerTests: XCTestCase {
             "Unmatched $$ here\n\nCode `$$x$$`\n",
             "Unmatched $$ here\n\n[link](https://example.com/$$x$$)\n",
             "Unmatched $$ here\n\n<span title=\"$$x$$\">text</span>\n",
+            "$$\nCode `$$x$$`\n",
+            "$$\n[link](https://example.com/$$x$$)\n",
+            "$$\n<span title=\"$$x$$\">text</span>\n",
         ]
 
         for source in sources {
@@ -204,8 +207,27 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertTrue(result.markdown.contains("Second unmatched $$ there"))
     }
 
+    func testStandaloneUnmatchedDisplayIgnoresLaterMixedDelimiter() throws {
+        let source = "$$\n\nText $$ here\n"
+        let result = try MarkdownMathScanner().scan(source)
+
+        XCTAssertTrue(result.tokens.isEmpty)
+        XCTAssertEqual(result.markdown, source)
+    }
+
     func testMixedDisplayReportsItsOwnLocationAfterUnmatchedLiteral() {
         let source = "First $$ here\n\nbefore $$x$$ after"
+
+        XCTAssertThrowsError(try MarkdownMathScanner().scan(source)) { error in
+            XCTAssertEqual(
+                error as? MarkdownMathScanner.ScanError,
+                .misplacedDisplayFormula(line: 3, column: 8)
+            )
+        }
+    }
+
+    func testMixedDisplayReportsOwnLocationAfterStandaloneUnmatchedLiteral() {
+        let source = "$$\n\nbefore $$x$$ after"
 
         XCTAssertThrowsError(try MarkdownMathScanner().scan(source)) { error in
             XCTAssertEqual(
@@ -324,6 +346,20 @@ final class MarkdownMathScannerTests: XCTestCase {
         }
 
         XCTAssertLessThan(elapsed, .seconds(1.5), "Elapsed: \(elapsed)")
+    }
+
+    func testDenseOpaqueDoubleDollarsRemainBounded() throws {
+        let source = "`" + String(repeating: "$$x", count: 10_000) + "`"
+        let clock = ContinuousClock()
+        var result: MarkdownMathScanner.Result?
+
+        let elapsed = try clock.measure {
+            result = try MarkdownMathScanner().scan(source)
+        }
+
+        XCTAssertTrue(try XCTUnwrap(result).tokens.isEmpty)
+        XCTAssertEqual(result?.markdown, source)
+        XCTAssertLessThan(elapsed, .seconds(1))
     }
 
     func testMathTokenConsumptionRequiresExactlyOneCarrier() throws {

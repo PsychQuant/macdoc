@@ -499,6 +499,8 @@ struct MarkdownMathScanner {
         var line = 1
         var column = 1
         var lineStart = 0
+        var currentPhysicalLineEnd = 0
+        var currentContentEnd = 0
         var logicalLineStart = 0
         var logicalQuoteDepth = 0
         var pendingVisibleDisplay: (offset: Int, line: Int, column: Int)?
@@ -513,12 +515,15 @@ struct MarkdownMathScanner {
 
         while index < characters.count {
             if index == lineStart {
-                let end = Self.lineEnd(in: characters, from: index)
-                let contentEnd = Self.contentEndBeforeNewline(in: characters, lineEnd: end)
+                currentPhysicalLineEnd = Self.lineEnd(in: characters, from: index)
+                currentContentEnd = Self.contentEndBeforeNewline(
+                    in: characters,
+                    lineEnd: currentPhysicalLineEnd
+                )
                 let context = Self.lineContext(
                     characters,
                     start: index,
-                    end: contentEnd
+                    end: currentContentEnd
                 )
                 logicalLineStart = context.contentStart
                 logicalQuoteDepth = context.quoteDepth
@@ -544,17 +549,14 @@ struct MarkdownMathScanner {
                characters[index + 1] == "$" {
                 let openingLine = line
                 let openingColumn = column
-                let currentLineEnd = Self.contentEndBeforeNewline(
-                    in: characters,
-                    lineEnd: Self.lineEnd(in: characters, from: index)
-                )
                 let delimiterIsStandalone = characters[logicalLineStart..<index]
                     .allSatisfy(\.isWhitespace)
-                    && characters[(index + 2)..<currentLineEnd]
+                    && characters[(index + 2)..<currentContentEnd]
                         .allSatisfy(\.isWhitespace)
                 if let display = Self.displayFormula(
                     in: characters,
                     opening: index,
+                    openingLineEnd: currentContentEnd,
                     lineStart: logicalLineStart,
                     openingQuoteDepth: logicalQuoteDepth
                 ) {
@@ -564,8 +566,12 @@ struct MarkdownMathScanner {
                         && !display.latex.isEmpty
                     if let pendingVisibleDisplay,
                        !isIndependentCompleteDisplay,
+                       delimiterIsStandalone,
                        eligibility.containsVisibleText(at: index)
-                        || eligibility.sharesParagraph(pendingVisibleDisplay.offset, index) {
+                        || eligibility.sharesParagraph(
+                                pendingVisibleDisplay.offset,
+                                index
+                            ) {
                         throw ScanError.misplacedDisplayFormula(
                             line: pendingVisibleDisplay.line,
                             column: pendingVisibleDisplay.column
@@ -643,8 +649,12 @@ struct MarkdownMathScanner {
 
                 let currentIsVisible = eligibility.containsVisibleText(at: index)
                 if let pendingVisibleDisplay,
+                   delimiterIsStandalone,
                    currentIsVisible
-                    || eligibility.sharesParagraph(pendingVisibleDisplay.offset, index) {
+                    || eligibility.sharesParagraph(
+                            pendingVisibleDisplay.offset,
+                            index
+                        ) {
                     throw ScanError.misplacedDisplayFormula(
                         line: pendingVisibleDisplay.line,
                         column: pendingVisibleDisplay.column
@@ -736,13 +746,10 @@ struct MarkdownMathScanner {
     private static func displayFormula(
         in characters: [Character],
         opening: Int,
+        openingLineEnd: Int,
         lineStart: Int,
         openingQuoteDepth: Int
     ) -> DisplayMatch? {
-        let openingLineEnd = contentEndBeforeNewline(
-            in: characters,
-            lineEnd: lineEnd(in: characters, from: opening)
-        )
         let prefixIsWhitespace = characters[lineStart..<opening].allSatisfy(\.isWhitespace)
 
         if let closing = doubleDollarClosing(
