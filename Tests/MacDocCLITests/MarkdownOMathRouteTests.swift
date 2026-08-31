@@ -203,6 +203,28 @@ struct MarkdownOMathRouteTests {
         #expect(try Data(contentsOf: output) == sentinel)
     }
 
+    @Test("formula error column uses CommonMark UTF-8 semantics")
+    func formulaErrorUsesUTF8Column() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let input = workspace.appendingPathComponent("fixture.md")
+        let output = workspace.appendingPathComponent("fixture.docx")
+        let sentinel = Data("KEEP".utf8)
+        try "你$\\overbrace{x}$".write(to: input, atomically: true, encoding: .utf8)
+        try sentinel.write(to: output)
+
+        let result = try CLITestHelper.convert(
+            to: "docx",
+            input: input.path,
+            flags: ["--math", "omath", "--output", output.path]
+        )
+
+        #expect(!result.succeeded)
+        #expect(result.stdout.isEmpty)
+        #expect(result.stderr.contains("line 1, column 4"))
+        #expect(try Data(contentsOf: output) == sentinel)
+    }
+
     @Test("display math sharing a logical paragraph fails before replacing destination")
     func mixedLogicalParagraphDisplayPreservesDestination() throws {
         let workspace = try makeWorkspace()
