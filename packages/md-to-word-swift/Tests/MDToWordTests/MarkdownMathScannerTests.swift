@@ -103,6 +103,14 @@ final class MarkdownMathScannerTests: XCTestCase {
         XCTAssertEqual(result.markdown, "First\n\nA \(result.tokens[0].placeholder) B")
     }
 
+    func testTokenColumnUsesCommonMarkUTF8Semantics() throws {
+        let result = try MarkdownMathScanner().scan("你$x$")
+
+        XCTAssertEqual(result.tokens.count, 1)
+        XCTAssertEqual(result.tokens[0].line, 1)
+        XCTAssertEqual(result.tokens[0].column, 4)
+    }
+
     func testCRLFCountsAsOneLogicalLine() throws {
         let result = try MarkdownMathScanner().scan("First\r\nA $x$ B")
 

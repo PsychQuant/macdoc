@@ -85,7 +85,7 @@ Alternatives rejected:
 
 ### Recognized formula failures are stable, located, and pre-write
 
-`MDToWord` will expose a public `MarkdownMathConversionError` that reports the one-based line and column of a recognized formula and a stable reason category: malformed or unsupported. Internal `LaTeXParseError` details are normalized into this type so callers do not depend on transitive parser implementation.
+`MDToWord` will expose a public `MarkdownMathConversionError` that reports the one-based CommonMark UTF-8 line and column of a recognized formula and a stable reason category: malformed or unsupported. Scanner advancement and original AST range indexing therefore share the same column-width semantics, including when non-ASCII text precedes a formula. Internal `LaTeXParseError` details are normalized into this type so callers do not depend on transitive parser implementation.
 
 The converter scans and parses every recognized formula while building the complete in-memory `WordDocument`. `convertToFile` calls `DocxWriter` only after that succeeds. Therefore a formula error creates no destination and leaves an existing destination byte-identical. Unmatched currency-like dollar text is not an error because it is not a recognized formula span.
 

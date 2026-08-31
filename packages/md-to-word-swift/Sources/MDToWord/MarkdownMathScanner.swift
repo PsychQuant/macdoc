@@ -1212,7 +1212,7 @@ struct MarkdownMathScanner {
                 column = 1
                 lineStart = index + 1
             } else {
-                column += 1
+                column += String(characters[index]).utf8.count
             }
         }
     }

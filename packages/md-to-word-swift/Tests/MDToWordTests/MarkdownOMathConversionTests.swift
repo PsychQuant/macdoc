@@ -393,6 +393,19 @@ final class MarkdownOMathConversionTests: XCTestCase {
         }
     }
 
+    func testUnsupportedFormulaColumnUsesCommonMarkUTF8Semantics() {
+        XCTAssertThrowsError(
+            try MarkdownToWordConverter(mathMode: .omath).convertMarkdown(
+                "你$\\overbrace{x}$"
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? MarkdownMathConversionError,
+                .unsupportedFormula(token: "\\overbrace", line: 1, column: 4)
+            )
+        }
+    }
+
     func testFormulaLocationIncludesFrontmatterLines() {
         let markdown = """
         ---
