@@ -84,6 +84,12 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **WHEN** visible literal text contains unmatched `$$` followed by a separate complete `$$x$$` display paragraph
 - **THEN** the first delimiter remains literal and the later paragraph becomes one display token
 
+#### Scenario: Unmatched display delimiters ignore opaque and mixed text
+
+- **WHEN** mixed visible text contains one or more unmatched `$$`, or an unmatched visible `$$` is followed by `$$x$$` inside code, HTML, or a destination
+- **THEN** every unmatched/opaque delimiter remains literal and produces no cross-boundary error
+- **AND** a later separately complete display paragraph remains eligible
+
 #### Scenario: Unterminated HTML-like prefixes remain bounded
 
 - **WHEN** one physical line contains many `<tag` prefixes without a closing `>`
