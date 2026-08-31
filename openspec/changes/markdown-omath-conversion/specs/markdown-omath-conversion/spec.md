@@ -96,6 +96,24 @@ Every generated placeholder SHALL be consumed exactly once by an allowed visible
 - **THEN** the opaque delimiter is not accepted as the visible opener's closing delimiter
 - **AND** destination bytes and all literal delimiters remain unchanged
 
+#### Scenario: Same-line opaque closing is ignored
+
+- **WHEN** a visible unmatched `$$` shares a physical line with a later `$$` inside inline code, a link destination, or an HTML attribute
+- **THEN** the opaque delimiter is not accepted as the visible opener's closing delimiter
+- **AND** both delimiters remain literal without a placement error
+
+#### Scenario: Reference destination standalone closing is ignored
+
+- **WHEN** an unmatched visible `$$` precedes a used reference definition whose continuation destination is exactly `$$`
+- **THEN** the destination remains byte-exact and does not close the visible delimiter
+- **AND** conversion succeeds without an OMath carrier or generated placeholder
+
+#### Scenario: Multiline link recovery remains bounded
+
+- **WHEN** a document contains thousands of paragraphs with parser-recognized multiline link destinations whose reported child ranges require fallback recovery
+- **THEN** each recovery starts from the enclosing paragraph's monotonic cursor
+- **AND** recovery does not rescan the accumulated paragraph collection or copy overlapping paragraph suffixes
+
 #### Scenario: Unterminated HTML-like prefixes remain bounded
 
 - **WHEN** one physical line contains many `<tag` prefixes without a closing `>`
