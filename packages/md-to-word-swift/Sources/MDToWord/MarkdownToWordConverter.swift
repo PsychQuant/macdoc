@@ -1,9 +1,80 @@
 import Foundation
 import Markdown
 import CommonConverterSwift
+import LaTeXMathSwift
 import OOXMLSwift
 
 private typealias WordParagraph = OOXMLSwift.Paragraph
+
+struct RenderedMarkdownMathToken {
+    let placeholder: String
+    let omml: String
+    let kind: MarkdownMathScanner.TokenKind
+    let line: Int
+    let column: Int
+}
+
+enum MarkdownInlineMathMatcher {
+    static func nextMatch(
+        in text: String,
+        from cursor: String.Index,
+        tokensByPlaceholder: [String: RenderedMarkdownMathToken],
+        searchPrefix: String?,
+        maximumPlaceholderLength: Int
+    ) -> (range: Range<String.Index>, token: RenderedMarkdownMathToken)? {
+        guard !tokensByPlaceholder.isEmpty,
+              let searchPrefix,
+              maximumPlaceholderLength > 0 else {
+            return nil
+        }
+
+        var searchStart = cursor
+        while searchStart < text.endIndex,
+              let prefixRange = text.range(
+                  of: searchPrefix,
+                  range: searchStart..<text.endIndex
+              ) {
+            let boundedEnd = text.index(
+                prefixRange.lowerBound,
+                offsetBy: maximumPlaceholderLength,
+                limitedBy: text.endIndex
+            ) ?? text.endIndex
+            if let closingSentinel = text.range(
+                of: "\u{E000}",
+                range: prefixRange.upperBound..<boundedEnd
+            ) {
+                let range = prefixRange.lowerBound..<closingSentinel.upperBound
+                let candidate = String(text[range])
+                if let token = tokensByPlaceholder[candidate], token.kind == .inline {
+                    return (range, token)
+                }
+            }
+            searchStart = prefixRange.upperBound
+        }
+        return nil
+    }
+}
+
+enum MarkdownMathConsumptionValidator {
+    static func validate(
+        tokens: [RenderedMarkdownMathToken],
+        consumedPlaceholders: [String: Int]
+    ) throws {
+        for token in tokens where consumedPlaceholders[token.placeholder, default: 0] != 1 {
+            throw MarkdownMathConversionError.formulaPlacementMismatch(
+                line: token.line,
+                column: token.column
+            )
+        }
+    }
+}
+
+/// Controls whether dollar-delimited Markdown is preserved as text or converted
+/// to native Word math.
+public enum MarkdownMathMode: String, Sendable {
+    case literal
+    case omath
+}
 
 /// Direct Markdown → Word (.docx) converter.
 ///
@@ -12,8 +83,11 @@ private typealias WordParagraph = OOXMLSwift.Paragraph
 /// for full `.docx` output.
 public struct MarkdownToWordConverter: DocumentConverter {
     public static let sourceFormat = "md"
+    private let mathMode: MarkdownMathMode
 
-    public init() {}
+    public init(mathMode: MarkdownMathMode = .literal) {
+        self.mathMode = mathMode
+    }
 
     public func convert<W: CommonConverterSwift.StreamingOutput>(
         input: URL,
@@ -53,29 +127,80 @@ public struct MarkdownToWordConverter: DocumentConverter {
         options: ConversionOptions = .default
     ) throws -> WordDocument {
         let extracted = FrontmatterExtractor.extract(from: source)
+        let markdown: String
+        let mathTokens: [RenderedMarkdownMathToken]
+        let mathPlaceholderSearchPrefix: String?
+        if mathMode == .omath {
+            let scanned: MarkdownMathScanner.Result
+            do {
+                scanned = try MarkdownMathScanner().scan(extracted.body)
+            } catch let error as MarkdownMathScanner.ScanError {
+                switch error {
+                case .misplacedDisplayFormula(let line, let column):
+                    throw MarkdownMathConversionError.misplacedDisplayFormula(
+                        line: line + extracted.bodyStartLine - 1,
+                        column: column
+                    )
+                }
+            }
+            markdown = scanned.markdown
+            mathPlaceholderSearchPrefix = scanned.placeholderSearchPrefix
+            mathTokens = try scanned.tokens.map { token in
+                do {
+                    let components = try LaTeXMathParser.parse(token.latex)
+                    return RenderedMarkdownMathToken(
+                        placeholder: token.placeholder,
+                        omml: components.map { $0.toOMML() }.joined(),
+                        kind: token.kind,
+                        line: token.line + extracted.bodyStartLine - 1,
+                        column: token.column
+                    )
+                } catch let error as LaTeXParseError {
+                    switch error {
+                    case .unrecognizedToken(let unsupportedToken):
+                        throw MarkdownMathConversionError.unsupportedFormula(
+                            token: unsupportedToken,
+                            line: token.line + extracted.bodyStartLine - 1,
+                            column: token.column
+                        )
+                    case .empty, .malformed:
+                        throw MarkdownMathConversionError.malformedFormula(
+                            line: token.line + extracted.bodyStartLine - 1,
+                            column: token.column
+                        )
+                    }
+                }
+            }
+        } else {
+            markdown = extracted.body
+            mathTokens = []
+            mathPlaceholderSearchPrefix = nil
+        }
         var builder = MarkdownWordBuilder(
             options: options,
             baseURL: baseURL,
             sourceName: sourceName,
-            frontmatter: extracted.metadata
+            frontmatter: extracted.metadata,
+            mathTokens: mathTokens,
+            mathPlaceholderSearchPrefix: mathPlaceholderSearchPrefix
         )
-        return try builder.build(markdown: extracted.body)
+        var document = try builder.build(markdown: markdown)
+        if !mathTokens.isEmpty {
+            document.documentRootAttributes["xmlns:m"] =
+                "http://schemas.openxmlformats.org/officeDocument/2006/math"
+        }
+        return document
     }
 
     private func renderDocumentXML(_ document: WordDocument) -> String {
-        var xml = """
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-        <w:body>
-        """
+        var bodyXML = ""
 
         for child in document.body.children {
             switch child {
             case .paragraph(let paragraph):
-                xml += paragraph.toXML()
+                bodyXML += paragraph.toXML()
             case .table(let table):
-                xml += table.toXML()
+                bodyXML += table.toXML()
             default:
                 // BodyChild added .contentControl / .bookmarkMarker /
                 // .rawBlockElement in newer ooxml-swift. Skip silently —
@@ -84,9 +209,17 @@ public struct MarkdownToWordConverter: DocumentConverter {
             }
         }
 
-        xml += renderSectionPropertiesXML(document.sectionProperties)
-        xml += "</w:body></w:document>"
-        return xml
+        bodyXML += renderSectionPropertiesXML(document.sectionProperties)
+        let mathNamespace = bodyXML.contains("<m:")
+            ? "\n            xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\""
+            : ""
+        return """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                    xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"\(mathNamespace)>
+        <w:body>\(bodyXML)</w:body></w:document>
+        """
     }
 
     private func renderSectionPropertiesXML(_ section: SectionProperties) -> String {
@@ -146,33 +279,88 @@ private struct MarkdownWordBuilder {
     private let baseURL: URL?
     private let sourceName: String?
     private let frontmatter: [String: String]
+    private let mathTokens: [RenderedMarkdownMathToken]
+    private let mathTokensByPlaceholder: [String: RenderedMarkdownMathToken]
+    private let mathPlaceholderSearchPrefix: String?
+    private let maximumMathPlaceholderLength: Int
+    private var consumedMathPlaceholders: [String: Int] = [:]
     private var inferredTitle = false
 
     init(
         options: ConversionOptions,
         baseURL: URL?,
         sourceName: String?,
-        frontmatter: [String: String]
+        frontmatter: [String: String],
+        mathTokens: [RenderedMarkdownMathToken],
+        mathPlaceholderSearchPrefix: String?
     ) {
         self.options = options
         self.baseURL = baseURL
         self.sourceName = sourceName
         self.frontmatter = frontmatter
+        self.mathTokens = mathTokens
+        self.mathTokensByPlaceholder = Dictionary(
+            uniqueKeysWithValues: mathTokens.map { ($0.placeholder, $0) }
+        )
+        self.mathPlaceholderSearchPrefix = mathPlaceholderSearchPrefix
+        maximumMathPlaceholderLength = mathTokens.map(\.placeholder.count).max() ?? 0
     }
 
     mutating func build(markdown: String) throws -> WordDocument {
         applyDocumentMetadata()
 
         let parsed = Document(parsing: markdown, options: .parseBlockDirectives)
+        try validateDisplayMathPlacement(in: parsed)
         for child in parsed.children {
             try appendBlock(child, quoteDepth: 0)
         }
+        try validateMathTokenConsumption()
 
         if document.body.children.isEmpty {
             document.appendParagraph(WordParagraph(text: ""))
         }
 
         return document
+    }
+
+    private func validateMathTokenConsumption() throws {
+        try MarkdownMathConsumptionValidator.validate(
+            tokens: mathTokens,
+            consumedPlaceholders: consumedMathPlaceholders
+        )
+    }
+
+    private mutating func markMathTokenConsumed(_ token: RenderedMarkdownMathToken) {
+        consumedMathPlaceholders[token.placeholder, default: 0] += 1
+    }
+
+    private func validateDisplayMathPlacement(in parsed: Document) throws {
+        var standaloneDisplayPlaceholders: Set<String> = []
+
+        func collect(from markup: Markup) {
+            if let paragraph = markup as? Markdown.Paragraph {
+                let children = Array(paragraph.children)
+                if children.count == 1,
+                   let text = children[0] as? Text,
+                   let token = mathTokensByPlaceholder[text.string],
+                   token.kind == .display {
+                    standaloneDisplayPlaceholders.insert(token.placeholder)
+                }
+            }
+            for child in markup.children {
+                collect(from: child)
+            }
+        }
+
+        collect(from: parsed)
+        for token in mathTokens where token.kind == .display {
+            guard standaloneDisplayPlaceholders.contains(token.placeholder) else {
+                throw MarkdownMathConversionError.misplacedDisplayFormula(
+                    line: token.line,
+                    column: token.column
+                )
+            }
+        }
     }
 
     private mutating func applyDocumentMetadata() {
@@ -376,6 +564,31 @@ private struct MarkdownWordBuilder {
         extraIndentLevels: Int = 0,
         style: String? = nil
     ) throws -> WordParagraph? {
+        if let token = displayToken(in: children) {
+            markMathTokenConsumed(token)
+            var paragraph = WordParagraph(runs: [])
+            paragraph.unrecognizedChildren = [
+                UnrecognizedChild(
+                    name: "oMathPara",
+                    rawXML: "<m:oMathPara><m:oMath>\(token.omml)</m:oMath></m:oMathPara>",
+                    position: 0
+                )
+            ]
+            paragraph.properties.style = style
+            paragraph.properties.numbering = numbering
+            paragraph.properties.spacing = Spacing(
+                after: numbering == nil ? 200 : 80,
+                line: 276,
+                lineRule: .auto
+            )
+            applyQuoteStyle(
+                to: &paragraph.properties,
+                quoteDepth: quoteDepth,
+                extraIndentLevels: extraIndentLevels
+            )
+            return paragraph
+        }
+
         var runs: [Run] = []
         for child in children {
             try appendInline(from: child, into: &runs, properties: RunProperties())
@@ -408,7 +621,7 @@ private struct MarkdownWordBuilder {
         switch markup {
         case let text as Text:
             guard !text.string.isEmpty else { return }
-            runs.append(Run(text: text.string, properties: properties))
+            appendText(text.string, into: &runs, properties: properties)
 
         case let emphasis as Emphasis:
             var next = properties
@@ -479,7 +692,7 @@ private struct MarkdownWordBuilder {
                 : "[Image: \(image.plainText)]"
             var next = properties
             next.italic = true
-            runs.append(Run(text: fallback, properties: next))
+            appendText(fallback, into: &runs, properties: next)
 
         case let inlineHTML as InlineHTML:
             let stripped = stripHTML(from: inlineHTML.rawHTML)
@@ -582,33 +795,50 @@ private struct MarkdownWordBuilder {
         return "rId\(baseID + usedCount)"
     }
 
-    private func makeExternalHyperlinkXML(text: String, relationshipId: String) -> String {
+    private mutating func makeExternalHyperlinkXML(text: String, relationshipId: String) -> String {
         """
         <w:hyperlink r:id="\(relationshipId)">
-            <w:r>
-                <w:rPr>
-                    <w:rStyle w:val="Hyperlink"/>
-                    <w:color w:val="0563C1"/>
-                    <w:u w:val="single"/>
-                </w:rPr>
-                <w:t xml:space="preserve">\(escapeXML(text))</w:t>
-            </w:r>
+            \(hyperlinkContentXML(text))
         </w:hyperlink>
         """
     }
 
-    private func makeInternalHyperlinkXML(text: String, anchor: String) -> String {
+    private mutating func makeInternalHyperlinkXML(text: String, anchor: String) -> String {
         """
         <w:hyperlink w:anchor="\(escapeXML(anchor))">
-            <w:r>
-                <w:rPr>
-                    <w:rStyle w:val="Hyperlink"/>
-                    <w:color w:val="0563C1"/>
-                    <w:u w:val="single"/>
-                </w:rPr>
-                <w:t xml:space="preserve">\(escapeXML(text))</w:t>
-            </w:r>
+            \(hyperlinkContentXML(text))
         </w:hyperlink>
+        """
+    }
+
+    private mutating func hyperlinkContentXML(_ text: String) -> String {
+        var xml = ""
+        var cursor = text.startIndex
+        while cursor < text.endIndex {
+            guard let match = nextInlineMathMatch(in: text, from: cursor) else {
+                xml += hyperlinkTextRunXML(String(text[cursor...]))
+                break
+            }
+            if cursor < match.range.lowerBound {
+                xml += hyperlinkTextRunXML(String(text[cursor..<match.range.lowerBound]))
+            }
+            xml += "<m:oMath>\(match.token.omml)</m:oMath>"
+            markMathTokenConsumed(match.token)
+            cursor = match.range.upperBound
+        }
+        return xml
+    }
+
+    private func hyperlinkTextRunXML(_ text: String) -> String {
+        """
+        <w:r>
+            <w:rPr>
+                <w:rStyle w:val="Hyperlink"/>
+                <w:color w:val="0563C1"/>
+                <w:u w:val="single"/>
+            </w:rPr>
+            <w:t xml:space="preserve">\(escapeXML(text))</w:t>
+        </w:r>
         """
     }
 
@@ -620,6 +850,59 @@ private struct MarkdownWordBuilder {
         var run = Run(text: "")
         run.rawXML = rawXML
         return run
+    }
+
+    private mutating func appendText(
+        _ text: String,
+        into runs: inout [Run],
+        properties: RunProperties
+    ) {
+        guard !mathTokensByPlaceholder.isEmpty else {
+            runs.append(Run(text: text, properties: properties))
+            return
+        }
+        var cursor = text.startIndex
+        while cursor < text.endIndex {
+            guard let match = nextInlineMathMatch(in: text, from: cursor) else {
+                runs.append(Run(text: String(text[cursor...]), properties: properties))
+                return
+            }
+            if cursor < match.range.lowerBound {
+                runs.append(
+                    Run(
+                        text: String(text[cursor..<match.range.lowerBound]),
+                        properties: properties
+                    )
+                )
+            }
+            runs.append(makeRawRun("<m:oMath>\(match.token.omml)</m:oMath>"))
+            markMathTokenConsumed(match.token)
+            cursor = match.range.upperBound
+        }
+    }
+
+    private func nextInlineMathMatch(
+        in text: String,
+        from cursor: String.Index
+    ) -> (range: Range<String.Index>, token: RenderedMarkdownMathToken)? {
+        MarkdownInlineMathMatcher.nextMatch(
+            in: text,
+            from: cursor,
+            tokensByPlaceholder: mathTokensByPlaceholder,
+            searchPrefix: mathPlaceholderSearchPrefix,
+            maximumPlaceholderLength: maximumMathPlaceholderLength
+        )
+    }
+
+    private func displayToken(in children: [Markup]) -> RenderedMarkdownMathToken? {
+        guard children.count == 1,
+              let text = children[0] as? Text else {
+            return nil
+        }
+        guard let token = mathTokensByPlaceholder[text.string], token.kind == .display else {
+            return nil
+        }
+        return token
     }
 
     private func plainText(from markup: Markup) -> String {
@@ -718,18 +1001,24 @@ private struct MarkdownWordBuilder {
 }
 
 private enum FrontmatterExtractor {
-    static func extract(from source: String) -> (metadata: [String: String], body: String) {
+    struct Result {
+        let metadata: [String: String]
+        let body: String
+        let bodyStartLine: Int
+    }
+
+    static func extract(from source: String) -> Result {
         let normalized = source
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
 
         guard normalized.hasPrefix("---\n") else {
-            return ([:], normalized)
+            return Result(metadata: [:], body: normalized, bodyStartLine: 1)
         }
 
         let remainder = String(normalized.dropFirst(4))
         guard let closingRange = remainder.range(of: "\n---\n") else {
-            return ([:], normalized)
+            return Result(metadata: [:], body: normalized, bodyStartLine: 1)
         }
 
         let rawMetadata = String(remainder[..<closingRange.lowerBound])
@@ -751,6 +1040,16 @@ private enum FrontmatterExtractor {
             }
         }
 
-        return (metadata, body)
+        let consumedPrefix = "---\n" + remainder[..<closingRange.upperBound]
+        let bodyStartLine = consumedPrefix.reduce(into: 1) { line, character in
+            if character.isNewline {
+                line += 1
+            }
+        }
+        return Result(
+            metadata: metadata,
+            body: body,
+            bodyStartLine: bodyStartLine
+        )
     }
 }
