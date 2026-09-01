@@ -33,7 +33,7 @@ extension MacDoc.Word {
         // readable as a passing one, so we only verify when the caller
         // names something to verify against.
         @Option(name: .customLong("verify-against"),
-                help: "參考 .docx；提供時對重建的 XML part set 做 byte-equal 驗證")
+                help: "參考 .docx；提供時對重建的 part set 做 byte-equal 驗證（含 binary part）")
         var verifyAgainst: String?
 
         @Flag(help: "覆寫既有的輸出檔案")
@@ -83,7 +83,26 @@ extension MacDoc.Word {
                 FileHandle.standardError.write(Data("已寫入: \(written)\n".utf8))
             }
             if result.verified == true {
-                FileHandle.standardError.write(Data("byte-equal 驗證通過\n".utf8))
+                // Name the scope. "byte-equal 驗證通過" on its own invites the
+                // reader to `ls -la` the two files, find different sizes, and
+                // doubt the tool — the comparison is per part, and the zip
+                // container (entry order, compression, timestamps) never
+                // enters it.
+                //
+                // Counting the reference is exact on this path, not an
+                // approximation: compareParts walks the union of both part
+                // sets, and a path present in only one side yields
+                // .missingInRebuilt / .unexpectedInRebuilt — neither is
+                // .equal, so it would have failed the verdict we just passed.
+                // Union size therefore equals reference size here.
+                var scope = "zip 容器大小可能不同"
+                if let reference = verifyAgainst,
+                   let count = try? RawPartChannel
+                       .readAllParts(from: URL(fileURLWithPath: reference)).count {
+                    scope = "\(count) 個 part 逐位元組相同；" + scope
+                }
+                FileHandle.standardError.write(
+                    Data("byte-equal 驗證通過（\(scope)）\n".utf8))
             }
         }
 

@@ -355,4 +355,32 @@ final class WordRenderTests: XCTestCase {
         }
         return nil
     }
+
+    /// The success message must name what was compared. "byte-equal 驗證通過"
+    /// on its own invites the reader to `ls -la` the two files, find different
+    /// sizes, and doubt the tool — the comparison is per part and the zip
+    /// container never enters it (#178).
+    func testVerificationSuccessMessageNamesScope() throws {
+        let dir = try makeTempDir()
+        let docx = dir.appendingPathComponent("sample.docx")
+        try makeSyntheticDocx(at: docx)
+
+        let script = dir.appendingPathComponent("sample.mdocx.swift")
+        let reversed = try CLITestHelper.run(
+            ["word", "reverse", docx.path, "--to-mdocx", script.path])
+        XCTAssertEqual(reversed.exitCode, 0, reversed.stderr)
+
+        let rebuilt = dir.appendingPathComponent("rebuilt.docx")
+        let result = try CLITestHelper.run(
+            ["word", "render", script.path,
+             "--to-docx", rebuilt.path,
+             "--verify-against", docx.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+
+        let expected = try RawPartChannel.readAllParts(from: docx).count
+        XCTAssertTrue(result.stderr.contains("\(expected) 個 part"),
+                      "message must name the compared part count (\(expected)):\n\(result.stderr)")
+        XCTAssertTrue(result.stderr.contains("zip 容器"),
+                      "message must say the container may differ:\n\(result.stderr)")
+    }
 }
