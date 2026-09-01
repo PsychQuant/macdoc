@@ -42,7 +42,7 @@
     },
     {
       "name": "che-pptx-mcp",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "PowerPoint (.pptx) MCP server — PresentationML 解析與生成：slides、shapes、tables、notes、theme、markdown 匯出。v0.1.0: 首次 marketplace 發布（signed + notarized universal binary）。",
       "author": {
         "name": "Che Cheng"
