@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.8] - 2026-09-01
+
+### Changed
+
+- `binary_version` 4.0.5 → **4.0.6**；shell 4.0.7 → 4.0.8。
+
+### Fixed
+
+- **append 模式插圖不再於存檔時靜默消失**（PsychQuant/macdoc#175）。binary v4.0.6 把
+  ooxml-swift 依賴下限升到 3.6.0（ooxml-swift#128：`appendParagraph` 快路徑以正面白名單
+  `isOpPayloadRepresentable` 把關，含 `<w:drawing>` 的段落一律走 typed fallback）。實際
+  事故：7 張圖的交付文件少了 4 張，插入／列表／存檔全程回報成功。
+
+### Added
+
+- **存檔前 image-consistency gate**（`E_IMAGE_CONSISTENCY`）。`save_document` /
+  `finalize_document` 寫檔前先序列化檢查：若會寫出本 session 新產生的孤兒 image
+  relationship（#175 簽名），拒絕寫檔並回報孤兒 rId 與三計數；開檔時既有的孤兒以
+  open-baseline diff 放行；新參數 `allow_orphan_images: true` 供刻意刪圖段落的情境放行。
+  拒絕發生在任何磁碟寫入之前，session 存活。autosave / shutdown-flush 刻意不設 gate。
+
 ## [4.0.7] - 2026-08-20
 
 ### Changed
