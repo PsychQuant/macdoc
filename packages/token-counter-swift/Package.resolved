@@ -1,0 +1,14 @@
+{
+  "originHash" : "ca56d8419ef2bd1d316e80715f7c532a0b5dfad6fe3efd7afea9d986949d54e4",
+  "pins" : [
+    {
+      "identity" : "swift-tiktoken",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/DePasqualeOrg/swift-tiktoken.git",
+      "state" : {
+        "revision" : "b4310ee520995ddff45b055de19e6605e0f8e5b6"
+      }
+    }
+  ],
+  "version" : 3
+}

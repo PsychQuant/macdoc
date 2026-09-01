@@ -1,5 +1,11 @@
 # macdoc
 
+> 平台聲明
+> - Token 計數／離線 GPT-4o 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `verified`，compiled executable 已在禁用網路並隔離 HOME／cache 的環境通過 `hello world` exact-byte acceptance；package suite 另以五組官方 Python `tiktoken` vectors 驗證 bundled `o200k_base`。
+> - Anthropic token-count transport 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `implemented-not-live-verified`，固定 endpoint、錯誤映射與資料遮蔽只以注入 transport 驗證，沒有呼叫 live Anthropic。
+> - Windows／Linux token 計數：macdoc CLI 與 `TokenCounter` package；狀態為 `not-supported`，目前 manifests 僅宣告 macOS 14+，不得由離線演算法外推 runtime 支援。
+> - 證據：`swift test --filter TokenCountCommandTests`、`swift test`（`packages/token-counter-swift`），以及 `Tests/MacDocCLITests/TokenCountCommandTests.swift`。
+
 原生 macOS 文件處理工具集，專注於文件格式轉換和 OCR。使用 Swift 開發，充分利用 Apple 平台原生能力（PDFKit、Vision.framework）。
 
 ## Claude Code Plugin Marketplace
@@ -25,7 +31,7 @@ MCP plugins 的 wrapper 會自動從各 repo 的 GitHub Releases 下載 universa
 ## Prerequisites
 
 - **macOS 14+**（Sonoma 或更新）
-- **Swift 5.9+**
+- **Swift 6.2+**（`swift-tiktoken` 的 package tools requirement）
 - **Xcode Command Line Tools**
 
 ```bash
@@ -111,6 +117,54 @@ macdoc convert --to pdf notes.note --output notes.pdf
 
 Notability 轉換目前支援舊版 plist-based `.note`（`Session.plist`）。現代 `.ntb`（FlatBuffers `noteBundle`）會被辨識，但尚不支援轉換；尚未實作 FlatBuffers 的手寫／時間軸重播，也不會抽取錄音、縮圖或其他資產作為替代輸出。
 
+### Token 計數（UTF-8 measurement route）
+
+GPT-4o 使用隨 binary bundled 的 `o200k_base.tiktoken`，先驗證 SHA-256
+`446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d`，再於本機計數；
+不會下載 vocabulary、連線、寫 tokenizer cache 或寫入 HOME。假設 `sample.txt` 的內容是
+`hello world`：
+
+```bash
+macdoc convert --to tokens --model gpt-4o sample.txt
+```
+
+stdout 的精確 bytes 是一個十進位整數與換行：
+
+```text
+2
+```
+
+也可寫入檔案；成功時 stdout 保持空白，`tokens.txt` 的內容仍是精確的 `2\n`：
+
+```bash
+macdoc convert --to tokens --model gpt-4o --output tokens.txt sample.txt
+```
+
+Claude 計數會把**完整、已驗證的輸入文字**送到 Anthropic。每次執行都必須同時提供非空的
+`ANTHROPIC_API_KEY` 與明示的 `--allow-network`；API key 只放在 `x-api-key` header：
+
+```bash
+export ANTHROPIC_API_KEY='your-key'
+macdoc convert --to tokens --model claude-sonnet-4-6 --allow-network sample.txt
+```
+
+省略 `--model` 會依固定順序要求 GPT-4o、Claude Sonnet 4.6，因此也需要同一個網路同意與
+credential。兩個 provider 都成功後才會一次輸出下列 tab-separated 形狀（數字依檔案與
+provider 回應而異）：
+
+```text
+Model	Tokens
+gpt-4o	1234
+claude-sonnet-4-6	1198
+```
+
+限制與語意：
+
+- `--model` 僅接受 `gpt-4o`、`claude-sonnet-4-6`，大小寫必須相符。
+- 輸入必須是一般檔案、嚴格 UTF-8、最多 1,000,000 bytes；空檔合法，副檔名不參與判斷。
+- Anthropic 數值是該 provider 回報的 input-token estimate，可能隨 provider 行為改變；不是本機可重現的離線精確值。
+- 任一 provider 失敗時，stdout 不會出現部分表格，既有 `--output` 檔案也不會被改寫。
+
 常用選項：
 
 | 選項 | 說明 |
@@ -122,6 +176,8 @@ Notability 轉換目前支援舊版 plist-based `.note`（`Session.plist`）。�
 | `--full` | 輸出完整 HTML 文件 |
 | `--css dark\|light` | SRT 主題 |
 | `--css minimal\|web` | Bib 樣式 |
+| `--model gpt-4o\|claude-sonnet-4-6` | token 計數模型（只適用 `--to tokens`） |
+| `--allow-network` | 每次允許把完整輸入送到 Anthropic（只適用含 Claude 的 token 計數） |
 
 ### BibLaTeX 工具（`bib`）
 
@@ -237,6 +293,7 @@ macdoc config ai set transcription codex
 | BibLaTeX → JSON | `convert --to json` |
 | 舊版 Note → HTML | `convert --to html` |
 | 舊版 Note → PDF | `convert --to pdf` |
+| UTF-8 text → Token count | `convert --to tokens` |
 
 ## MCP Servers
 
