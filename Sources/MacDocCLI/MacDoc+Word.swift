@@ -36,8 +36,12 @@ extension MacDoc.Word {
         @Argument(help: "輸入的 .docx 檔案")
         var input: String
 
-        @Option(name: .customLong("to-mdocx"), help: "輸出的 .mdocx.swift 路徑")
-        var toMdocx: String
+        // Optional so `--coverage` can run as a pure diagnostic (#177).
+        // The report is the documented step for deciding *whether* to
+        // produce the script; requiring the output path forced the caller
+        // to produce the very artifact they were still deciding about.
+        @Option(name: .customLong("to-mdocx"), help: "輸出的 .mdocx.swift 路徑（省略時須搭配 --coverage）")
+        var toMdocx: String?
 
         @Flag(name: .customLong("from-oplog"),
               help: "強制使用 oplog sidecar（<stem>.oplog.jsonl；找不到時報錯）")
@@ -69,14 +73,22 @@ extension MacDoc.Word {
 
         func run() throws {
             let inputURL = try validatedInputURL(input)
-            let outputURL = URL(fileURLWithPath: toMdocx)
 
-            guard !FileManager.default.fileExists(atPath: outputURL.path) || force else {
-                throw ValidationError("輸出檔案已存在: \(toMdocx)（使用 --force 覆寫）")
+            guard toMdocx != nil || coverage else {
+                throw ValidationError(
+                    "需要 --to-mdocx（產生腳本）或 --coverage（只印報告）至少其一")
+            }
+
+            let outputURL = toMdocx.map { URL(fileURLWithPath: $0) }
+            if let outputURL, let toMdocx {
+                guard !FileManager.default.fileExists(atPath: outputURL.path) || force else {
+                    throw ValidationError("輸出檔案已存在: \(toMdocx)（使用 --force 覆寫）")
+                }
             }
 
             let log: OperationLog
             var dslParts: Set<String> = []
+            var rawReasons: [String: String] = [:]
             if let sidecarLog = try SidecarStore.loadLog(alongside: inputURL) {
                 log = sidecarLog
                 FileHandle.standardError.write(Data(
@@ -94,7 +106,20 @@ extension MacDoc.Word {
                 let result = try ReverseExtractor.reverse(parts: parts)
                 log = result.log
                 dslParts = result.dslParts
+                rawReasons = result.rawReasons
             }
+
+            // Coverage BEFORE the write (#177). The report is a decision input
+            // for whether to produce the script at all — printing it afterwards
+            // meant the artifact already existed by the time you could judge it.
+            if coverage {
+                try Self.reportCoverage(for: inputURL,
+                                        dslParts: dslParts,
+                                        rawReasons: rawReasons)
+            }
+
+            // Coverage-only: report printed, nothing to write.
+            guard let outputURL, let toMdocx else { return }
 
             // Parse --slot name=paraId designations (strict: malformed
             // designations fail loudly, never degrade silently).
@@ -116,10 +141,6 @@ extension MacDoc.Word {
             }
             try source.write(to: outputURL, atomically: true, encoding: .utf8)
             FileHandle.standardError.write(Data("已寫入: \(toMdocx)\n".utf8))
-
-            if coverage {
-                try Self.reportCoverage(for: inputURL, dslParts: dslParts)
-            }
         }
 
         /// Prints the dual-track coverage report to stdout: per-part DSL/raw
@@ -127,7 +148,9 @@ extension MacDoc.Word {
         /// reverse (parts whose typed rebuild proved byte-equal); sidecar and
         /// paragraphs-only paths report all-raw — those modes carry no
         /// byte-equal DSL claim.
-        static func reportCoverage(for url: URL, dslParts: Set<String> = []) throws {
+        static func reportCoverage(for url: URL,
+                                   dslParts: Set<String> = [],
+                                   rawReasons: [String: String] = [:]) throws {
             let parts = try RawPartChannel.readAllParts(from: url)
             let report = RawPartChannel.partLevelCoverage(parts: parts, dslParts: dslParts)
             var lines = ["=== Coverage report: \(url.lastPathComponent) ==="]
@@ -143,7 +166,31 @@ extension MacDoc.Word {
                 report.aggregateDSLBytes,
                 report.aggregateTotalBytes,
                 report.parts.count))
+            lines.append(contentsOf: Self.rawReasonNote(rawReasons))
             print(lines.joined(separator: "\n"))
+        }
+
+        /// Names the root cause when `word/document.xml` fell to the raw channel
+        /// for a reason the caller can act on, and points at the trade-off (#176).
+        ///
+        /// Only `paragraph-no-paraId` gets a note: it is the one raw reason with
+        /// a documented alternative path. Other reasons (`table`, `byte-mismatch`,
+        /// `parse-error`, …) have no such escape hatch, and emitting the hint for
+        /// them would send the caller down a road that does not help.
+        static func rawReasonNote(_ rawReasons: [String: String]) -> [String] {
+            guard rawReasons["word/document.xml"] == "paragraph-no-paraId" else { return [] }
+            return [
+                "",
+                "note: word/document.xml 落 raw 的根因是 paragraph-no-paraId —— 檔案中有段落不帶",
+                "      w14:paraId（部分 Word 版本的產物即如此）。DSL 升級是 part-level 全有全無，",
+                "      一個段落缺 id 就整份降 raw，所以上面的 DSL 百分比對這份檔案不具參考性。",
+                "",
+                "      這個數字不代表 swiftify 對本檔無能為力，只代表「預設的 full-fidelity 路徑」",
+                "      無能為力。二選一：",
+                "        · 預設（full-fidelity）：byte-equal 可驗證，但腳本不可讀、slot 需真 paraId",
+                "        · --paragraphs-only     ：可讀的 DSL、--slot 可用（為缺 id 的段落合成 id），",
+                "                                  代價是重播只保證 content-equivalent，不再 byte-equal",
+            ]
         }
 
         /// Builds an authoring log from the docx typed views (no oplog input).
