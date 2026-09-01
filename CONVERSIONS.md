@@ -17,7 +17,9 @@
 | **PDF** | ✅ `pdf-to-md` | · | ✅ `pdf-to-docx` | ✅ `pdf-to-latex` | · | — | · |
 | **BibLaTeX (.bib)** | ✅ `bib-apa-to-md` | ✅ `bib-apa-to-html` | · | · | ✅ `bib-apa-to-json` | · | · |
 | **SRT** | · | ✅ `srt-to-html` | · | · | · | · | — |
-| **Note (.note)** | · | ✅ `note-to-html` | · | · | · | · | · |
+| **舊版 Note (.note)** | · | ✅ `note-to-html` | · | · | · | ✅ `note-to-pdf` | · |
+
+Notability 轉換目前支援舊版 plist-based `.note`（`Session.plist`）。現代 `.ntb`（FlatBuffers `noteBundle`）會被辨識，但尚不支援轉換；尚未實作 FlatBuffers 的手寫／時間軸重播，也不會抽取錄音、縮圖或其他資產作為替代輸出。
 
 ## Converter Details
 
@@ -36,7 +38,8 @@
 | HTML → Word | `html-to-word-swift` | ✅ implemented | SwiftSoup → OOXML writer |
 | Markdown → Word | `md-to-word-swift` | ✅ implemented | swift-markdown AST → OOXML writer |
 | PDF → DOCX | `pdf-to-docx-swift` | ✅ implemented | PDFKit text extraction → OOXML writer |
-| Note → HTML | `note-to-html-swift` | ✅ implemented | Notability .note → interactive HTML player with audio-synced stroke replay |
+| 舊版 Note → HTML | `note-to-html-swift` | ✅ implemented | plist-based `.note` → interactive HTML player with audio-synced stroke replay |
+| 舊版 Note → PDF | `note-to-pdf-swift` | ✅ implemented | plist-based `.note` → rendered PDF |
 
 ## Rules
 

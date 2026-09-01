@@ -104,10 +104,12 @@ macdoc convert --to html refs.bib --full
 macdoc convert --to md refs.bib
 macdoc convert --to json refs.bib
 
-# Note → HTML（Notability 筆記互動播放器）
-macdoc convert --to html notes.note --full
+# Note → HTML / PDF（Notability 筆記；僅限舊版容器）
 macdoc convert --to html notes.note --full --css dark
+macdoc convert --to pdf notes.note --output notes.pdf
 ```
+
+Notability 轉換目前支援舊版 plist-based `.note`（`Session.plist`）。現代 `.ntb`（FlatBuffers `noteBundle`）會被辨識，但尚不支援轉換；尚未實作 FlatBuffers 的手寫／時間軸重播，也不會抽取錄音、縮圖或其他資產作為替代輸出。
 
 常用選項：
 
@@ -233,7 +235,8 @@ macdoc config ai set transcription codex
 | BibLaTeX → HTML | `convert --to html` |
 | BibLaTeX → Markdown | `convert --to md` |
 | BibLaTeX → JSON | `convert --to json` |
-| Note → HTML | `convert --to html` |
+| 舊版 Note → HTML | `convert --to html` |
+| 舊版 Note → PDF | `convert --to pdf` |
 
 ## MCP Servers
 
