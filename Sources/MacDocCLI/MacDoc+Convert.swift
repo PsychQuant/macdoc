@@ -23,6 +23,18 @@ import TokenCounter
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
     struct Convert: AsyncParsableCommand {
+        private enum MathOption: String, CaseIterable, ExpressibleByArgument {
+            case literal
+            case omath
+
+            var converterMode: MarkdownMathMode {
+                switch self {
+                case .literal: .literal
+                case .omath: .omath
+                }
+            }
+        }
+
         static let configuration = CommandConfiguration(
             commandName: "convert",
             abstract: "Convert documents between formats (textutil-compatible)"
@@ -58,6 +70,9 @@ extension MacDoc {
         @Flag(name: .long, help: "Preserve <u>/<sup>/<sub>/<mark> as raw HTML in Markdown")
         var htmlExtensions: Bool = false
 
+        @Option(name: .long, help: "Markdown math mode: literal|omath (Markdown to DOCX only; default: literal)")
+        private var math: MathOption?
+
         @Argument(help: "Input file")
         var input: String
 
@@ -66,6 +81,10 @@ extension MacDoc {
 
             let ext = inputURL.pathExtension.lowercased()
             let target = to.lowercased()
+
+            if math != nil && !(["md", "markdown"].contains(ext) && target == "docx") {
+                throw ValidationError("--math 只支援 Markdown 轉 DOCX")
+            }
 
             if target == "tokens" {
                 try validateTokenRouteOptions()
@@ -318,7 +337,8 @@ extension MacDoc {
             options.hardLineBreaks = hardBreaks
 
             let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
-            try MarkdownToWordConverter().convertToFile(input: inputURL, output: outputURL, options: options)
+            let converter = MarkdownToWordConverter(mathMode: (math ?? .literal).converterMode)
+            try converter.convertToFile(input: inputURL, output: outputURL, options: options)
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
