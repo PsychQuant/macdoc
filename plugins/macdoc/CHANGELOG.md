@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.5.1] - 2026-09-01
+
+### Fixed
+
+- SessionStart 不再執行常駐 `~/bin/macdoc --version`（PsychQuant/macdoc#161）。它先固定 system PATH，再以 `/usr/bin/codesign` 與 plugin-pinned `binary_sha256` 重驗 exact release bytes，只讀 installer sidecar 判斷版本；簽章／digest 不符、sidecar 缺失或版本不同時改嘗試一次 verified download。下載的 `.sha256` asset 也必須等於 plugin pin。這消除驗簽後從可替換路徑執行的 swap window，也避免 user-writable `~/bin` 劫持 trust-chain 工具；下載失敗仍維持 session fail-soft。
+
+### Tests
+
+- 新增共用驗證 library 與 resident binary 對抗測試：簽章不符的 binary 不得被執行；合法且 digest／sidecar 相符的 binary 只驗簽、不執行、不連網；release-pin、下載 bytes 與 codesign 三個 candidate gate 各有獨立負向測試，並以實際 signed v0.7.0 fixture 驗證正向路徑。
+
 ## [1.4.0] - 2026-08-19
 
 ### Changed
