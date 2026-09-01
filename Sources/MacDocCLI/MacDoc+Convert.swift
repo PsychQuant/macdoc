@@ -17,6 +17,7 @@ import BibAPAToMD
 import MarkerWordConverter
 import NoteToHTML
 import NoteToPDF
+import NotabilityContainerDetection
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
@@ -105,10 +106,12 @@ extension MacDoc {
             case ("tex", "docx"):
                 try convertTeXToWord(inputURL: inputURL)
 
-            case ("note", "html"):
+            case ("note", "html"), ("ntb", "html"):
+                try rejectUnsupportedNotabilityGeneration(inputURL: inputURL)
                 try convertNoteToHTML(inputURL: inputURL)
 
-            case ("note", "pdf"):
+            case ("note", "pdf"), ("ntb", "pdf"):
+                try rejectUnsupportedNotabilityGeneration(inputURL: inputURL)
                 try convertNoteToPDF(inputURL: inputURL)
 
             default:
@@ -409,6 +412,18 @@ extension MacDoc {
         }
 
         // MARK: - Note → HTML
+
+        private func rejectUnsupportedNotabilityGeneration(inputURL: URL) throws {
+            switch NotabilityContainerDetector.classify(at: inputURL) {
+            case .legacy:
+                return
+            case .modernFlatBuffers:
+                throw ValidationError(NotabilityContainerDetector.modernContainerDiagnostic)
+            case .unknown:
+                guard inputURL.pathExtension.lowercased() == "ntb" else { return }
+                throw ValidationError(NotabilityContainerDetector.unrecognizedNTBContainerDiagnostic)
+            }
+        }
 
         private func convertNoteToHTML(inputURL: URL) throws {
             if css != .dark && css != .light {
