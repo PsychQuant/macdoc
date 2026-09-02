@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.10] - 2026-09-03
+
+### Changed
+
+- `binary_version` 4.0.6 → **4.0.8**；shell 4.0.8 → 4.0.10（4.0.9 未出貨：其三個版本檔在 `26c434f` 被漏出 commit，
+  見下方 Fixed 第二項；本條目併入）。
+- plugin / marketplace description 不再寫死「Built on ooxml-swift v2.0.1」（已過時三個大版），改為指向 binary repo 的
+  `Package.swift`（PsychQuant/macdoc#175 verify R1 表 #14）。
+
+### Fixed
+
+- **submodule pin 指向不存在的 commit**（macdoc#175 R1 表 #1）。4.0.8 的 `7bf161b` 把 `mcp/che-word-mcp` 釘在手打的
+  `56ac6c8674…`（真值 `56ac6c8a71…`），`clone --recurse-submodules` 必壞。`26c434f` 以 `rev-parse` 讀真值修正。
+- **版本檔漏出 commit**（macdoc#175 R2 表 #1）。`26c434f` 的 commit message 宣稱 shell 4.0.9 / binary 4.0.7，實際只含
+  gitlink；remote `binary_version` 停在 4.0.6，wrapper 據此下載帶 R1 四條 blocking 的舊 binary。本 commit 補齊並直接指向 4.0.8。
+- binary **4.0.7 + 4.0.8**：image-consistency gate 的 baseline 改 open-time 快照、autosave / shutdown flush / checkpoint
+  三側門全部過 gate（checkpoint 顯式路徑一律過、含 `allow_orphan_images` 逃生口）、fail-closed inspection、`.unsaved`
+  sidecar 不覆蓋既有檔＋清理、短路改看 header/footer 圖；ooxml-swift **3.6.1 + 3.6.2**：`appendParagraph` 白名單補齊
+  Paragraph 與 Run 層、不可投影的 append 改 graft 進 live tree（不再整份 typed 重序列化）、`PackageInspector` per-part
+  比對＋註解／`>`／巢狀 parts 三修。細節見各 binary repo CHANGELOG。
+
 ## [4.0.8] - 2026-09-01
 
 ### Changed
