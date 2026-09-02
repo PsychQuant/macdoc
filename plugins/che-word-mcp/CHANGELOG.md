@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.11] - 2026-09-03
+
+### Changed
+
+- `binary_version` 4.0.8 → **4.0.9**；shell 4.0.10 → 4.0.11。binary 4.0.9 只是把 ooxml-swift 下限升到 3.6.3：
+  3.6.2 的 graft 對 root 只宣告 `xmlns:w` 的文件會寫出未宣告前綴的 `document.xml`（Word 拒開，
+  PsychQuant/macdoc#175 verify R3 codex F1），3.6.3 在 root 補宣告；另修 `PackageInspector` 巢狀 part 的
+  OPC rels 路徑。真實 Word 文件與 `create_document` 產出的文件 root 本來就宣告齊全、不受 3.6.2 影響。
+
 ## [4.0.10] - 2026-09-03
 
 ### Changed
