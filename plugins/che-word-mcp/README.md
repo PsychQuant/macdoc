@@ -190,6 +190,8 @@ close_document:   { "doc_id": "mydoc" }
 
 v3.0.0+ session state 追蹤：dirty tracking、autosave、`finalize_document`、disk drift 偵測。
 
+binary 4.0.6+（4.0.10 定型）：存檔前 **image-consistency gate**——會寫出本 session 新產生的孤兒 image relationship 時回 `E_IMAGE_CONSISTENCY` 拒絕（`allow_orphan_images: true` 放行；autosave / shutdown flush / 顯式 path 的 checkpoint 同樣過 gate）。細節見 CLAUDE.md「Save-time image-consistency gate」。
+
 ## Round-trip Fidelity（v3.5.0 true byte-preservation）
 
 底層 `ooxml-swift v0.24.0` 採用 **preserve-by-default + dirty tracking** 架構：`open_document` 保留原始 archive tempDir；`save_document` overlay 模式透過 `WordDocument.modifiedParts: Set<String>` 精確判斷哪些 part 真正被改動，**未改動的 typed-managed part 完全不重寫**——byte-for-byte 保留 `word/theme/`、`webSettings.xml`、`people.xml`、`commentsExtended/Extensible/Ids`、`glossary/`、`customXml/`、**以及 `word/document.xml`、`styles.xml`、`fontTable.xml`、`header*.xml`、`footer*.xml`、`comments.xml`、`footnotes.xml`、`endnotes.xml`** 等所有 typed parts。v0.19.x 額外解決 #56 P0：`<w:document>` root 34 個 `xmlns:*` declarations 完整保留，`<w:bookmarkStart>` / `<w:hyperlink>` / `<w:fldSimple>` / `<mc:AlternateContent>` 結構化 wrapper 全程 round-trip（pre-v0.19.0 會 silently 丟掉 wrapper 內 354 個 `<w:t>` text nodes）。
