@@ -80,6 +80,19 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 
 Plugin shell 與 binary 版本獨立。Plugin shell 升 minor 反映文件/skill/CLAUDE.md 變動；binary 版升反映 MCP server 內部新增 tool 或修 bug。
 
+## Save-time image-consistency gate（binary 4.0.6+，4.0.10 定型；PsychQuant/macdoc#175）
+
+`save_document` / `finalize_document` / 帶顯式 `path` 的 `checkpoint` 在寫檔前先序列化並用 ooxml-swift `PackageInspector` 檢查：若會寫出**本 session 新產生**的孤兒 image relationship（rels/media 存在但該 part 內無引用——#175「插圖回報成功但存檔後圖不在」的簽名），回 `E_IMAGE_CONSISTENCY` 拒絕寫檔（正本不動、session 存活）；檢查本身失敗回 `E_IMAGE_CONSISTENCY_INSPECTION`。
+
+| 要點 | 行為 |
+|------|------|
+| baseline | 開檔時的封包快照（revert / reload / 通過 gate 的存檔後更新）；開檔時就存在的孤兒不擋 |
+| 逃生口 | `allow_orphan_images: true`（刻意刪除含圖段落、想保留殘留 relationship 時）；必須是 boolean |
+| 側門 | `autosave: true` 與 shutdown flush 同樣過 gate，拒絕時狀態寫到 `<source>.unsaved*.docx`（不覆蓋既有檔、成功存檔後自動清理）；只有**不帶 path** 的 `checkpoint`（recovery sidecar）不 gate |
+| 拒絕後該做什麼 | 先比對 `list_images` 與 `get_paragraphs`：圖真的不在正文才重插；是刻意刪圖就帶 `allow_orphan_images: true` 重存。**不要**用 checkpoint / 換路徑繞過——同一道 gate |
+
+根因（ooxml-swift 3.6.x）：append 模式的段落若含 op payload 無法表示的內容（圖片、marker、raw children），改為 graft 進 live tree，不再整份 `document.xml` 走 typed 重序列化；anchored 插圖與其他 typed-dirty 操作仍走 typed 路徑（PsychQuant/ooxml-swift#133）。
+
 ## Permissions
 
 無 macOS TCC 權限需求。plugin 跑在使用者層級，讀寫 `.docx` 檔案使用標準檔案系統權限（會繼承呼叫者的 sandbox / FDA 設定）。
