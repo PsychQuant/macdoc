@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.12] - 2026-09-03
+
+### Changed
+
+- `binary_version` 4.0.9 → **4.0.10**；shell 4.0.11 → 4.0.12。PsychQuant/macdoc#175 verify **R3 PASS** 後的 in-scope 修正：
+  binary 4.0.10 的無圖短路改為封包級（open-time 計數，footnotes / charts / diagrams 圖不再被跳過）並帶進
+  ooxml-swift **3.6.4**（graft 的命名空間宣告改放移植段落、root 完全不動——3.6.3 曾把 70/80 份真實文件的 CRLF prolog
+  改成 LF）。三處 CHANGELOG 敘述依 R3 實測更正（graft 僅在插圖為該 part 第一個 typed 變更時生效，見 ooxml-swift#133）。
+  R1 → R3 全程紀錄在 macdoc#175。
+
 ## [4.0.11] - 2026-09-03
 
 ### Changed
