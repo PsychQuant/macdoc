@@ -64,7 +64,7 @@ public struct APAStyler {
     }
 
     private static func styleBook(_ entry: BibEntry) -> APABookRef {
-        let title = buildTitleWithSubtitle(entry)
+        let title = buildTitle(entry)
 
         return APABookRef(
             authors: formatAuthorsString(entry),
@@ -79,7 +79,7 @@ public struct APAStyler {
     }
 
     private static func styleChapter(_ entry: BibEntry) -> APAChapterRef {
-        let chapterTitle = toSentenceCase(stripBraces(entry.title ?? ""))
+        let chapterTitle = buildTitle(entry)
         let bookTitle = toSentenceCase(stripBraces(field(entry, "BOOKTITLE") ?? ""))
         let editorStr = buildEditorString(entry)
         let pages = field(entry, "PAGES").map { "pp. \(normalizePages($0))" }
@@ -116,7 +116,7 @@ public struct APAStyler {
         return APAThesisRef(
             authors: formatAuthorsString(entry),
             date: formatDate(entry),
-            title: toSentenceCase(stripBraces(entry.title ?? "")),
+            title: buildTitle(entry),
             thesisType: thesisType,
             institution: institution,
             doi: normalizeDOI(entry),
@@ -141,7 +141,7 @@ public struct APAStyler {
         return APAReportRef(
             authors: formatAuthorsString(entry),
             date: formatDate(entry),
-            title: toSentenceCase(stripBraces(entry.title ?? "")),
+            title: buildTitle(entry),
             titleAddon: titleAddon,
             number: number,
             institution: field(entry, "INSTITUTION").map(stripBraces),
@@ -161,7 +161,7 @@ public struct APAStyler {
         return APAPresentationRef(
             authors: formatAuthorsString(entry),
             date: formatDate(entry),
-            title: toSentenceCase(stripBraces(entry.title ?? "")),
+            title: buildTitle(entry),
             presentationType: presentationType,
             conference: field(entry, "EVENTTITLE").map(stripBraces),
             venue: field(entry, "VENUE").map(stripBraces),
@@ -174,7 +174,7 @@ public struct APAStyler {
         return APAOnlineRef(
             authors: formatAuthorsString(entry),
             date: formatDate(entry),
-            title: toSentenceCase(stripBraces(entry.title ?? "")),
+            title: buildTitle(entry),
             publisher: field(entry, "PUBLISHER").map(stripBraces),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
@@ -193,6 +193,16 @@ public struct APAStyler {
         return clean.hasPrefix("http") ? clean : "https://doi.org/\(clean)"
     }
 
+    /// The rendered title of an entry: `TITLE`, plus a standalone `SUBTITLE`
+    /// field folded in as `Main title: The subtitle`.
+    ///
+    /// **Every per-type styling function must call this** rather than inlining
+    /// `toSentenceCase(stripBraces(entry.title ?? ""))`. Five of them did inline
+    /// it, and each silently dropped `SUBTITLE` (macdoc#183): a real
+    /// bibliography rendered 8 `@PRESENTATION` entries with half a title, and
+    /// nothing reported an error. There used to be a `buildTitleWithSubtitle`
+    /// alias with identical behaviour, which made `buildTitle` read as if it
+    /// did NOT handle subtitles — it is gone; this is the only spelling.
     private static func buildTitle(_ entry: BibEntry) -> String {
         let cleanTitle = stripBraces(entry.title ?? "")
         var full = toSentenceCase(cleanTitle)
@@ -202,9 +212,6 @@ public struct APAStyler {
         return full
     }
 
-    private static func buildTitleWithSubtitle(_ entry: BibEntry) -> String {
-        buildTitle(entry)
-    }
 
     private static func buildEditorString(_ entry: BibEntry) -> String? {
         guard let edRaw = field(entry, "EDITOR"), !edRaw.isEmpty else { return nil }
