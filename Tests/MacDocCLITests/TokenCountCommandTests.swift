@@ -11,12 +11,13 @@ final class TokenCountCommandTests: XCTestCase {
         let isolation = try temporaryIsolationEnvironment()
         defer { try? FileManager.default.removeItem(at: isolation.root) }
         let filesBefore = try relativeRegularFilePaths(in: isolation.root)
+        let binary = try CLITestHelper.binaryPath
 
         let result = try CLITestHelper.runProcess(
             executableURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
             arguments: [
                 "-p", "(version 1)(allow default)(deny network*)",
-                CLITestHelper.binaryPath,
+                binary,
                 "convert", "--to", "tokens", "--model", "gpt-4o", input.path,
             ],
             currentDirectory: CLITestHelper.repoRoot,

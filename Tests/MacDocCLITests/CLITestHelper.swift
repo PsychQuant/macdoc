@@ -10,17 +10,53 @@ struct CLIResult {
     var succeeded: Bool { exitCode == 0 }
 }
 
+enum BinarySelectionError: Error, Equatable {
+    case invalidOverride(String)
+    case unavailable(String)
+}
+
 /// CLI 測試輔助工具
 enum CLITestHelper {
 
+    static func resolveBinaryURL(
+        repoRoot: URL,
+        configuration: String,
+        environment: [String: String],
+        isExecutable: (String) -> Bool
+    ) throws -> URL {
+        let candidate: URL
+        if let override = environment["MACDOC_TEST_BINARY"] {
+            guard !override.isEmpty, override.hasPrefix("/") else {
+                throw BinarySelectionError.invalidOverride(override)
+            }
+            candidate = URL(fileURLWithPath: override)
+        } else {
+            candidate = repoRoot.appendingPathComponent(".build")
+                .appendingPathComponent(configuration)
+                .appendingPathComponent("macdoc")
+        }
+
+        guard isExecutable(candidate.path) else {
+            throw BinarySelectionError.unavailable(candidate.path)
+        }
+        return candidate
+    }
+
     /// macdoc binary 路徑
     static var binaryPath: String {
-        // 先找 release，再找 debug
-        let releaseURL = repoRoot.appendingPathComponent(".build/release/macdoc")
-        if FileManager.default.fileExists(atPath: releaseURL.path) {
-            return releaseURL.path
+        get throws {
+            #if DEBUG
+            let configuration = "debug"
+            #else
+            let configuration = "release"
+            #endif
+            return try resolveBinaryURL(
+                repoRoot: repoRoot,
+                configuration: configuration,
+                environment: ProcessInfo.processInfo.environment,
+                isExecutable: FileManager.default.isExecutableFile(atPath:)
+            ).path
         }
-        return repoRoot.appendingPathComponent(".build/debug/macdoc").path
     }
 
     /// repo 根目錄（從 Tests/MacDocCLITests/ 往上兩層）
@@ -39,8 +75,10 @@ enum CLITestHelper {
         timeout: TimeInterval = 30,
         environment: [String: String]? = nil
     ) throws -> CLIResult {
-        try runProcess(
-            executableURL: URL(fileURLWithPath: binaryPath),
+        let path = try binaryPath
+        FileHandle.standardError.write(Data("[macdoc-test] binary=\(path)\n".utf8))
+        return try runProcess(
+            executableURL: URL(fileURLWithPath: path),
             arguments: arguments,
             currentDirectory: repoRoot,
             timeout: timeout,
