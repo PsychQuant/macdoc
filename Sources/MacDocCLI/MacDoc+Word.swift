@@ -116,6 +116,10 @@ extension MacDoc.Word {
                 try Self.reportCoverage(for: inputURL,
                                         dslParts: dslParts,
                                         rawReasons: rawReasons)
+            } else if Self.hasParagraphOnlyAlternative(rawReasons) {
+                FileHandle.standardError.write(Data(
+                    "note: paragraph-no-paraId；可用 --paragraphs-only 取得段落 DSL 與 slot，代價是省略其他 parts，重播不保證 byte-equal。\n".utf8
+                ))
             }
 
             // Coverage-only: report printed, nothing to write.
@@ -177,8 +181,12 @@ extension MacDoc.Word {
         /// a documented alternative path. Other reasons (`table`, `byte-mismatch`,
         /// `parse-error`, …) have no such escape hatch, and emitting the hint for
         /// them would send the caller down a road that does not help.
+        static func hasParagraphOnlyAlternative(_ rawReasons: [String: String]) -> Bool {
+            rawReasons["word/document.xml"] == "paragraph-no-paraId"
+        }
+
         static func rawReasonNote(_ rawReasons: [String: String]) -> [String] {
-            guard rawReasons["word/document.xml"] == "paragraph-no-paraId" else { return [] }
+            guard Self.hasParagraphOnlyAlternative(rawReasons) else { return [] }
             return [
                 "",
                 "note: word/document.xml 落 raw 的根因是 paragraph-no-paraId —— 檔案中有段落不帶",

@@ -12,6 +12,7 @@
 import XCTest
 import Foundation
 import OOXMLSwift
+@testable import MacDocCLI
 
 final class WordReverseCoverageTests: XCTestCase {
 
@@ -88,6 +89,58 @@ final class WordReverseCoverageTests: XCTestCase {
         try DocxWriter.write(doc, to: url)
     }
 
+    /// Removing the non-coverage diagnostic would make paraId-less documents
+    /// silently produce an all-raw script even though a readable alternative
+    /// exists.
+    func testDefaultReverseSuggestsParagraphsOnly() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reverse-hint-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let docx = tmp.appendingPathComponent("legacy.docx")
+        let out = tmp.appendingPathComponent("legacy.mdocx.swift")
+        try makeParaIdlessDocx(at: docx)
+
+        let result = try CLITestHelper.run([
+            "word", "reverse", docx.path, "--to-mdocx", out.path,
+        ])
+
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("--paragraphs-only"), result.stderr)
+        XCTAssertTrue(result.stderr.contains("不保證 byte-equal"), result.stderr)
+        XCTAssertTrue(result.stderr.contains("省略其他 parts"), result.stderr)
+        XCTAssertEqual(result.stdout, "")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: out.path))
+        let script = try String(contentsOf: out, encoding: .utf8)
+        XCTAssertTrue(script.contains("carryPart"), "default must stay on the raw full-fidelity route")
+        XCTAssertFalse(script.contains("Paragraph(id:"), "diagnostic must not switch modes")
+    }
+
+    /// The actionable diagnostic is deliberately keyed to one exact part and
+    /// reason; widening this predicate would recommend a lossy mode for causes
+    /// it cannot solve.
+    func testParagraphsOnlyAlternativeRequiresExactDocumentReason() {
+        XCTAssertTrue(MacDoc.Word.Reverse.hasParagraphOnlyAlternative([
+            "word/document.xml": "paragraph-no-paraId",
+        ]))
+
+        let nonActionableReasons = ["table", "byte-mismatch", "parse-error"]
+        for reason in nonActionableReasons {
+            XCTAssertFalse(MacDoc.Word.Reverse.hasParagraphOnlyAlternative([
+                "word/document.xml": reason,
+            ]), reason)
+        }
+        XCTAssertFalse(MacDoc.Word.Reverse.hasParagraphOnlyAlternative([:]))
+        XCTAssertFalse(MacDoc.Word.Reverse.hasParagraphOnlyAlternative([
+            "word/header1.xml": "paragraph-no-paraId",
+        ]))
+        XCTAssertFalse(MacDoc.Word.Reverse.hasParagraphOnlyAlternative([
+            "word/document.xml": "table",
+            "word/header1.xml": "paragraph-no-paraId",
+        ]))
+    }
+
     /// `--coverage` is usable as a pure diagnostic: no `--to-mdocx`, no script
     /// written. Pins #177 — the report is the documented step for deciding
     /// *whether* to produce the script, so requiring the output path made the
@@ -147,6 +200,8 @@ final class WordReverseCoverageTests: XCTestCase {
                       "the report must name the root cause:\n\(result.stdout)")
         XCTAssertTrue(result.stdout.contains("--paragraphs-only"),
                       "the report must point at the alternative path:\n\(result.stdout)")
+        XCTAssertFalse(result.stderr.contains("--paragraphs-only"),
+                       "coverage must not duplicate the alternative note:\n\(result.stderr)")
     }
 
     /// The note is conditioned on the root cause, not emitted for every raw
@@ -165,6 +220,46 @@ final class WordReverseCoverageTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertFalse(result.stdout.contains("paragraph-no-paraId"),
                        "root-cause note leaked onto a paraId-bearing document:\n\(result.stdout)")
+        XCTAssertFalse(result.stderr.contains("--paragraphs-only"), result.stderr)
+    }
+
+    /// Explicit lossy mode already reflects the caller's choice, so it must
+    /// not print the full-fidelity fallback diagnostic.
+    func testParagraphsOnlyModeDoesNotSuggestItself() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrc-paragraphs-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let docx = tmp.appendingPathComponent("legacy.docx")
+        let out = tmp.appendingPathComponent("legacy.mdocx.swift")
+        try makeParaIdlessDocx(at: docx)
+
+        let result = try CLITestHelper.run([
+            "word", "reverse", docx.path, "--paragraphs-only", "--to-mdocx", out.path,
+        ])
+
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertFalse(result.stderr.contains("可用 --paragraphs-only"), result.stderr)
+    }
+
+    /// A sidecar bypasses full-fidelity extraction entirely and therefore has
+    /// no raw reason from which to infer this diagnostic.
+    func testSidecarModeDoesNotSuggestParagraphsOnly() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrc-sidecar-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let docx = tmp.appendingPathComponent("legacy.docx")
+        let out = tmp.appendingPathComponent("legacy.mdocx.swift")
+        try makeParaIdlessDocx(at: docx)
+        try SidecarStore.saveLog(OperationLog(), alongside: docx)
+
+        let result = try CLITestHelper.run([
+            "word", "reverse", docx.path, "--to-mdocx", out.path,
+        ])
+
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("使用 oplog sidecar"), result.stderr)
+        XCTAssertFalse(result.stderr.contains("--paragraphs-only"), result.stderr)
     }
 }
-
