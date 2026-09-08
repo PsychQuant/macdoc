@@ -34,6 +34,13 @@ ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之
 - 設定操作：show 不列機密 AI/OCR 值；import 不在 snapshot 記原始絕對路徑；所有新設定寫入保留未知欄位。
 - 驗收：合成 Normal fixture 檢查允許的 twips/half-point 值、禁止內容不存在、原檔 hash 不變、ordinary/authoring writer 一致。壞設定與 verify failure 檢查舊檔 bytes 不變。
 - 相依工作在獨立 Git 工作樹執行；本機整合使用 SwiftPM editable dependency 或等價明確 local override，不編輯 .build/checkouts；未發布的上游依賴不偽造 release version。
+- 套用脈絡使用明確 newDocument／existingDocument enum；由 converter staging 讀回的文件仍傳 newDocument，不以 archive 存在推斷。
+- 樣式合併保留目標正文仍引用的 style IDs；Normal 的 localized styleId 依 default paragraph 標記辨認，不硬編碼為 Normal。驗證 basedOn／next／linked 等依賴不懸空。
+- 匯入 docDefaults 與安全 ancillary parts 必須保存在可持久寫入的 document state；updateStyle 或 markTypedDirty 後再次 save 仍保留，不只第一輪 XML 寫入成功。
+- authoring writer 必須輸出 profile theme/fontTable 等允許 parts 並合併 content types／relationships；fontTable 是字型登錄，不等於對文字施加字型。
+- existingDocument 明確 official 只套用最終 body section 的安全版面欄位，保留目標原本的 header/footer 參照與其他分節；不把快照沒有引用誤作刪除目標引用。
+- 第一版拒絕帶實際 numbering definition 或非零 numId 的範本格式，使用具名 unsupported numbering error；不重寫目標既有 numbering，避免映射錯接。原始 Normal 是否可匯入以實測驗證。
+- 測試以 configURL 依賴注入或新 document 指令明確的 --config 路徑使用隔離設定；不得覆寫真實使用者 config 作為測試。
 
 ## Risks / Trade-offs
 
@@ -49,4 +56,3 @@ ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之
 ## Open Questions
 
 (none)；Mac/Windows 字型與視覺檢查是待執行驗收，不是未決產品選擇。
-
