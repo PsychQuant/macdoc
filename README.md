@@ -286,6 +286,26 @@ macdoc config ai set transcription codex
 
 設定檔位置：`~/.config/macdoc/config.json`
 
+### 文件格式設定（原始碼建置功能，尚未發布）
+
+此功能由 [#185](https://github.com/PsychQuant/macdoc/issues/185) 追蹤，需要包含 profile/store 的 OOXMLSwift 與保留未知設定欄位的 PDFToLaTeXCore。本機整合使用 SwiftPM editable dependencies；目前發布的 macdoc 0.7.0 與 plugin 自動下載 binary 尚未提供以下參數。
+
+完成相依套件整合並建置後，使用該工作樹的 binary：
+
+```bash
+.build/debug/macdoc config document show
+.build/debug/macdoc config document import-official --template /path/to/Normal.dotm
+.build/debug/macdoc config document set-default official
+.build/debug/macdoc convert --to docx notes.md --profile inherit --output notes.docx
+.build/debug/macdoc word render notes.mdocx.swift --to-docx notes.docx --profile official --force
+```
+
+CLI 與新版 Word MCP 共用 `~/.config/macdoc/config.json` 的 `document` 區段。新文件採明示 `profile` → `document.defaultProfile` → `inherit`；既有文件與腳本 replay 只有明示 profile 才套用。`inherit` 保留既有文件格式；新文件去掉產生器強制字型，但保留明示字型，例如程式碼 Menlo。
+
+匯入只保存允許的格式快照，不複製範本正文、不修改 Normal、不自動切換預設值。官方繁中字型使用標楷體，OOXML 寫入經 Mac Word 實測可辨識的 family identifier `DFKai-SB`；其餘支援的格式值來自範本，不代表一套法定公文格式。Windows Word 渲染仍待驗證。省略 `--template` 時，僅該匯入命令讀取目前帳號 Office 範本目錄的 Normal.dotm；後續產檔使用保存的快照。缺失、損毀或不支援的快照會明確報錯。
+
+文件設定命令接受 `--config /path/to/config.json`；convert/render 接受 `--document-config /path/to/config.json`。`show` 只列文件設定，不列 AI/OCR 機密；設定寫入保留其他區段及未知欄位。convert 保留既有一般檔覆寫語義，拒絕 Word 開檔鎖與目錄；render 覆寫既有檔仍需 `--force`。兩者都先套用格式再檢查及發布，render 驗證失敗不覆寫舊檔。
+
 ## Supported Conversions
 
 | Source → Target | 指令 |

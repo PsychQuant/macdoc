@@ -8,7 +8,7 @@ extension MacDoc {
         static let configuration = CommandConfiguration(
             commandName: "config",
             abstract: "macdoc 設定管理",
-            subcommands: [AI.self, OCR.self]
+            subcommands: [AI.self, OCR.self, Document.self]
         )
 
         // MARK: config ai

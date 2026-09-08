@@ -1,5 +1,21 @@
 # che-word-mcp
 
+## 文件格式 profile：原始碼建置功能，尚未發布
+
+macdoc#185／che-word-mcp#223 的原始碼整合新增 `create_document`、`open_document`、`execute_script` 的可選 `profile`，值限 `inherit` 或 `official`。需要包含 profile/store 的 OOXMLSwift 原始碼；目前 plugin wrapper 下載的既有 binary 尚未提供此功能。本次未提高 `binary_version`，也未發布 binary。
+
+新版 MCP 與新版 macdoc 共用 `~/.config/macdoc/config.json` 的 `document.defaultProfile` 和 `document.officialSnapshot`。先透過整合建置的 macdoc `config document import-official --template /path/to/Normal.dotm` 保存快照；匯入不切換預設值，要預設使用 official 再執行 `config document set-default official`。
+
+| 操作 | 未指定 profile | 明示 profile |
+|---|---|---|
+| `create_document` | 設定預設 → inherit | 優先於設定 |
+| `open_document` | 保留原格式，不讀新文件預設 | inherit 不改文件；official 套用並標示變更 |
+| `execute_script` | 保留 replay，不讀新文件預設 | 驗證與發布前套用 |
+
+錯誤型別、null、未知名稱、缺失或損毀的 official 快照會明確失敗；格式解析或套用失敗不註冊新 session、不發布輸出。快照只攜帶允許的格式；正文和來源路徑不會進入快照。繁中字型為標楷體，OOXML 使用 Mac Word 可辨識的 `DFKai-SB`，Windows Word 渲染仍待驗證。原 Normal 後續變更或移除也不影響已匯入的格式。
+
+既有文件明示 inherit 不會因 profile 觸發 dirty 或 autosave；official 成功套用後沿用正常 autosave 與存檔保護。`execute_script` 仍保留既有 overwrite／驗證錯誤契約。自訂設定路徑可由 MCP server constructor 的 `documentConfigURL` 注入；CLI 文件設定命令使用 `--config`，convert/render 使用 `--document-config`。
+
 **Word MCP Server** — Swift 原生 OOXML 操作，**245 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
 
 當前版本：Plugin shell **v3.23.0** / Binary **v3.23.0**（Plugin shell + Binary 同步）— closes [PsychQuant/che-word-mcp#177](https://github.com/PsychQuant/che-word-mcp/issues/177)，`get_tables` 修正截斷政策違規：舊版無條件截斷回傳（表格列/欄/文字皆砍到 3），不提供 `summarize` 參數、不揭露省略——違反本 repo `summarize: Bool` 反向預設慣例（v3.1.0 起 `truncateText()` 的既有紀律，見 [#1](https://github.com/PsychQuant/che-word-mcp/issues/1)/[#5](https://github.com/PsychQuant/che-word-mcp/issues/5)）。新版預設回傳全部列/欄/完整文字，header 標最大寬度並標示不齊列（`(ragged: min..max columns per row)`）；`summarize: true` 才截斷至 3/3，並揭露全部三種省略類型。同族缺口（`get_paragraphs`/`list_footnotes`/`list_endnotes`/`list_all_formatted_text`）另追蹤於 [#178](https://github.com/PsychQuant/che-word-mcp/issues/178)。

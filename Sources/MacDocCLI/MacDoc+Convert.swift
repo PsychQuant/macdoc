@@ -19,6 +19,7 @@ import NoteToHTML
 import NoteToPDF
 import NotabilityContainerDetection
 import TokenCounter
+import OOXMLSwift
 
 // MARK: - Convert 子命令（textutil-compatible 統一入口）
 extension MacDoc {
@@ -42,6 +43,12 @@ extension MacDoc {
 
         @Option(name: .long, help: "Target format (md, html, docx, pdf, json, marker, tokens)")
         var to: String
+
+        @Option(help: "DOCX 文件格式：inherit 或 official；優先於新文件預設設定")
+        var profile: DocumentProfileOption?
+
+        @Option(name: .customLong("document-config"), help: "文件設定檔路徑")
+        var documentConfig: String?
 
         @Option(name: .long, help: "Token model: gpt-4o or claude-sonnet-4-6")
         var model: String?
@@ -81,6 +88,10 @@ extension MacDoc {
 
             let ext = inputURL.pathExtension.lowercased()
             let target = to.lowercased()
+
+            if (profile != nil || documentConfig != nil) && target != "docx" {
+                throw ValidationError("--profile 與 --document-config 只支援轉換為 DOCX")
+            }
 
             if math != nil && !(["md", "markdown"].contains(ext) && target == "docx") {
                 throw ValidationError("--math 只支援 Markdown 轉 DOCX")
@@ -256,7 +267,7 @@ extension MacDoc {
 
         private func convertHTMLToWord(inputURL: URL) throws {
             let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
-            try HTMLToWordConverter().convertToFile(input: inputURL, output: outputURL)
+            try writeProfiledDocument(HTMLToWordConverter().convertToDocument(input: inputURL), to: outputURL)
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
@@ -338,7 +349,7 @@ extension MacDoc {
 
             let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
             let converter = MarkdownToWordConverter(mathMode: (math ?? .literal).converterMode)
-            try converter.convertToFile(input: inputURL, output: outputURL, options: options)
+            try writeProfiledDocument(converter.convertToDocument(input: inputURL, options: options), to: outputURL)
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
@@ -444,7 +455,7 @@ extension MacDoc {
             options.hardLineBreaks = hardBreaks
 
             let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
-            try PDFToDOCXConverter().convertToFile(input: inputURL, output: outputURL, options: options)
+            try writeProfiledDocument(PDFToDOCXConverter().convertToDocument(input: inputURL, options: options), to: outputURL)
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
@@ -452,7 +463,7 @@ extension MacDoc {
 
         private func convertTeXToWord(inputURL: URL) throws {
             let outputURL = try resolveDocxOutputURL(inputURL: inputURL)
-            try TeXToDOCXConverter().convertToFile(input: inputURL, output: outputURL)
+            try writeProfiledDocument(TeXToDOCXConverter().convertToDocument(input: inputURL), to: outputURL)
             FileHandle.standardError.write(Data("已寫入: \(outputURL.path)\n".utf8))
         }
 
@@ -562,6 +573,41 @@ extension MacDoc {
         /// Convenience for docx output (backward compat).
         private func resolveDocxOutputURL(inputURL: URL) throws -> URL {
             try resolveBinaryOutputURL(inputURL: inputURL, ext: "docx")
+        }
+
+        private func writeProfiledDocument(_ converted: WordDocument, to outputURL: URL) throws {
+            var document = converted
+            defer { document.close() }
+            let store = DocumentProfileStore(configURL: documentConfig.map { URL(fileURLWithPath: $0) } ?? DocumentProfileStore.defaultConfigURL)
+            if let selected = try store.resolve(explicit: profile?.kind, context: .newDocument) {
+                try document.applyFormattingProfile(selected, context: .newDocument)
+            }
+            let fm = FileManager.default
+            func checkDestination() throws {
+                var isDirectory: ObjCBool = false
+                if fm.fileExists(atPath: outputURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                    throw ValidationError("輸出路徑是目錄：\(outputURL.path)")
+                }
+                if WordLock.isLockedByWord(outputURL) {
+                    throw SyncError.fileLockedByWord(lockURL: WordLock.lockFileURL(for: outputURL))
+                }
+            }
+            try checkDestination()
+            let staging = outputURL.deletingLastPathComponent()
+                .appendingPathComponent(".\(outputURL.lastPathComponent).profile-staging-\(UUID().uuidString)", isDirectory: true)
+            try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            defer { try? fm.removeItem(at: staging) }
+            let stagedFile = staging.appendingPathComponent("document.docx")
+            try DocxWriter.write(document, to: stagedFile)
+            // Inspect the final profiled package before its first publication.
+            var checked = try DocxReader.read(from: stagedFile)
+            checked.close()
+            try checkDestination()
+            if fm.fileExists(atPath: outputURL.path) {
+                _ = try fm.replaceItemAt(outputURL, withItemAt: stagedFile)
+            } else {
+                try fm.moveItem(at: stagedFile, to: outputURL)
+            }
         }
 
         private func loadBibEntries(from inputURL: URL) throws -> [BibEntry] {
