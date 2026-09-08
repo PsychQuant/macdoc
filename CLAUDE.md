@@ -350,6 +350,23 @@ repo 名負責標示語言，module 名不必再說一次；在 Swift 檔案裡�
 - `ImageClassifier` - 圖片分類協議
 - `StreamingOutput` - 輸出協議
 
+## 第一方依賴一律用版本範圍，不用 `branch:`（#184）
+
+**任何第一方 `Package.swift` 都不得宣告 `branch:`。** 這不是風格偏好，是踩過的坑：
+
+`branch:` 記的是一個 revision，`swift build` **永不推進它**；而且它是 unversioned requirement，會**壓過整張圖的版本範圍**。所以它不是「追最新」，是「凍結，並且讓別人的版本需求失效」。
+
+2026-09-08 實測到的後果（macdoc#184）：
+
+- word-builder-swift 的一條 `branch: "main"` 宣告，**同時解出兩個不同的舊 revision** —— macdoc 拿到 ooxml-swift v3.2.0、word-builder 自己的 resolve 停在 v3.0.0，而宣告旁的註解寫著「always picks up the latest」。
+- 它還被烤進已發布的 `v1.0.0` tag，於是每個外部消費者都繼承一個不可重現的建置。
+- 拿掉它之後才發現**版本圖本來就無解**：六個套件宣告 `from: "0.5.x"` / `"0.7.0"`，SwiftPM 的 `from:` 封頂在下一個 major，等於 `< 1.0.0`，與另外四個的 `2.0.0..<4.0.0` 互斥。pin 遮的不只是落後，是不可滿足性。
+- 它同時遮住了 macdoc CLI 自己的編譯破口（`TranscodeError.rawSlotExecutionFailure`，ooxml-swift v3.5.0 新增卻從未處理）。
+
+**反模式會靠引用繁殖**：docx-workflow-swift 當初就是照抄 word-builder 的做法，理由寫「per the word-builder-swift v1.0.0 policy」。所以這條要寫成規則而不是留在 issue 裡。
+
+現況（2026-09-08）：`from: "3.7.0"`（ooxml-swift）與 `from: "1.0.2"`（word-builder-swift），**第一方 manifest 零 `branch:`**。`packages/token-counter-swift` 的 `revision:` 是第三方 fork 的刻意釘選，不在此規則內。
+
 ## Package Update Workflow
 
 所有套件皆使用 `url:` 遠端依賴。
@@ -381,8 +398,8 @@ swift build
 | `.` (root) | https://github.com/PsychQuant/macdoc.git | 主專案 CLI |
 | `packages/common-converter-swift` | https://github.com/PsychQuant/doc-converter-swift.git | 轉換器協議（remote 名 doc-converter-swift） |
 | `packages/word-to-md-swift` | https://github.com/PsychQuant/word-to-md-swift.git | Word → MD 轉換 |
-| `packages/word-builder-swift` | https://github.com/PsychQuant/word-builder-swift.git | Lens-model authoring surface for .docx (v1.0.0+) — wraps OOXMLSwift.WordDocument |
-| `packages/docx-workflow-swift` | (local only — not yet published) | Layer 3 manifest-driven docx-edit library on top of word-builder-swift v1.0.0 |
+| `packages/word-builder-swift` | https://github.com/PsychQuant/word-builder-swift.git | Lens-model authoring surface for .docx (v1.0.2+) — wraps OOXMLSwift.WordDocument |
+| `packages/docx-workflow-swift` | (local only — not yet published) | Layer 3 manifest-driven docx-edit library on top of word-builder-swift v1.0.2 |
 | `packages/ooxml-swift` | https://github.com/PsychQuant/ooxml-swift.git | OOXML 解析 |
 | `packages/markdown-swift` | https://github.com/PsychQuant/markdown-swift.git | Markdown 生成 |
 | `packages/marker-swift` | https://github.com/PsychQuant/marker-swift.git | 圖片分類 |
