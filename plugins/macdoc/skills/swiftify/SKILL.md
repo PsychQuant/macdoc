@@ -121,12 +121,13 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 **DSL 升級是 per-part 全有全無，不是逐段降級。** 一個 part 裡只要有任何一處無法用 typed 形式 byte-equal 地重建，**整個 part** 就落到 raw。
 
-兩個最常見的落 raw 原因：
+常見根因與可採用的路徑：
 
-| 情況 | 結果 |
-|------|------|
-| 文件含**任一表格** | 整個 `word/document.xml` 落 raw |
-| 段落沒有 `w14:paraId`（legacy 文件、部分工具產出）| 不具升級資格，落 raw |
+| 根因／模式 | 可讀 DSL／slot | 保真與限制 |
+|---|---|---|
+| 預設 full-fidelity，缺 paraId | `document.xml` 走 raw；缺真 paraId 的位置不能直接 raw-slot 定位 | 保留全部內容，維持 byte-equal 目標 |
+| 缺 paraId，明確選 `--paragraphs-only` | 產生段落 DSL，合成 `p1`、`p2`…，可指定 slot | 省略非段落內容；不保證 byte-equal，版面與格式也不保證完整 |
+| table／byte-mismatch／parse-error 等 | 不能把 `--paragraphs-only` 當成完整文件的替代方案 | 保留 full-fidelity；需另行處理根因 |
 
 實測兩個對照：
 
@@ -139,13 +140,31 @@ macdoc convert 產的 2 段落簡單文件（0 個 paraId）
   → Aggregate: 0.0% DSL (0 / 8572 bytes across 9 parts)
 ```
 
-**兩個最直覺的輸入都是 0.0%。** 所以：
+**兩個最直覺的輸入都是 0.0%，但處理方式並不相同。** 所以：
 
 - 表格密集的官方表單 → **一定**是 raw。拿到的是「穿著 Swift 語法的 byte-equal 封存檔」
 - 它能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條 118 KB 的單行整條重新 escape，diff 顯示「一行變了」
 
-如果你的目的是「產生人類可讀的 Swift 文件原始碼」，raw channel 的文件**達不到**，而且這不是設定問題——需要 ooxml-swift 支援 rich table 的 typed 表示與 sub-part 局部降級，兩者目前都不存在。
+若唯一根因是 `word/document.xml = paragraph-no-paraId`，且接受只保留段落，可明確改走 paragraphs-only：
+
+```bash
+# 先確認實際根因
+macdoc word reverse legacy.docx --coverage
+
+# 取得段落 DSL；輸出中的合成 ID 才是後續依據
+macdoc word reverse legacy.docx --paragraphs-only --to-mdocx legacy.mdocx.swift
+
+# 讀過 legacy.mdocx.swift、確認實際段落 ID 是 p1 後才指定 slot；不可猜 ID
+macdoc word reverse legacy.docx --paragraphs-only \
+  --slot body=p1 --to-mdocx slot.mdocx.swift
+```
+
+paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`，也不保證版面或格式完整。以上範例各用不同輸出路徑，重跑時不會因既有檔案而要求 `--force`。
+
+> **發布狀態**：`--paragraphs-only` 是 CLI 0.7.0 已有功能；當預設 reverse 偵測到此精確根因時主動寫入 stderr 的提示，尚未隨正式 CLI 發布，需使用包含 PsychQuant/macdoc#181 修正的 CLI。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
+
+若根因是表格、byte-mismatch、parse-error 或其他原因，raw channel 不是設定問題；要取得人類可讀的完整 Swift 文件原始碼，仍需 ooxml-swift 支援 rich table 的 typed 表示與 sub-part 局部降級，目前都不存在。
 
 ## 典型情境：以官方範本定點填寫
 
