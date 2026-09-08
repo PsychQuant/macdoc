@@ -27,6 +27,12 @@ final class WordReverseSlotTests: XCTestCase {
         try doc.writeAuthoringPackage(to: url)
     }
 
+    private func makeParaIdlessDocx(at url: URL) throws {
+        var doc = WordDocument()
+        doc.body.children.append(.paragraph(Paragraph(runs: [Run(text: "合成 ID 段落")])))
+        try DocxWriter.write(doc, to: url)
+    }
+
     /// --slot produces the parameterized form; executing it with the default
     /// call-site arguments reproduces the reference byte-equal.
     func testSlotFlagProducesParameterizedScript() throws {
@@ -75,5 +81,26 @@ final class WordReverseSlotTests: XCTestCase {
         ])
         XCTAssertNotEqual(unknown.exitCode, 0)
         XCTAssertTrue(unknown.stderr.contains("無法建立"), unknown.stderr)
+    }
+
+    /// Paragraphs-only synthesizes stable sequential IDs for legacy documents,
+    /// and those IDs remain usable by the slot exporter.
+    func testParagraphsOnlyParaIdlessDocumentSupportsSynthesizedSlot() throws {
+        let dir = try makeTempDir()
+        let docx = dir.appendingPathComponent("legacy.docx")
+        try makeParaIdlessDocx(at: docx)
+        let out = dir.appendingPathComponent("legacy-slot.mdocx.swift")
+
+        let result = try CLITestHelper.run([
+            "word", "reverse", docx.path, "--paragraphs-only",
+            "--slot", "body=p1", "--to-mdocx", out.path,
+        ])
+
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertFalse(result.stderr.contains("可用 --paragraphs-only"), result.stderr)
+        let script = try String(contentsOf: out, encoding: .utf8)
+        XCTAssertTrue(script.contains("func makeDocument("), script)
+        XCTAssertTrue(script.contains("body: String"), script)
+        XCTAssertTrue(script.contains("Paragraph(id: \"p1\")"), script)
     }
 }
