@@ -17,6 +17,8 @@ Parent macdoc#185 已核准完整計畫。現有 typed writer 與 authoring writ
 
 document 設定包含 defaultProfile 與 officialSnapshot 參照；profiles 僅 inherit/official。快照以版本化檔案存於 config 同目錄的 profiles 子目錄。先驗證並原子保存快照，再更新 config；已存在快照不默默重匯入。AIConfig.save 以已知鍵集合更新最新讀取的 object，保留未知鍵，nil 的已知欄位須移除，不能採只覆蓋非 nil 的天真 merge。
 
+共用 DocumentProfileStore 放在 OOXMLSwift 的獨立來源檔，以明確 configURL 初始化；只有 CLI/MCP adapter 主動呼叫 store 時才讀 config，不從 generic writer/importer 隱式讀取。resolve 接受 typed profile kind 與 new/existing context；existing 無 explicit 以及 explicit inherit 不讀不必要的 snapshot。import 每次產生新 UUID 的 immutable snapshot 檔，再原子更新 officialSnapshot 參照；config 保存失敗不覆寫舊快照。document 區段內未知欄位也保留。CLI document 設定命令支援 --config，convert/render 支援 --document-config 作明確替代路徑；MCP 以 constructor 注入 configURL 測試，不改真實使用者設定。
+
 ### CLI 與 MCP 的顯式套用
 
 新增 macdoc config document show、set-default <inherit|official>、import-official --template <path>。import-official 預設來源可定位目前帳號 Normal，但只在該命令執行；不在每次產檔時讀 Normal。convert --to docx 使用 --profile 逐次覆寫，MCP create_document 使用 profile 參數。word render／MCP execute_script／open_document 只處理明示 profile，忽略 creation default。unsupported profile 報錯。
