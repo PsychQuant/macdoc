@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "0.5.1"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.7.0"),
         .package(url: "https://github.com/PsychQuant/markdown-swift.git", from: "0.1.0"),
         .package(url: "https://github.com/PsychQuant/marker-swift.git", from: "0.1.0"),
     ],

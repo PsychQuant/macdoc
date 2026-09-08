@@ -13,10 +13,11 @@ let package = Package(
         .library(name: "DocxWorkflowLib", targets: ["DocxWorkflowLib"])
     ],
     dependencies: [
-        // Branch-track main per the word-builder-swift v1.0.0 policy:
-        // always pull the latest Edit-algebra runtime + Phase 2c Reducer
-        // cases. Deploy-via-download semantics preserved.
-        .package(url: "https://github.com/PsychQuant/word-builder-swift.git", branch: "main"),
+        // Version range, not `branch:` — the "v1.0.0 policy" this used to cite
+        // was itself the defect (macdoc#184): a branch requirement freezes the
+        // resolved revision and overrides the graph's version ranges, and
+        // copying it here is how the anti-pattern propagated one level up.
+        .package(url: "https://github.com/PsychQuant/word-builder-swift.git", from: "1.0.2"),
     ],
     targets: [
         .target(
