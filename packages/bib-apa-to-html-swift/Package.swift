@@ -19,7 +19,8 @@ let package = Package(
         .testTarget(
             name: "BibAPAToHTMLTests",
             dependencies: ["BibAPAToHTML"],
-            path: "Tests/BibAPAToHTMLTests"
+            path: "Tests/BibAPAToHTMLTests",
+            resources: [.process("Resources")]
         )
     ]
 )
