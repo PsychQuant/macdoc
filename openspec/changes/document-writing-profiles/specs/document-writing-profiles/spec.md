@@ -33,12 +33,12 @@ Official import SHALL read the selected Normal template without modifying it and
 - **THEN** import SHALL report a named error and SHALL leave the previous snapshot and config unchanged.
 
 ### Requirement: Official formatting
-Official SHALL apply the imported snapshot and override the Traditional Chinese font to 標楷體, removing conflicting eastAsiaTheme overrides and updating Hant theme mappings. Other supported Western, paragraph and page formatting SHALL come from the snapshot rather than fabricated public-document rules.
+Official SHALL apply the imported snapshot and override the Traditional Chinese font to 標楷體 using the OOXML family identifier DFKai-SB, removing conflicting eastAsiaTheme overrides and updating Hant theme mappings. Other supported Western, paragraph and page formatting SHALL come from the snapshot rather than fabricated public-document rules.
 
 #### Scenario: Selected Normal geometry
 - **GIVEN** a snapshot with page width 11906 twips, height 16838 twips, font size 24 half-points, vertical margins 1440 twips and horizontal margins 1800 twips
 - **WHEN** official is applied
-- **THEN** those values SHALL be preserved and the Traditional Chinese font SHALL be 標楷體.
+- **THEN** those values SHALL be preserved and the Traditional Chinese font SHALL be 標楷體 with serialized family DFKai-SB.
 
 ### Requirement: Snapshot stability and failures
 Imported snapshots SHALL remain stable when the original template subsequently changes or disappears. Official selection with a missing, unsupported-version or corrupt snapshot SHALL fail explicitly without fallback.
@@ -77,4 +77,3 @@ Completion evidence SHALL distinguish automated XML tests from Mac Word and Wind
 #### Scenario: No Windows environment
 - **WHEN** only macOS is available
 - **THEN** automated and Mac results SHALL be reported separately and Windows validation SHALL remain unchecked.
-

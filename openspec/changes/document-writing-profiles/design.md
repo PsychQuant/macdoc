@@ -30,6 +30,7 @@ ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之
 ## Implementation Contract
 
 - 官方基底：使用者選定目前 Normal 的格式快照（A4、12 pt、其餘值由檔案解析），繁中字型標楷體；不是 Formal.dotx。
+- 標楷體的 OOXML 儲存識別名稱使用 DFKai-SB，使用者介面仍稱標楷體。Mac Word 16.112.3 實測直接寫中文顯示名會輸出 PMingLiU；只替換 styles/theme 的字型值為 DFKai-SB，Word PDF 才使用 DFKaiShu-SB-Estd-BF。Windows 尚待驗收，不由這個 Mac 結果推定通過。
 - 安全匯入：只取 styles/docDefaults、受限 theme/fonts/numbering 與 body 最終 section 的安全格式值。去掉正文、修訂資訊、header/footer/printer 引用、外部 rels、嵌入字型與影像；未支援且影響格式完整性的內容明確拒絕，不宣稱完整保留。
 - 型別與 API：DocumentFormattingProfile 可 Codable 且有 schemaVersion；匯入與套用 throw；未知版本、缺必要資料、壞 XML fail-loud。任何 zip path 不可變成任意本機寫入目標。
 - 決策優先：新建 explicit > config default > inherit；既有／replay 無 explicit 就完全不套 profile。呼叫者已明示的文字格式不被 inherit 清除。
