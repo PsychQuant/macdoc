@@ -23,7 +23,7 @@ document 設定包含 defaultProfile 與 officialSnapshot 參照；profiles 僅 
 
 ### 套用先於驗證與發布
 
-ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之前套用，再走現有 verify 與 publish。convertToFile 若沒有寫前套用入口，CLI 將轉換輸出導向本次私有 staging，讀取後套用並在最終原子發布前驗證；禁止先寫 user output 再補格式。MCP session 只有套用成功才註冊，新建/既有顯式變更正確標示 dirty。
+ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之前套用，再走現有 verify 與 publish。四個 DOCX converters 已有 convertToDocument，CLI 直接取得新建 WordDocument 後套 profile，再寫入同目錄私有 staging，檢查成品後原子發布；不新增 converter 公開 API，也不先寫 user output 再補格式。MCP session 只有套用成功才註冊，新建/既有顯式變更正確標示 dirty。
 
 ## Implementation Contract
 
