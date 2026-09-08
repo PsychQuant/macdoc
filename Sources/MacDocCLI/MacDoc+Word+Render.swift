@@ -116,6 +116,12 @@ extension MacDoc.Word {
                 return "raw op 解析失敗（line \(line)）: \(reason)"
             case .slotDesignationFailure(let name, let reason):
                 return "slot「\(name)」無法建立: \(reason)"
+            case .rawSlotExecutionFailure(let name, let reason):
+                // ooxml-swift v3.5.0 added this case. macdoc never handled it
+                // because the dependency graph was frozen at v3.2.0 by a
+                // `branch: "main"` pin (macdoc#184) — the pin hid a compile
+                // break in macdoc's own CLI for four minor releases.
+                return "raw slot「\(name)」替換失敗: \(reason)"
             }
         }
     }
