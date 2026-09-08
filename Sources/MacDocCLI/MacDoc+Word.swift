@@ -44,7 +44,7 @@ extension MacDoc.Word {
         var toMdocx: String?
 
         @Flag(name: .customLong("from-oplog"),
-              help: "強制使用 oplog sidecar（<stem>.oplog.jsonl；找不到時報錯）")
+              help: "強制使用 oplog sidecar（優先 <docx-full-name>.oplog.jsonl；缺少時可讀 legacy <stem>.oplog.jsonl；兩者皆無則報錯）")
         var fromOplog = false
 
         @Flag(help: "覆寫既有的輸出檔案")
