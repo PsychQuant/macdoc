@@ -6,7 +6,7 @@
 
 ## 2. 共用設定與 consumer
 
-- [ ] 2.1 實作 Configuration coexistence，依「文件設定與未知欄位保留」修正 AIConfig.save；測試 AI/OCR/document 交替更新、已知 optional 清空及損壞 JSON 不覆寫。
+- [x] 2.1 實作 Configuration coexistence，依「文件設定與未知欄位保留」修正 AIConfig.save；測試 AI/OCR/document 交替更新、已知 optional 清空及損壞 JSON 不覆寫。
 - [ ] 2.2 實作 Profile selection 的 config document show／set-default／import-official 與 CLI convert profile，依「CLI 與 MCP 的顯式套用」選擇新建 explicit > default > inherit；測試缺快照報錯、顯式 inherit 不讀 snapshot、轉換 staging 後發布。
 - [ ] 2.3 將 Profile selection 接到 Word MCP create/open/execute 與 CLI render；測試新建默认、既有/replay 無 explicit 不變、失敗不註冊 session／不發布 output。
 
