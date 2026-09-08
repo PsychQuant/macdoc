@@ -29,6 +29,12 @@ extension MacDoc.Word {
         @Option(name: .customLong("to-docx"), help: "輸出的 .docx 路徑")
         var toDocx: String
 
+        @Option(help: "明示套用 inherit 或 official；省略時不讀取新文件預設設定")
+        var profile: DocumentProfileOption?
+
+        @Option(name: .customLong("document-config"), help: "文件設定檔路徑")
+        var documentConfig: String?
+
         // Verification is opt-in: absence of a verdict must never be
         // readable as a passing one, so we only verify when the caller
         // names something to verify against.
@@ -42,6 +48,8 @@ extension MacDoc.Word {
         func run() throws {
             let inputURL = try validatedInputURL(input)
             let outputURL = URL(fileURLWithPath: toDocx)
+            let store = DocumentProfileStore(configURL: documentConfig.map { URL(fileURLWithPath: $0) } ?? DocumentProfileStore.defaultConfigURL)
+            let selected = try store.resolve(explicit: profile?.kind, context: .existingDocument)
 
             // No overwrite check here on purpose. The gate lives in the
             // shared entry point, so the MCP face inherits it; a copy here
@@ -57,7 +65,8 @@ extension MacDoc.Word {
                     scriptPath: inputURL.path,
                     outputPath: outputURL.path,
                     verifyAgainst: verifyAgainst,
-                    overwrite: force)
+                    overwrite: force,
+                    formattingProfile: selected)
             } catch let error as TranscodeError {
                 throw ValidationError(Self.describe(error))
             } catch ScriptPipelineError.outputExists(let path) {
