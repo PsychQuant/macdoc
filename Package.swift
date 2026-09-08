@@ -89,7 +89,8 @@ let package = Package(
                 // (WordReverseCoverageTests → emptyAuthoringDocument).
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "TokenCounter", package: "TokenCounter"),
-            ]
+            ],
+            exclude: ["README.md"]
         ),
     ]
 )
