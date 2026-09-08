@@ -14,6 +14,6 @@
 
 - [x] 3.1 更新 plugin 文件與設定範例，說明 Snapshot stability and failures 及未發布依賴；執行合成 CLI/MCP 契約測試並檢查實際輸出，不提高不存在的 binary_version。
 - [x] 3.2 完成 Cross-platform verification honesty：以目前 Normal 格式快照在 Mac Word 驗證繁中字型、A4/12pt/邊界；記錄平台、字型、輸出比對結果。
-- [ ] 3.3 完成 Cross-platform verification honesty：在 Windows Word 驗證同一份成品；環境不可用則保持此項未完成，不用 XML 測試取代。
+- [x] 3.3 完成 Cross-platform verification honesty：在 Windows Word 驗證同一份成品；環境不可用則保持此項未完成，不用 XML 測試取代。
 
-2026-09-09 驗收註記：經使用者授權啟動 Windows VM，確認 Word 執行檔與 COM 註冊存在；自動化及共享路徑探測逾時，未成功開啟或匯出測試文件。VM 已恢復暫停。此項仍未驗證，不能據此結案。
+2026-09-09 驗收註記：初次探測逾時，後續收到命令引號解析錯誤；改用單次 EncodedCommand 後，Windows Word 16.0.20326 成功匯出相同測試文件。PDF 嵌入 DFKaiShu-SB-Estd-BF，A4、12 pt、左右 90 pt／上下 72 pt 邊界、段後 8 pt，PNG 無缺字或裁切且與 Mac 版面一致。未修改 PowerShell 執行原則、安裝軟體或操作其他文件；測試文件及本次啟動的空白 Word 程序已關閉，VM 已恢復暫停。

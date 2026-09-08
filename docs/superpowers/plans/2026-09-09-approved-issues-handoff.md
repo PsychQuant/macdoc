@@ -19,11 +19,11 @@
 | bibliography 三套件 | 35 項通過，subtitle mutation RED/GREEN 通過 |
 | AIConfig | 19 項通過；完整 119 項有 3 個既存失敗測試／6 個 assertion failures，已在原始版本重現 |
 | Mac Word | 實際 PDF 字型與版面通過；Word 16.112.3，DFKaiShu-SB-Estd-BF，A4、12 pt、預期邊界與段落 |
-| Windows Word | 未驗證；Word 存在，但自動化逾時。授權啟動的 VM 已恢復暫停 |
+| Windows Word | 實際 PDF 與畫面通過；Word 16.0.20326，標楷體、A4、12 pt、邊界／段落與 Mac 一致；VM 已恢復暫停 |
 
 測試總數包含表列 skips；不可解讀為所有測試均實際執行。#187 的 release 產品另以 debug 測試 bundle + explicit release binary 驗證；原生 release Swift Testing 啟動問題另追蹤 macdoc#188。
 
-本次有各工作項目獨立審查與整體分支審查，不等同正式 `/idd-verify` 的完整多模型流程。Windows task 3.3 保持未勾選，#185 不宣告驗收完成。
+本次有各工作項目獨立審查與整體分支審查，不等同正式 `/idd-verify` 的完整多模型流程。Windows task 3.3 已以實際 Word 匯出驗收通過；Spectra 任務 9/9 完成，但不代表正式發布或 issue 結案。
 
 最後限定範圍複審通過：獨立重現確認 official/inherit 的後續 theme 修改在普通存檔、authoring 及重新開啟皆保留。沒有未處理的 Critical／Important。
 
@@ -41,9 +41,9 @@
 
 ## 實作裁定
 
-- `DFKai-SB` 為序列化字型名稱，介面稱標楷體；Mac Word 證實本地化字串會退回其他字型，Windows 結果仍待驗。
+- `DFKai-SB` 為序列化字型名稱，介面稱標楷體；Mac Word 證實本地化字串會退回其他字型，Windows Word 亦確認此識別名稱會使用標楷體。
 - 共用 store 接受明確 configURL；一般 OOXML writer 不讀使用者設定。
 - 快照使用不可變 UUID 檔案再原子更新設定參照；不修改 Normal 或實際使用者設定。
 - v1 拒絕範本中的實際 numbering，避免錯接目標文件的 ID；不以靜默降級取代錯誤。
 - 新文件依 explicit > config > inherit；既有文件與 replay 沒有 explicit profile 即保持原行為。
-- Windows 自動化失敗不擴大為安裝軟體或修改系統設定，保留未驗證狀態。
+- Windows 初次逾時與引號錯誤改用單次 EncodedCommand 解決；未修改既有指令碼執行原則或安裝軟體。匯出後 Quit 的 COM ref 參數另行正確呼叫，已確認本次空白 Word 程序關閉，再恢復 VM 暫停。
