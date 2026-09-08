@@ -65,31 +65,34 @@ final class JSONFormatterTests: XCTestCase {
 
     // MARK: - Integration
 
-    func testEndToEndWithRealBibFile() throws {
-        let bibPath = "/Users/che/Academic/che-cheng-website/vendor/cheng_che_cv/bibliography/Che.bib"
-        let bibFile = try BibParser.parse(filePath: bibPath)
+    func testEndToEndWithBundledBibFixtureHasExplicitJSONFields() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "portable-references", withExtension: "bib"))
+        let bibFile = try BibParser.parse(filePath: url.path)
         let json = try BibToAPAJSONFormatter.formatJSON(bibFile.entries)
-
-        XCTAssertFalse(json.isEmpty)
-
         let data = json.data(using: .utf8)!
         let decoded = try JSONDecoder().decode([APAJSONEntry].self, from: data)
 
-        XCTAssertEqual(decoded.count, bibFile.entries.count)
-        // Every entry should have a non-empty rendered field
-        for entry in decoded {
-            XCTAssertFalse(entry.rendered.isEmpty, "Entry \(entry.key) has empty rendered HTML")
-            XCTAssertFalse(entry.citation.isEmpty, "Entry \(entry.key) has empty citation")
-        }
-
-        print("\n=== JSON output (first entry) ===")
-        if let first = decoded.first {
-            print("key: \(first.key)")
-            print("type: \(first.type)")
-            print("year: \(first.year)")
-            print("rendered: \(String(first.rendered.prefix(100)))...")
-            print("citation: \(first.citation)")
-        }
+        XCTAssertEqual(decoded.count, 8)
+        let byKey = Dictionary(uniqueKeysWithValues: decoded.map { ($0.key, $0) })
+        XCTAssertEqual(byKey["fixture-article"]?.type, "ARTICLE")
+        XCTAssertEqual(byKey["fixture-book"]?.type, "BOOK")
+        XCTAssertEqual(byKey["fixture-chapter"]?.type, "INCOLLECTION")
+        XCTAssertEqual(byKey["fixture-thesis"]?.type, "THESIS")
+        XCTAssertEqual(byKey["fixture-report"]?.type, "REPORT")
+        XCTAssertEqual(byKey["fixture-presentation"]?.type, "PRESENTATION")
+        XCTAssertEqual(byKey["fixture-online"]?.type, "ONLINE")
+        XCTAssertEqual(byKey["fixture-fallback"]?.type, "UNPUBLISHED")
+        XCTAssertEqual(byKey["fixture-article"]?.year, "2020")
+        XCTAssertTrue(byKey["fixture-article"]?.rendered.contains("Article title: Article subtitle") == true)
+        XCTAssertTrue(byKey["fixture-book"]?.rendered.contains("Book title: Book subtitle") == true)
+        XCTAssertTrue(byKey["fixture-chapter"]?.rendered.contains("Chapter title: Chapter subtitle") == true)
+        XCTAssertTrue(byKey["fixture-thesis"]?.rendered.contains("Thesis title: Thesis subtitle") == true)
+        XCTAssertTrue(byKey["fixture-report"]?.rendered.contains("Report title: Report subtitle") == true)
+        XCTAssertTrue(byKey["fixture-presentation"]?.rendered.contains("Presentation title: Presentation subtitle") == true)
+        XCTAssertTrue(byKey["fixture-online"]?.rendered.contains("Online title: Online subtitle") == true)
+        XCTAssertTrue(byKey["fixture-fallback"]?.rendered.contains("Fallback title: Fallback subtitle") == true)
+        XCTAssertEqual(byKey["fixture-article"]?.citation, "<a href=\"#ref-fixture-article\">(Tester, 2020)</a>")
+        XCTAssertEqual(byKey["fixture-article"]?.narrativeCitation, "<a href=\"#ref-fixture-article\">Tester (2020)</a>")
     }
 
     // MARK: - Helpers

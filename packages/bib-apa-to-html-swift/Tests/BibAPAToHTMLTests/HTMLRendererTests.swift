@@ -92,17 +92,27 @@ final class HTMLRendererTests: XCTestCase {
         XCTAssertTrue(lines[0].contains("Alpha"))
     }
 
-    // MARK: - Integration with real .bib
+    // MARK: - Portable integration
 
-    func testEndToEndWithRealBibFile() throws {
-        let bibPath = "/Users/che/Academic/che-cheng-website/vendor/cheng_che_cv/bibliography/Che.bib"
-        let bibFile = try BibParser.parse(filePath: bibPath)
+    func testEndToEndWithBundledBibFixtureCoversEveryReferenceType() throws {
+        let bibFile = try parseBundledFixture()
         let html = BibToAPAHTMLFormatter.formatReferenceList(bibFile.entries)
-        XCTAssertFalse(html.isEmpty)
-        XCTAssertTrue(html.contains("<em>"))
-        XCTAssertTrue(html.contains("<a href="))
-        print("\n=== HTML output (first 500 chars) ===\n")
-        print(String(html.prefix(500)))
+
+        XCTAssertEqual(bibFile.entries.count, 8)
+        XCTAssertTrue(html.contains("Article title: Article subtitle"))
+        XCTAssertTrue(html.contains("<em>Journal of Fixtures</em>"))
+        XCTAssertTrue(html.contains("<em>Book title: Book subtitle</em>"))
+        XCTAssertTrue(html.contains("Chapter title: Chapter subtitle"))
+        XCTAssertTrue(html.contains("<em>Fixture handbook</em>"))
+        XCTAssertTrue(html.contains("[Doctoral dissertation, Test University]"))
+        XCTAssertTrue(html.contains("Report title: Report subtitle"))
+        XCTAssertTrue(html.contains("(Technical Report 42)"))
+        XCTAssertTrue(html.contains("[Conference presentation]"))
+        XCTAssertTrue(html.contains("Fixture Conference"))
+        XCTAssertTrue(html.contains("<em>Online title: Online subtitle</em>"))
+        XCTAssertTrue(html.contains("<em>Fallback title: Fallback subtitle</em>"))
+        XCTAssertTrue(html.contains("<a href=\"https://doi.org/10.1234/article\">https://doi.org/10.1234/article</a>"))
+        XCTAssertTrue(html.contains("<a href=\"https://example.test/online\">https://example.test/online</a>"))
     }
 
     // MARK: - In-Text Citations
@@ -136,13 +146,21 @@ final class HTMLRendererTests: XCTestCase {
         XCTAssertTrue(result.contains("</a>"))
     }
 
-    func testReferenceListHasAnchorIDs() throws {
-        let bibPath = "/Users/che/Academic/che-cheng-website/vendor/cheng_che_cv/bibliography/Che.bib"
-        let bibFile = try BibParser.parse(filePath: bibPath)
+    func testBundledFixtureReferenceLinksMatchAnchorIDs() throws {
+        let bibFile = try parseBundledFixture()
         let html = BibToAPAHTMLFormatter.formatReferenceList(bibFile.entries)
-        // Every entry should have a unique id
-        XCTAssertTrue(html.contains("id=\"ref-cheng_likert_choices_2021\""))
-        XCTAssertTrue(html.contains("id=\"ref-cheng_phd_dissertation_2025\""))
+
+        for entry in bibFile.entries {
+            XCTAssertTrue(html.contains("id=\"ref-\(entry.key)\""), "Missing anchor for \(entry.key)")
+            XCTAssertEqual(
+                BibToAPAHTMLFormatter.formatInTextCitation(entry),
+                "<a href=\"#ref-\(entry.key)\">(Tester, \(entry.date!))</a>"
+            )
+            XCTAssertEqual(
+                BibToAPAHTMLFormatter.formatNarrativeInTextCitation(entry),
+                "<a href=\"#ref-\(entry.key)\">Tester (\(entry.date!))</a>"
+            )
+        }
     }
 
     func testCSSContainsTargetHighlight() {
@@ -156,5 +174,10 @@ final class HTMLRendererTests: XCTestCase {
         var dict = OrderedDict()
         for (k, v) in fields { dict[k] = v }
         return BibEntry(entryType: type, key: key, fields: dict, rawText: "", lineNumber: 1)
+    }
+
+    private func parseBundledFixture() throws -> BibFile {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "portable-references", withExtension: "bib"))
+        return try BibParser.parse(filePath: url.path)
     }
 }
