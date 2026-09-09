@@ -50,6 +50,10 @@ macdoc word reverse form.docx --to-mdocx form.mdocx.swift --coverage
 
 MCP：`get_script_coverage(source_path)`
 
+上面這種同時提供 `--to-mdocx` 的 coverage 形式可用於正式 CLI v0.7.0；只給 `--coverage`
+而不產出腳本的 coverage-only 形式，以及具名根因的新提示，仍屬未發布的本機開發版行為。
+v0.7.0 的 channel／百分比輸出不能指出 raw 的確切原因。
+
 輸出長這樣：
 
 ```
@@ -92,7 +96,7 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--force]
 
 MCP：`execute_script(script_path, output_path, overwrite?)`
 
-**輸出路徑已有檔案時預設拒絕。** CLI 要 `--force`，MCP 要 `overwrite: true`。重跑同一個輸出路徑（改完 slot 值再 render 一次就是）一定會遇到——不是錯誤，是要你確認。
+**輸出路徑已有檔案時預設拒絕。** 只有先檢查精確輸出路徑，並取得使用者對覆寫該檔案的明確事前同意，才可在 CLI 加 `--force` 或在 MCP 傳 `overwrite: true`；否則改用新的輸出路徑。不得自動加上覆寫選項。
 
 > **命名注意**：同一個操作在兩個面的名字不同——CLI 是 **`render`**，MCP 是 **`execute_script`**。MCP 那個名字是已發布 tool schema 的一部分，CLI 的名字由 `mdocx-grammar` spec 固定，所以兩邊都不動。底層是同一個實作。
 
@@ -121,7 +125,10 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 **DSL 升級是 per-part 全有全無，不是逐段降級。** 一個 part 裡只要有任何一處無法用 typed 形式 byte-equal 地重建，**整個 part** 就落到 raw。
 
-常見根因與可採用的路徑：
+以下是**非窮舉**的常見情況與處置表，不是 CLI 會逐項列出的 raw 根因目錄。目前未發布的
+CLI 新提示只會具名指出 `word/document.xml = paragraph-no-paraId`；`table`、`byte-mismatch`、
+`parse-error` 是用來說明內部判定與處置差異的分類，不會各自印在 CLI 報告中。只看到
+`Aggregate: 0.0% DSL` 也無法反推出是哪一類原因。
 
 | 根因／模式 | 可讀 DSL／slot | 保真與限制 |
 |---|---|---|
@@ -154,7 +161,7 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 若唯一根因是 `word/document.xml = paragraph-no-paraId`，且接受只保留段落，可明確改走 paragraphs-only。診斷與相容路徑依 CLI 版本不同：
 
 ```bash
-# 本機開發版：須確認同時包含 #176 的根因資訊與 #177 的 coverage-only 支援
+# 本機開發版：須確認同時包含 #176 的 paragraph-no-paraId 提示與 #177 的 coverage-only 支援
 macdoc word reverse legacy.docx --coverage
 
 # 正式 v0.7.0：不支援上面的 coverage-only，也不會顯示新版根因資訊。
@@ -169,11 +176,15 @@ macdoc word reverse legacy.docx --paragraphs-only \
 
 paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`，也不保證版面或格式完整。以上兩個輸出路徑不同，只能避免兩條範例彼此撞檔；重跑其中任一條仍會被預設拒絕，必須換新輸出路徑，或先取得使用者同意才加 `--force` 覆寫。
 
-> **發布狀態**：`--paragraphs-only` 是 CLI 0.7.0 已有功能；coverage-only、coverage 中的新版根因資訊，以及預設 reverse 偵測到精確根因時寫入 stderr 的提示，尚未隨正式 CLI 發布。完整診斷流程需使用包含 #176、#177 與 #181 相應變更的本機開發版。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
+> **發布狀態**：`--paragraphs-only` 與帶 `--to-mdocx` 的 coverage 是 CLI 0.7.0 已有功能；coverage-only、coverage 中具名的 `paragraph-no-paraId` 說明，以及預設 reverse 偵測到同一原因時寫入 stderr 的提示，尚未隨正式 CLI 發布。這些新提示不代表 CLI 會逐項印出其他內部分類。完整診斷流程需使用包含 #176、#177 與 #181 相應變更的本機開發版。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
 
-若 full-fidelity 回報的根因是 `table`，表示表格超出目前可轉成 `appendTable` 的 canonical minimal shape；保留完整內容時該 part 走 raw，而 `--paragraphs-only` 會直接省略表格。即使表格符合 canonical minimal shape，也必須等整個 part 通過試重建，才能確認走 DSL。若根因是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格。
+若經核心分析確認內部分類是 `table`，表示表格超出目前可轉成 `appendTable` 的 canonical minimal shape；保留完整內容時該 part 走 raw，而 `--paragraphs-only` 會直接省略表格。即使表格符合 canonical minimal shape，也必須等整個 part 通過試重建，才能確認走 DSL。若分析確認是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格，也不能只靠 CLI 的 0.0% 判定。
 
 ## 典型情境：以官方範本定點填寫
+
+下列範例全部使用新的輸出路徑，所以不需要 `--force`。若其中任何精確路徑已存在，先改用
+另一個新路徑；只有在檢查該路徑並取得使用者對覆寫該檔案的明確事前同意後，才可為那一條
+命令加上 `--force`，不得自動覆寫。
 
 ```bash
 # 0. 確認版本：文件落在 raw channel 時（含複雜表格的官方表單常見；以第 1 步的 coverage
@@ -182,20 +193,20 @@ paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify
 macdoc --version
 
 # 1. 先看落在哪條 channel（決定期待值，不決定可不可用）
-macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift --coverage
+macdoc word reverse 範本.docx --to-mdocx 範本-coverage.mdocx.swift --coverage
 
 # 2. 指定要填的位置
-macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift \
-  --slot applicant=<paraId> --force
+macdoc word reverse 範本.docx --to-mdocx 範本-slot.mdocx.swift \
+  --slot applicant=<paraId>
 
 # 3. 先驗腳本：default 值重播必須與範本逐位元組相同
 #    （這一步在「改值之前」做——它證明的是腳本本身）
-macdoc word render 範本.mdocx.swift --to-docx 重建.docx --verify-against 範本.docx --force
+macdoc word render 範本-slot.mdocx.swift --to-docx 重建-驗證.docx --verify-against 範本.docx
 
 # 4. 改腳本裡的 slot 參數值，然後重建出已填表單
-#    （改一次 slot 值就重跑一次，第二次起輸出檔已存在 → 要 --force）
+#    （每次重建先選新的輸出路徑；覆寫必須另行取得精確同意）
 #    「已寫入」只代表寫出了檔案，不代表值有填進去——一定要做下面的核對
-macdoc word render 範本.mdocx.swift --to-docx 已填.docx --force
+macdoc word render 範本-slot.mdocx.swift --to-docx 已填-1.docx
 ```
 
 第 3 步是這個工作流的核心保證：default 重播 byte-equal **證明**腳本除了 slot 之外逐位元組重建範本。第 4 步（填了新值）的輸出**不會**過 `--verify-against`——值變了，全包 byte-equal 必然不同；它的保證來自 render 本身：raw channel 的替換做完會驗 XML well-formedness，指定段落以外的 bytes 由第 3 步已證的腳本結構背書。要人工核對填了什麼，用 che-word-mcp 的 `compare_documents` 對照範本。
