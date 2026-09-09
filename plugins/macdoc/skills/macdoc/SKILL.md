@@ -127,7 +127,9 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 | `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）|
 | `--from-oplog` | reverse | 強制用 oplog sidecar |
 | `--verify-against <docx>` | render | 對照參考檔做 byte-equal 驗證；**不給就不驗** |
-| `--force` | 兩者 | 覆寫既有輸出（不給就拒絕，且不動既有檔案）|
+| `--force` | 兩者 | 先檢查精確目標並取得使用者對該檔案的明確事前同意，才可覆寫；不給就拒絕且不動既有檔案 |
+
+完整的覆寫同意邊界與使用新路徑的工作流見 [`swiftify`](../swiftify/SKILL.md) skill。
 
 ### 這條迴路保證什麼、不保證什麼
 

@@ -158,7 +158,7 @@ CLI 新提示只會具名指出 `word/document.xml = paragraph-no-paraId`；`tab
 - 對確實落 raw 的文件，腳本仍能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）。
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條大型單行重新 escape，diff 顯示「一行變了」。
 
-若唯一根因是 `word/document.xml = paragraph-no-paraId`，且接受只保留段落，可明確改走 paragraphs-only。診斷與相容路徑依 CLI 版本不同：
+只有在檢視文件來源與實際內容、確認唯一根因是 `word/document.xml = paragraph-no-paraId`，而且接受只保留段落時，才可明確改走 paragraphs-only。不能只由 CLI 的 raw／0% 摘要推定；即使開發版具名提示該原因，也要確認非段落內容可捨棄。無法確認時保留 full-fidelity，不把其他原因類推成 lossy 模式。診斷與相容路徑依 CLI 版本不同：
 
 ```bash
 # 本機開發版：須確認同時包含 #176 的 paragraph-no-paraId 提示與 #177 的 coverage-only 支援
