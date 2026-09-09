@@ -220,6 +220,8 @@ final class WordReverseCoverageTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertFalse(result.stdout.contains("paragraph-no-paraId"),
                        "root-cause note leaked onto a paraId-bearing document:\n\(result.stdout)")
+        XCTAssertFalse(result.stderr.contains("--paragraphs-only"),
+                       "lossy alternative leaked onto a paraId-bearing coverage run:\n\(result.stderr)")
     }
 
     /// The default full-fidelity path must apply the exact raw-reason
