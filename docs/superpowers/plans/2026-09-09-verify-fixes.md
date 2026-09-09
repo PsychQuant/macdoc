@@ -14,7 +14,7 @@
 ## Task 2: #181 文件與負向契約
 
 讀 formal-close-review/issue-181-r1.md 的 M1–M6。保持生產 predicate 的精確條件與 coverage/stdout契約。
-修 swiftify 範例：真 v0.7.0 不支援 coverage-only／新版根因，將完整診斷流程標示需本機包含相應提交的未發布CLI；舊版只提供真可用的明確段落替代路徑。不同輸出檔只避免彼此撞檔，重跑仍需新路徑或使用者同意覆寫。移除重申錯誤的0%量測，區分歷史樣本與本次可重現合成案例；保留任一表格門檻，不把 parse-error/byte-mismatch 皆歸為表格問題。
+修 swiftify 範例：真 v0.7.0 不支援 coverage-only／新版根因，將完整診斷流程標示需本機包含相應提交的未發布CLI；舊版只提供真可用的明確段落替代路徑。不同輸出檔只避免彼此撞檔，重跑仍需新路徑或使用者同意覆寫。移除重申錯誤的0%量測，區分歷史樣本與本次可重現合成案例。區分「paragraphs-only 會省略任何表格」與「full-fidelity 可支援 canonical minimal table，rich/foreign-form table 才可能因 table 原因落 raw」；整個 part 能否 DSL 仍須通過試重建。不可再寫任何表格一律 raw，也不把 parse-error/byte-mismatch 皆歸為表格問題。
 補 default+有paraId 不提示的負向e2e；負向斷言用flag token、保留有效原斷言。示範放寬predicate能使新test RED。
 將被追蹤的 task-3-report.md 內容保留至 docs/superpowers/ 合理位置，再取消舊 scratch 路徑的追蹤；不得刪掉報告內容。不提高binary_version、不發布。驗證文中命令適用性、覆寫拒絕、slot/full-fidelity回歸；更新skill時遵守writing-skills測試紀律。
 
@@ -32,4 +32,3 @@ TDD、集中回歸與每套件全suite一次；報告清楚分splitcommit與loca
 核心修補提交後，以最後凍結OOXML commit重新編譯generator產出測試DOCX，保存來源／產物hash，Mac與Windows Word驗收或證明全部packageparts與已驗成品等價。若操作Windows僅用先前核准的同一VM／同一測試文件，完成恢復suspended，不安裝軟體、不操作其他文件。
 同步README的精確版本與平台狀態。正式重驗採既有R1+本輪修補delta為明確範圍，保留六路模型與反方覆核，Claude CLI使用前景Agent避免print背景600秒截斷；不得用缺失的reviewer冒稱PASS。
 通過後按使用者指定idd-close 2.20 gate，逐案Closing Summary、close、立即CurrentStatus同步與讀回。未通過不關。上游依賴發布仍是獨立明確授權邊界。
-
