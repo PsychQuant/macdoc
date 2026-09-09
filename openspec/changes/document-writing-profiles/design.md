@@ -52,6 +52,7 @@ ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之
 - 若一份 metadata 已正確註冊待寫 parts，finalizer 不得只為重新排序或格式化而改寫其 bytes；無 profile 的 style/theme 編輯尤其不能多餘改寫未改變的 metadata。若原 metadata 必須新增註冊，則只承諾必要變更及其他結構／屬性保留。
 - styles 原始資料必須以 XML 編碼正確解析或保留 Data；禁止將 UTF-16 bytes 當成 UTF-8 解碼後作為後續 typed merge 的來源。
 - 新建 inherit 只移除可辨識為生成器引入的字型。呼叫者明示的字型即使與預設值相同，也不能靠 style ID／值相等而清掉；非字型修改不應讓無關的生成器字型殘留。字型來源追蹤屬內部狀態，不改 OOXML 格式，不改公開內容相等的語意。
+- 字型來源不序列化；檔案讀回後，相同字型值無法分辨生成預設與 caller 明示，故保留 source-owned 字型，即使呼叫者明確傳 newDocument。new/existing context 不由 archive 存在與否推測；context 決定是否套用，來源狀態決定哪些字型能安全移除。實際 CLI/MCP creation adapters 在首次序列化前套 profile，舊 post-staging 去字型測試應改成此真實流程與讀回後安全保留的對照，不新增猜測或隱藏的 OOXML 來源標籤。
 - 檢查成品再發布仍是契約；查核 convert 的 readback 是否保留新建預設 inherit 的預期與失敗原子性。只有確認可達的 reader 相容性問題才修，不因猜測移除驗證或擴張 converter API。
 - 首個回歸 fixture 要有真正 PNG、頁首頁尾、外部超連結及必要的 content types／relationships。測試同時驗 references、registrations 與 target bytes，經 ordinary、authoring、script/replay、save/reopen；不可只驗 r:id 子字串。
 - 平台驗收以最終 core HEAD 與 generator source／binary hash 綁定新 DOCX，再記錄每個 package part 的 hash 及 Mac／Windows PDF、字型與度量。若重用舊平台成品，須證明全部輸入 package parts 與原已驗成品相同，不能只比較時間戳或少數 XML 欄位。

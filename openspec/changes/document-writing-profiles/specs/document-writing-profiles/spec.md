@@ -26,6 +26,12 @@ Inherit SHALL preserve an existing document's styles, theme and direct formattin
 - **THEN** the explicit Calibri choice SHALL remain effective.
 - **AND** unrelated font choices originating solely from the generator SHALL be omitted.
 
+#### Scenario: Serialized font provenance is unknown
+- **GIVEN** a document read from a file whose font values cannot distinguish generator defaults from explicit caller choices
+- **WHEN** inherit is applied, including with an explicit newDocument context
+- **THEN** source-owned font choices SHALL be preserved rather than inferred from matching style IDs or values.
+- **AND** CLI and MCP creation adapters SHALL apply the creation profile before first serialization to produce font-neutral new documents.
+
 ### Requirement: Safe official template snapshot
 Official import SHALL read the selected Normal template without modifying it and SHALL construct a versioned formatting-only snapshot using an XML element and attribute allowlist. The snapshot SHALL preserve supported styles, docDefaults, paragraph defaults, safe font/theme settings and page geometry. It SHALL NOT carry source paths, document body text, macros, document properties, revisions, comments, external relationships, embedded fonts or image payloads.
 
