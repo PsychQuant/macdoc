@@ -29,8 +29,11 @@ XCTest bundle，並明確指定 release 產品 binary。這會驗證 override �
 swift build -c release
 RELEASE_BIN="$(swift build -c release --show-bin-path)/macdoc"
 MACDOC_TEST_BINARY="$RELEASE_BIN" \
-  swift test --disable-swift-testing --filter CLITestHelperBinaryPathTests
+  swift test --disable-swift-testing --filter NoteHTMLConvertTests
 ```
+
+`NoteHTMLConvertTests` 會透過 `CLITestHelper.run` 實際啟動指定的 release 產品 binary；此時測試
+程式本身仍是預設的 debug XCTest bundle。
 
 使用 `--scratch-path` 時，請以 `mktemp` 建立工作樹外的暫存目錄，並透過
 `MACDOC_TEST_BINARY` 明確指定該 scratch path 內的絕對可執行檔路徑；helper 不會猜測 SwiftPM
