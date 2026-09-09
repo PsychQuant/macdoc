@@ -43,6 +43,30 @@
 
 下面的 Mac／Windows 記錄是對 `992a3d67` 輸入直接執行 Word 的證據；`3aa221aa` 新輸入以全部 package parts 等價沿用該證據，本輪沒有新 Word／VM 執行。兩個 DOCX 整體 ZIP 雜湊不同，不宣稱整個 ZIP 檔案 bytes 相同。
 
+## 最終凍結版回歸與證據邊界
+
+- controller 在最終 core `3aa221aa3bba3657af68f1c8d22416d3efe9863e` 執行完整套件：
+  1598 tests／32 skips／0 failures，log 為
+  `/tmp/macdoc-delta-verify.9cY8Ky/final/core-full-final-3aa.log`。本輪 root consumer 使用同一 editable
+  core，執行 `swift test --disable-swift-testing --filter DocumentProfileCLITests`：7 tests／0 failures；
+  每次 e2e 都記錄實際 CLI 為
+  `[macdoc-test] binary=/Users/che/Developer/macdoc/.claude/worktrees/codex-187-186-181-185/.build/debug/macdoc`。
+  MCP `92e66860cc4db94eb81d9d14c6e8bafcceb31905` 亦使用同一 core，執行相同 runner 選項及
+  `--filter DocumentProfileToolsTests`：11 tests／0 failures。
+- `RunProperties` 曾新增內部儲存欄位，因而改變記憶體配置；依賴該 core 的既有增量建置曾出現
+  SIGBUS，對依賴模組執行乾淨重建後即消失。更新到此 core 時應乾淨重建下游模組，不能把舊
+  `.build` 產物的 ABI 混用誤判為產品邏輯錯誤。
+- styles reader 的輸入範圍是有效 UTF-8 與可辨識的 UTF-16BE／LE（含受測的 BOM／XML 起始模式）；
+  其他編碼會明確拒絕。typed edit 後的 `styles.xml` 可能序列化為 UTF-8，因此這裡不主張完整
+  charset 保留或任意 XML 編碼支援。
+- 獨立 OPC oracle 沒有呼叫 production reader：以系統 `unzip` 分別列出兩份 ZIP central
+  directory，確認兩邊名稱集合完全相同且恰為預期 10 個 entries，再解壓到分開的新目錄並執行
+  `diff -qr`；exit 0、10 個 raw part files 全無差異。完整命令與輸出邊界保存在
+  `/tmp/macdoc-delta-verify.9cY8Ky/final/independent-opc-proof.md`。
+- Word 平台證據只涵蓋 basic official formatting（A4、邊界、字型、字級與段後距）的實際呈現，
+  不涵蓋圖片、頁首／頁尾與超連結的 composite rendering。這些 package preservation 路徑由自動化
+  關聯、content-types 與 target-part 測試覆蓋，不把它們冒稱為 Word 視覺驗收。
+
 ## Mac Word
 
 - Microsoft Word 16.112.3，build 16.112.830。
