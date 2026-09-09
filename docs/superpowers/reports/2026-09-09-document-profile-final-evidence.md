@@ -50,7 +50,8 @@
   `/tmp/macdoc-delta-verify.9cY8Ky/final/core-full-final-3aa.log`。本輪 root consumer 使用同一 editable
   core，執行 `swift test --disable-swift-testing --filter DocumentProfileCLITests`：7 tests／0 failures；
   每次 e2e 都記錄實際 CLI 為
-  `[macdoc-test] binary=/Users/che/Developer/macdoc/.claude/worktrees/codex-187-186-181-185/.build/debug/macdoc`。
+  `[macdoc-test] binary=<isolated-worktree>/.build/debug/macdoc`。這裡只將顯示路徑匿名化；原始絕對
+  路徑保存在 ignored 的 `post-verify-fix-report.md`，其餘 hashes 與證據未改。
   MCP `92e66860cc4db94eb81d9d14c6e8bafcceb31905` 亦使用同一 core，執行相同 runner 選項及
   `--filter DocumentProfileToolsTests`：11 tests／0 failures。
 - `RunProperties` 曾新增內部儲存欄位，因而改變記憶體配置；依賴該 core 的既有增量建置曾出現
