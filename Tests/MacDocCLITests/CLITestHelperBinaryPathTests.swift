@@ -26,7 +26,13 @@ final class CLITestHelperBinaryPathTests: XCTestCase {
             .appendingPathComponent(".build/release/macdoc").path
         #endif
 
-        XCTAssertEqual(try CLITestHelper.binaryPath, expectedPath)
+        if FileManager.default.isExecutableFile(atPath: expectedPath) {
+            XCTAssertEqual(try CLITestHelper.binaryPath, expectedPath)
+        } else {
+            XCTAssertThrowsError(try CLITestHelper.binaryPath) {
+                XCTAssertEqual($0 as? BinarySelectionError, .unavailable(expectedPath))
+            }
+        }
     }
 
     func testDebugDoesNotPreferRelease() throws {
