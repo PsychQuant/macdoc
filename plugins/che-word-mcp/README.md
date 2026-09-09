@@ -2,7 +2,7 @@
 
 ## 文件格式 profile：原始碼建置功能，尚未發布
 
-macdoc#185／che-word-mcp#223 的原始碼整合新增 `create_document`、`open_document`、`execute_script` 的可選 `profile`，值限 `inherit` 或 `official`。需要包含 profile/store 的 OOXMLSwift 原始碼；目前 plugin wrapper 下載的既有 binary 尚未提供此功能。本次未提高 `binary_version`，也未發布 binary。
+macdoc#185／che-word-mcp#223 的原始碼整合新增 `create_document`、`open_document`、`execute_script` 的可選 `profile`，值限 `inherit` 或 `official`。本機最終驗收使用 OOXMLSwift `992a3d67b772e99e420a7ffcbb54749dece39ceb` 的 editable dependency；目前 plugin wrapper 下載的既有 binary 尚未提供此功能，追蹤中的遠端 pin 也不是這份本機修補。本次未提高 `binary_version`，也未發布 binary。
 
 新版 MCP 與新版 macdoc 共用 `~/.config/macdoc/config.json` 的 `document.defaultProfile` 和 `document.officialSnapshot`。先透過整合建置的 macdoc `config document import-official --template /path/to/Normal.dotm` 保存快照；匯入不切換預設值，要預設使用 official 再執行 `config document set-default official`。
 
@@ -12,9 +12,9 @@ macdoc#185／che-word-mcp#223 的原始碼整合新增 `create_document`、`open
 | `open_document` | 保留原格式，不讀新文件預設 | inherit 不改文件；official 套用並標示變更 |
 | `execute_script` | 保留 replay，不讀新文件預設 | 驗證與發布前套用 |
 
-錯誤型別、null、未知名稱、缺失或損毀的 official 快照會明確失敗；格式解析或套用失敗不註冊新 session、不發布輸出。快照只攜帶允許的格式；正文和來源路徑不會進入快照。繁中字型為標楷體，OOXML 使用 Mac Word 可辨識的 `DFKai-SB`，Windows Word 渲染仍待驗證。原 Normal 後續變更或移除也不影響已匯入的格式。
+錯誤型別、null、未知名稱、缺失或損毀的 official 快照會明確失敗；格式解析或套用失敗不註冊新 session、不發布輸出。快照只攜帶允許的格式；正文和來源路徑不會進入快照。繁中字型為標楷體，OOXML 使用 `DFKai-SB`；最終 core 重新產生的同一份 DOCX 已由 Mac Word 16.112.3 與 Windows Word 16.0.20326 實際匯出，兩邊皆為 1 頁 A4、12 pt、預期邊界／段後距，PDF 實際嵌入 DFKaiShu-SB-Estd-BF 與 Aptos，PNG 無缺字、裁切或重疊。原 Normal 後續變更或移除也不影響已匯入的格式。
 
-既有文件明示 inherit 不會因 profile 觸發 dirty 或 autosave；official 成功套用後沿用正常 autosave 與存檔保護。`execute_script` 仍保留既有 overwrite／驗證錯誤契約。自訂設定路徑可由 MCP server constructor 的 `documentConfigURL` 注入；CLI 文件設定命令使用 `--config`，convert/render 使用 `--document-config`。
+新建 adapter 在首次序列化前套用 profile；`inherit` 只移除記憶體中可證明由 factory 產生的預設字型，保留 caller 明示字型。provenance 不寫入 OOXML，讀回文件的字型視為來源文件所有，不以 style ID 或相同字型值猜測來源。既有文件明示 inherit 不會因 profile 觸發 dirty 或 autosave；official 成功套用後沿用正常 autosave 與存檔保護。`execute_script` 仍保留既有 overwrite／驗證錯誤契約。自訂設定路徑可由 MCP server constructor 的 `documentConfigURL` 注入；CLI 文件設定命令使用 `--config`，convert/render 使用 `--document-config`。
 
 **Word MCP Server** — Swift 原生 OOXML 操作，**245 個工具**，支援 Dual-Mode 存取 + preserve-by-default round-trip fidelity + programmatic Track Changes 生成 + `document.xml` lossless round-trip。
 
