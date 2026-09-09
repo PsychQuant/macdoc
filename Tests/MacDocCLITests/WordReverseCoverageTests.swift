@@ -220,7 +220,29 @@ final class WordReverseCoverageTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertFalse(result.stdout.contains("paragraph-no-paraId"),
                        "root-cause note leaked onto a paraId-bearing document:\n\(result.stdout)")
-        XCTAssertFalse(result.stderr.contains("--paragraphs-only"), result.stderr)
+    }
+
+    /// The default full-fidelity path must apply the exact raw-reason
+    /// predicate before suggesting the lossy alternative. Unlike the coverage
+    /// path above, this invocation reaches the stderr diagnostic branch.
+    func testDefaultParaIdBearingDocumentDoesNotSuggestParagraphsOnly() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrc-default-hasid-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let docx = tmp.appendingPathComponent("s.docx")
+        let out = tmp.appendingPathComponent("s.mdocx.swift")
+        try makeSyntheticDocx(at: docx)
+
+        let result = try CLITestHelper.run([
+            "word", "reverse", docx.path, "--to-mdocx", out.path,
+        ])
+
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertFalse(result.stderr.contains("--paragraphs-only"),
+                       "lossy alternative leaked onto a paraId-bearing document:\n\(result.stderr)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: out.path))
     }
 
     /// Explicit lossy mode already reflects the caller's choice, so it must
@@ -239,7 +261,7 @@ final class WordReverseCoverageTests: XCTestCase {
         ])
 
         XCTAssertEqual(result.exitCode, 0, result.stderr)
-        XCTAssertFalse(result.stderr.contains("可用 --paragraphs-only"), result.stderr)
+        XCTAssertFalse(result.stderr.contains("--paragraphs-only"), result.stderr)
     }
 
     /// A sidecar bypasses full-fidelity extraction entirely and therefore has
