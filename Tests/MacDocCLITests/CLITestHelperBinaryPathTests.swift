@@ -6,6 +6,29 @@ final class CLITestHelperBinaryPathTests: XCTestCase {
     private let debugPath = "/tmp/idd-test-root/.build/debug/macdoc"
     private let releasePath = "/tmp/idd-test-root/.build/release/macdoc"
 
+    func testBinaryPathUsesActualTestBuildConfiguration() throws {
+        let variable = "MACDOC_TEST_BINARY"
+        let originalValue = getenv(variable).map { String(cString: $0) }
+        unsetenv(variable)
+        defer {
+            if let originalValue {
+                setenv(variable, originalValue, 1)
+            } else {
+                unsetenv(variable)
+            }
+        }
+
+        #if DEBUG
+        let expectedPath = CLITestHelper.repoRoot
+            .appendingPathComponent(".build/debug/macdoc").path
+        #else
+        let expectedPath = CLITestHelper.repoRoot
+            .appendingPathComponent(".build/release/macdoc").path
+        #endif
+
+        XCTAssertEqual(try CLITestHelper.binaryPath, expectedPath)
+    }
+
     func testDebugDoesNotPreferRelease() throws {
         let available = Set([debugPath, releasePath])
 
