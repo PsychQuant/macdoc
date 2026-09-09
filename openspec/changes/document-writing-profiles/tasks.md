@@ -30,4 +30,4 @@
 ## 5. 最終版本證據
 
 - [x] 5.1 實現 Cross-platform verification honesty 的 Final writer snapshot evidence：以最後 core revision 重建 generator 與 DOCX、保存來源及逐 part hash，Mac／Windows Word 實測或證明與既有驗收輸入全部 parts 等價；四份 README 與證據範圍一致。
-- [ ] 5.2 對本輪修補 delta 完成獨立與正式驗證，確認先前 blocker 已解且未新增回歸；逐案記錄結果，只有通過者執行結案，不自動發布或合併。
+- [x] 5.2 對本輪修補 delta 完成獨立與正式驗證，確認先前 blocker 已解且未新增回歸；逐案記錄結果，只有通過者執行結案，不自動發布或合併。
