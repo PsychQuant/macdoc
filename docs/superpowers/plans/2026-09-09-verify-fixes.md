@@ -1,5 +1,12 @@
 # 正式驗證修補與結案計畫
 
+> 歷史文件：這是 controller 所有、跨 #187／#181／#185 的單次工作階段計畫，用來保存當時的
+> 任務與授權邊界，不構成未來工作的持續授權。文中的 `formal-close-review/` 路徑是保留於本機的
+> 覆核產物；可公開存取的較早 Verify 報告為
+> [#187](https://github.com/PsychQuant/macdoc/issues/187#issuecomment-5597074900)、
+> [#181](https://github.com/PsychQuant/macdoc/issues/181#issuecomment-5597075264)、
+> [#185](https://github.com/PsychQuant/macdoc/issues/185#issuecomment-5597316358)。
+
 ## Global Constraints
 
 使用臺灣正體中文。保留既有工作；只在已建立的隔離工作樹實作。不修改 .build/checkouts，不自動推送／發布／合併。使用者已明確授權修正 #187、#181、#185、重驗並對通過者結案，這取代舊計畫的 no-close 邊界；不代表上游發布已獲授權。#186 已結案，不重做；#189–#194 是後續待辦，不擴大本輪範圍。TDD 先重現再修補，每案獨立提交、覆核及證據。程式碼凍結後驗證；不得審查中改 HEAD。
