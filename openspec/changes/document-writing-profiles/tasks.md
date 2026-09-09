@@ -24,7 +24,7 @@
 
 - [ ] 4.1 依正式驗證修補契約實現 Shared explicit OOXML API 的 Replay preserves unrelated package registrations：以真實 relationships／目標 parts 重現 official+replay，再修正 metadata 合併，ordinary／authoring／script／reopen 均無懸空引用且無關 bytes 不變。
 - [ ] 4.2 實現 Encoded styles and unchanged metadata：UTF-16 styles 的 typed edit 可保存；無 profile 且註冊未變時 content types／relationships bytes 保持原樣，以 focused regression 的 RED/GREEN 驗證。
-- [ ] 4.3 實現 Inherit preserves document-owned formatting 的 Explicit font equals a generated default：同名同值的 caller 明示字型保留、其餘生成器字型省略，以輸出 XML 與雙 writer 測試驗證，不以相等的值猜意圖。
+- [ ] 4.3 實現 Inherit preserves document-owned formatting 的 Explicit font equals a generated default 與 Serialized font provenance is unknown：同名同值的 caller 明示字型保留、其餘可證生成器字型省略；creation 在首次序列化前套用，讀回後保留不明來源的既有字型。以輸出 XML 與雙 writer 測試驗證，不以相等的值猜意圖。
 - [ ] 4.4 查核 Verification before publication 的 convert readback 相容性與失敗原子性；保留新建 profile 決策，僅對可重現問題修補；CLI/MCP 聚焦及完整回歸各通過一次，原始 remote pins 保留並揭露 editable 邊界。
 
 ## 5. 最終版本證據
