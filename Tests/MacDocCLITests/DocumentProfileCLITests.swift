@@ -93,6 +93,24 @@ final class DocumentProfileCLITests: XCTestCase {
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: dir.path).contains { $0.contains("staging") })
     }
 
+    func testAllFourConvertersDefaultInheritPassesReadbackBeforePublication() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("absent-config.json")
+        for (index, input) in [FixtureManager.htmlFile(), FixtureManager.markdownFile(), FixtureManager.pdfFile(), FixtureManager.texFile()].enumerated() {
+            let output = dir.appendingPathComponent("default-\(index).docx")
+            try Data("previous output".utf8).write(to: output)
+            let result = try CLITestHelper.run(["convert", "--to", "docx", input, "--output", output.path, "--document-config", config.path])
+            XCTAssertEqual(result.exitCode, 0, result.stderr)
+            var readback = try DocxReader.read(from: output)
+            defer { readback.close() }
+            let styles = String(decoding: try XCTUnwrap(RawPartChannel.readAllParts(from: output)["word/styles.xml"]), as: UTF8.self)
+            XCTAssertFalse(styles.contains("Calibri"), input)
+            XCTAssertFalse(styles.contains("Times New Roman"), input)
+            XCTAssertFalse(styles.contains("DFKai-SB"), input)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: config.path))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: dir.path).contains { $0.contains("staging") })
+    }
+
     func testUnsupportedProfileRoutesAndUnknownValuesFail() throws {
         let dir = try directory(), output = dir.appendingPathComponent("out.html")
         let sentinel = Data("old HTML".utf8)
