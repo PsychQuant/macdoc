@@ -133,9 +133,9 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 
 **保證**：byte-equal 重播。`--verify-against` 通過就代表重建出的每個 XML part 與參考檔逐位元組相同。
 
-**不保證**：產物可讀。腳本有兩條 channel——typed DSL（可讀）與 raw（把整個 XML part 逐字塞進一行 `// @op`）。**DSL 升級是 per-part 全有全無**：文件裡只要含一個表格，整個 `word/document.xml` 就整份掉到 raw channel。
+**不保證**：產物可讀。腳本有兩條 channel——typed DSL（可讀）與 raw（把整個 XML part 逐字塞進一行 `// @op`）。**DSL 升級是 per-part 全有全無**：canonical minimal table 可用 typed DSL 表示，但仍須整個 part 的其他內容都受支援且試重建 byte-equal 才會升級；不支援的 rich／foreign-form table 可能讓整個 `word/document.xml` 留在 raw。明確選 `--paragraphs-only` 則會省略所有表格。
 
-實測 `REC-O-01` 這類真實官方表單：
+歷史實測樣本 `REC-O-01` 的結果如下；這是該份文件的量測，不是「含一個表格必為 0%」的規則：
 
 ```
 --- Aggregate: 0.0% DSL (0 / 190479 XML bytes across 16 parts) ---
