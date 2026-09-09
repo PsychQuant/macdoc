@@ -24,18 +24,20 @@ swift test -c release --disable-swift-testing \
 `--test-bundle-path` 傳給產品 `macdoc`，導致指令失敗；相關錯誤由
 [#188](https://github.com/PsychQuant/macdoc/issues/188) 追蹤。另一個替代流程是使用預設的 debug
 XCTest bundle，並明確指定 release 產品 binary。這會驗證 override 流程，但不等同於驗證 release
-測試 bundle 的編譯組態接線。判定成功時不能只看 `swift test` 的 exit 0；還必須在同一份 log
-確認實際啟動 release 路徑，且 NoteHTML 測試不是 skip：
+測試 bundle 的編譯組態接線。下列命令直接保留 `swift test` 的 exit status，並不是自動驗收
+script；命令 exit 0 後，仍須人工核對同一次輸出確實含有精確的 release binary log，且
+`testNoteToHTMLSmoke` 顯示 passed、不是 skipped：
 
 ```sh
 swift build -c release
 RELEASE_BIN="$(swift build -c release --show-bin-path)/macdoc"
-TEST_LOG="$(mktemp "${TMPDIR:-/tmp}/macdoc-release-test.XXXXXX")"
 MACDOC_TEST_BINARY="$RELEASE_BIN" \
-  swift test --disable-swift-testing --filter NoteHTMLConvertTests 2>&1 | tee "$TEST_LOG"
-grep -F "[macdoc-test] binary=$RELEASE_BIN" "$TEST_LOG"
-grep -E "NoteHTMLConvertTests.*testNoteToHTMLSmoke.*passed" "$TEST_LOG"
+  swift test --disable-swift-testing --filter NoteHTMLConvertTests
 ```
+
+同一次輸出應可見 `[macdoc-test] binary=<RELEASE_BIN 的精確絕對路徑>`，以及
+`NoteHTMLConvertTests.testNoteToHTMLSmoke`（或 XCTest 等價名稱）passed；缺少任一項或顯示 skipped
+都不能算完成 release-product 驗證。
 
 `NoteHTMLConvertTests` 會透過 `CLITestHelper.run` 實際啟動指定的 release 產品 binary；此時測試
 程式本身仍是預設的 debug XCTest bundle。
