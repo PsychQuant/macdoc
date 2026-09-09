@@ -45,6 +45,18 @@ ScriptPipeline 的 profile 參數預設 nil，在 replay 後、staging write 之
 - 第一版拒絕帶實際 numbering definition 或非零 numId 的範本格式，使用具名 unsupported numbering error；不重寫目標既有 numbering，避免映射錯接。原始 Normal 是否可匯入以實測驗證。
 - 測試以 configURL 依賴注入或新 document 指令明確的 --config 路徑使用隔離設定；不得覆寫真實使用者 config 作為測試。
 
+### 正式驗證修補契約
+
+- 既有 1–3 組任務與平台成品保留為歷史紀錄；本輪追加修補任務才是最終 tip 的完成門檻，不以歷史勾選替代新驗證。
+- applyFormattingProfile 不能在讓 metadata 失效時丟棄唯一原始資料來源。ordinary／authoring writer 都必須保留來源中與 profile 無關的 Override、Default、Relationship、Id、Target、TargetMode，並只新增或更新實際輸出的 profile parts 註冊。合併不得把原圖片、頁首頁尾或超連結變成懸空參照。
+- 若一份 metadata 已正確註冊待寫 parts，finalizer 不得只為重新排序或格式化而改寫其 bytes；無 profile 的 style/theme 編輯尤其不能多餘改寫未改變的 metadata。若原 metadata 必須新增註冊，則只承諾必要變更及其他結構／屬性保留。
+- styles 原始資料必須以 XML 編碼正確解析或保留 Data；禁止將 UTF-16 bytes 當成 UTF-8 解碼後作為後續 typed merge 的來源。
+- 新建 inherit 只移除可辨識為生成器引入的字型。呼叫者明示的字型即使與預設值相同，也不能靠 style ID／值相等而清掉；非字型修改不應讓無關的生成器字型殘留。字型來源追蹤屬內部狀態，不改 OOXML 格式，不改公開內容相等的語意。
+- 檢查成品再發布仍是契約；查核 convert 的 readback 是否保留新建預設 inherit 的預期與失敗原子性。只有確認可達的 reader 相容性問題才修，不因猜測移除驗證或擴張 converter API。
+- 首個回歸 fixture 要有真正 PNG、頁首頁尾、外部超連結及必要的 content types／relationships。測試同時驗 references、registrations 與 target bytes，經 ordinary、authoring、script/replay、save/reopen；不可只驗 r:id 子字串。
+- 平台驗收以最終 core HEAD 與 generator source／binary hash 綁定新 DOCX，再記錄每個 package part 的 hash 及 Mac／Windows PDF、字型與度量。若重用舊平台成品，須證明全部輸入 package parts 與原已驗成品相同，不能只比較時間戳或少數 XML 欄位。
+- 本輪不自動發 tag、push、merge 或發布上游；不變更 #189–#194 的後續範圍，不新增自動官方文件內容判定。
+
 ## Risks / Trade-offs
 
 - [安全與完整性衝突] → 不安全引用剔除；不可表示的必要格式拒絕並回報，不假裝完整。

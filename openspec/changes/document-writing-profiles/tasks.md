@@ -17,3 +17,17 @@
 - [x] 3.3 完成 Cross-platform verification honesty：在 Windows Word 驗證同一份成品；環境不可用則保持此項未完成，不用 XML 測試取代。
 
 2026-09-09 驗收註記：初次探測逾時，後續收到命令引號解析錯誤；改用單次 EncodedCommand 後，Windows Word 16.0.20326 成功匯出相同測試文件。PDF 嵌入 DFKaiShu-SB-Estd-BF，A4、12 pt、左右 90 pt／上下 72 pt 邊界、段後 8 pt，PNG 無缺字或裁切且與 Mac 版面一致。未修改 PowerShell 執行原則、安裝軟體或操作其他文件；測試文件及本次啟動的空白 Word 程序已關閉，VM 已恢復暫停。
+
+以上為初輪完成紀錄；正式驗證發現的新缺口由以下追加任務管理，必須全數完成才可再主張最終版本完成。
+
+## 4. 正式驗證修補
+
+- [ ] 4.1 依正式驗證修補契約實現 Shared explicit OOXML API 的 Replay preserves unrelated package registrations：以真實 relationships／目標 parts 重現 official+replay，再修正 metadata 合併，ordinary／authoring／script／reopen 均無懸空引用且無關 bytes 不變。
+- [ ] 4.2 實現 Encoded styles and unchanged metadata：UTF-16 styles 的 typed edit 可保存；無 profile 且註冊未變時 content types／relationships bytes 保持原樣，以 focused regression 的 RED/GREEN 驗證。
+- [ ] 4.3 實現 Inherit preserves document-owned formatting 的 Explicit font equals a generated default：同名同值的 caller 明示字型保留、其餘生成器字型省略，以輸出 XML 與雙 writer 測試驗證，不以相等的值猜意圖。
+- [ ] 4.4 查核 Verification before publication 的 convert readback 相容性與失敗原子性；保留新建 profile 決策，僅對可重現問題修補；CLI/MCP 聚焦及完整回歸各通過一次，原始 remote pins 保留並揭露 editable 邊界。
+
+## 5. 最終版本證據
+
+- [ ] 5.1 實現 Cross-platform verification honesty 的 Final writer snapshot evidence：以最後 core revision 重建 generator 與 DOCX、保存來源及逐 part hash，Mac／Windows Word 實測或證明與既有驗收輸入全部 parts 等價；四份 README 與證據範圍一致。
+- [ ] 5.2 對本輪修補 delta 完成獨立與正式驗證，確認先前 blocker 已解且未新增回歸；逐案記錄結果，只有通過者執行結案，不自動發布或合併。
