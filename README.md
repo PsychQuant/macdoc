@@ -288,7 +288,7 @@ macdoc config ai set transcription codex
 
 ### 文件格式設定（原始碼建置功能，尚未發布）
 
-此功能由 [#185](https://github.com/PsychQuant/macdoc/issues/185) 追蹤，需要尚未發布的 OOXMLSwift profile/store 與 PDFToLaTeXCore 設定保留變更。本機驗收以 SwiftPM editable dependencies 整合，其中最終 OOXMLSwift 修補為 `992a3d67b772e99e420a7ffcbb54749dece39ceb`；追蹤中的遠端 pins 未改成此本機提交。目前發布的 macdoc 0.7.0 與 plugin 自動下載 binary 尚未提供以下參數。
+此功能由 [#185](https://github.com/PsychQuant/macdoc/issues/185) 追蹤，需要尚未發布的 OOXMLSwift profile/store 與 PDFToLaTeXCore 設定保留變更。本機驗收以 SwiftPM editable dependencies 整合，其中最終 OOXMLSwift 修補為 `3aa221aa3bba3657af68f1c8d22416d3efe9863e`；追蹤中的遠端 pins 未改成此本機提交。目前發布的 macdoc 0.7.0 與 plugin 自動下載 binary 尚未提供以下參數。
 
 完成相依套件整合並建置後，使用該工作樹的 binary：
 
@@ -302,7 +302,7 @@ macdoc config ai set transcription codex
 
 CLI 與新版 Word MCP 共用 `~/.config/macdoc/config.json` 的 `document` 區段。新文件採明示 `profile` → `document.defaultProfile` → `inherit`；既有文件與腳本 replay 只有明示 profile 才套用。`inherit` 保留既有文件格式；對尚未序列化的新文件，只移除可由記憶體 provenance 證明為 factory 產生的預設字型，保留呼叫者明示字型，例如程式碼 Menlo。CLI／MCP 的 creation adapter 會在首次序列化前套用；provenance 不寫入 OOXML，所以檔案讀回後的字型視為來源文件所有，不以 style ID 或相同字型值猜測並刪除。
 
-匯入只保存允許的格式快照，不複製範本正文、不修改 Normal、不自動切換預設值。官方繁中字型使用標楷體，OOXML family identifier 為 `DFKai-SB`；最終 core 重新產生的同一份 DOCX 已由 Mac Word 16.112.3 與 Windows Word 16.0.20326 實際匯出驗證，兩邊皆為 1 頁 A4、12 pt、左右 90 pt／上下 72 pt、段後 8 pt，PDF 實際嵌入 DFKaiShu-SB-Estd-BF 與 Aptos，PNG 無缺字、裁切或重疊。其餘支援的格式值來自範本，不代表一套法定公文格式；詳見[最終驗收證據](docs/superpowers/reports/2026-09-09-document-profile-final-evidence.md)。省略 `--template` 時，僅該匯入命令讀取目前帳號 Office 範本目錄的 Normal.dotm；後續產檔使用保存的快照。缺失、損毀或不支援的快照會明確報錯。
+匯入只保存允許的格式快照，不複製範本正文、不修改 Normal、不自動切換預設值。官方繁中字型使用標楷體，OOXML family identifier 為 `DFKai-SB`；core `992a3d67` 產生的 DOCX 已由 Mac Word 16.112.3 與 Windows Word 16.0.20326 實際匯出驗證，兩邊皆為 1 頁 A4、12 pt、左右 90 pt／上下 72 pt、段後 8 pt，PDF 實際嵌入 DFKaiShu-SB-Estd-BF 與 Aptos，PNG 無缺字、裁切或重疊。最終 reader 修補 core `3aa221aa` 以原合成測試的固定 IDs／時間重新產檔，全部 10 個 package parts 與已驗輸入逐位元組相同，沿用該平台證據，本輪未重新執行 Word。其餘支援的格式值來自範本，不代表一套法定公文格式；詳見[最終驗收證據](docs/superpowers/reports/2026-09-09-document-profile-final-evidence.md)。省略 `--template` 時，僅該匯入命令讀取目前帳號 Office 範本目錄的 Normal.dotm；後續產檔使用保存的快照。缺失、損毀或不支援的快照會明確報錯。
 
 文件設定命令接受 `--config /path/to/config.json`；convert/render 接受 `--document-config /path/to/config.json`。`show` 只列文件設定，不列 AI/OCR 機密；設定寫入保留其他區段及未知欄位。convert 保留既有一般檔覆寫語義，拒絕 Word 開檔鎖與目錄；render 覆寫既有檔仍需 `--force`。兩者都先套用格式再檢查及發布，render 驗證失敗不覆寫舊檔。
 

@@ -4,12 +4,12 @@
 
 ## 來源與產物
 
-- 最終 OOXMLSwift：`992a3d67b772e99e420a7ffcbb54749dece39ceb`。
+- 直接進行 Word 平台驗證的 OOXMLSwift：`992a3d67b772e99e420a7ffcbb54749dece39ceb`。
 - generator 由該提交的 OOXMLSwift 與 ZIPFoundation `.swift.o` 重新連結，不含既有 runner main；source SHA256 `56c6a0da6dab6027701bae5ce88f9124f2f93396400a19b2906eb306d228be2b`，executable SHA256 `53295f5edffcf06e9a11a41ccc0dd881724f5ce61839743e5f08866db8309e6a`。
 - 選定的 `Normal.dotm` 只讀輸入 SHA256 為 `4344474f78cf11a7b3517d662669cdb8093545cd94e2800516ad7cb51b7c53f1`；generator 前、generator 後與兩個平台驗收後三次讀值相同。原範本未複製、上傳或修改，實際使用者設定亦未變更。
-- 新 DOCX SHA256 `71036f8a7fbac6f517fcc2d381d2af1e4f733cd11d532c41c2358011a718fd37`。
+- 直接進行 Word 平台驗證的 DOCX SHA256 `71036f8a7fbac6f517fcc2d381d2af1e4f733cd11d532c41c2358011a718fd37`（`official-final-992a3d67.docx`）。
 
-DOCX 的全部 package parts：
+原 Word 驗證 DOCX 與下述新核心 DOCX 的全部 package parts 均逐位元組相同；兩份輸入各 part 的 SHA256 如下：
 
 | Part | SHA256 |
 |---|---|
@@ -25,6 +25,23 @@ DOCX 的全部 package parts：
 | `word/theme/theme1.xml` | `f8224736bec462156d02b4af55545a18c2a7165af2d90bfe735207a596e639f3` |
 
 完整本機來源、連結物件、產物及逐 part 清單保存在 `.superpowers/sdd/2026-09-09-verify-fixes/visual/`；該工作證據依既有 ignore 規則不提交。
+
+## Reader guard 修補後的完整 part 等價
+
+- 最終 OOXMLSwift 為 `3aa221aa3bba3657af68f1c8d22416d3efe9863e`。相對 `992a3d67` 僅修改 styles reader 編碼 guard 與負向測試，明確拒絕未支援編碼，防止 UTF-32 被另一種解碼掃描後放行；writer 與 profile 程式碼未變。
+- 真實 Reader 負向回歸 RED 為 2 tests／2 failures；GREEN 為 DocumentFormattingProfileTests 36 tests／1 optional skip／0 failures，加上 DTD focused 13 tests／0 failures。完整套件未重跑；先前 core 1596／MCP 380／ROOT 97 XCTest＋43 Swift Testing 的完整結果仍只代表原先基線。
+- 新 generator `generate-final-equivalent.swift` 由固定核心的 110 個 OOXMLSwift／ZIPFoundation `.swift.o` 重新連結，source SHA256 `9ee5f5a6211fcd0a458bc699f5342f7b873250b297ca0f9dcdea6985bb8a8bc6`，binary `generate-final-3aa221aa` SHA256 `32849130939e1af59fa849e7cdc3d7b61896cbfd9c3612c149bee3811c809716`；link input 清單為 `generate-final-3aa221aa-link-inputs.sha256`。
+- harness 明確提供原合成測試的四個 paragraph IDs：`66B5E5EF`、`78AA5B13`、`39BA8FA6`、`1A42AB36`；created／modified 固定為 `2026-09-09T08:50:19Z`，creator 為 `che-word-mcp`、revision 為 `1`。保留原四段文字、同一 Normal、正常 profile import/apply 與 DocxWriter；這些是排除測試非決定性因素的輸入，不是 production 修補，也沒有事後修補 XML 或複製舊 parts。
+- 新 DOCX `official-final-3aa221aa.docx` SHA256 `3a32a5732efef9e07ca103fd82c1351c9f06e29de52823358f1f0f10514e3a83`。generator 前後的 Normal SHA256 均為上列 `4344474f…b7c53f1`，未改動範本或真實設定。
+- 從 ROOT 執行以下完整比較命令，exit 0；比較程式先確認 part names 集合完全相同且恰為 10，再對每一 part 直接比較 `Data` bytes、列出 SHA256。結果為 `PASS: 10/10 package parts are byte-for-byte equal; no normalization or exclusions.`。原始碼與輸出分別保存在 `visual/compare-complete-parts.swift`、`visual/official-final-3aa221aa-complete-comparison.txt`。
+
+```sh
+.superpowers/sdd/2026-09-09-verify-fixes/visual/compare-complete-parts-3aa221aa \
+  .superpowers/sdd/2026-09-09-verify-fixes/visual/official-final-992a3d67.docx \
+  .superpowers/sdd/2026-09-09-verify-fixes/visual/official-final-3aa221aa.docx
+```
+
+下面的 Mac／Windows 記錄是對 `992a3d67` 輸入直接執行 Word 的證據；`3aa221aa` 新輸入以全部 package parts 等價沿用該證據，本輪沒有新 Word／VM 執行。兩個 DOCX 整體 ZIP 雜湊不同，不宣稱整個 ZIP 檔案 bytes 相同。
 
 ## Mac Word
 
@@ -47,4 +64,4 @@ DOCX 的全部 package parts：
 
 字型來源只存在於未序列化的記憶體物件。CLI／MCP creation adapter 必須在首次序列化前套用 `inherit` 或 `official`；`inherit` 只能移除可證明由 factory 產生的預設字型，caller 明示字型應保留。provenance 不寫入 OOXML，因此檔案讀回後的字型一律視為來源文件所有，即使再次以 `newDocument` context 套用，也不得以 style ID 或相同字型值猜測來源並刪除。
 
-這次只更新證據與四個 README，沒有重跑完整程式碼測試套件、沒有修改 core production/tests、沒有發布、推送、合併或變更 GitHub issue。正式重驗與結案由 controller 另行執行。
+原 `992a3d67` 平台驗收階段只更新證據與四個 README，沒有重跑完整程式碼測試套件或修改 core production/tests。後續 `3aa221aa` 局部 reader guard 修補執行了上述 focused tests 與完整 part 等價驗證；兩階段都沒有發布、推送或合併。本輪沒有操作 Word／VM 或變更 GitHub issue；正式重驗與結案由 controller 另行執行。
