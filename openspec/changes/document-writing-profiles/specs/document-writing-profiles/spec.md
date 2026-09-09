@@ -20,6 +20,12 @@ Inherit SHALL preserve an existing document's styles, theme and direct formattin
 - **THEN** generated defaults SHALL contain no forced Calibri, Times New Roman, Calibri Light or substitute family.
 - **AND** explicit caller formatting SHALL remain effective.
 
+#### Scenario: Explicit font equals a generated default
+- **GIVEN** a new document whose caller explicitly sets the Normal style font to Calibri
+- **WHEN** inherit is applied
+- **THEN** the explicit Calibri choice SHALL remain effective.
+- **AND** unrelated font choices originating solely from the generator SHALL be omitted.
+
 ### Requirement: Safe official template snapshot
 Official import SHALL read the selected Normal template without modifying it and SHALL construct a versioned formatting-only snapshot using an XML element and attribute allowlist. The snapshot SHALL preserve supported styles, docDefaults, paragraph defaults, safe font/theme settings and page geometry. It SHALL NOT carry source paths, document body text, macros, document properties, revisions, comments, external relationships, embedded fonts or image payloads.
 
@@ -54,6 +60,18 @@ OOXMLSwift SHALL own snapshot import, validation and profile application. Its ge
 - **WHEN** the same profile is applied and the document is emitted through ordinary and authoring writers
 - **THEN** both outputs SHALL contain the selected defaults, styles, theme and page geometry without dangling relationships.
 
+#### Scenario: Replay preserves unrelated package registrations
+- **GIVEN** a carried package containing an image, header, footer and external hyperlink with their original content types and relationships
+- **WHEN** official is explicitly applied before script replay publication
+- **THEN** every original reference SHALL retain its relationship and target or external TargetMode.
+- **AND** unrelated part bytes SHALL remain unchanged while profile parts receive the required registrations.
+
+#### Scenario: Encoded styles and unchanged metadata
+- **GIVEN** a document with valid UTF-16 styles and correctly registered formatting parts
+- **WHEN** a typed style edit is saved without selecting a profile
+- **THEN** the edit SHALL succeed without corrupting the styles encoding.
+- **AND** unchanged content types and relationships SHALL retain their original bytes.
+
 ### Requirement: Verification before publication
 Profile application SHALL happen before final verification and publication. CLI and MCP SHALL preserve existing overwrite refusal and failure atomicity. The verifier SHALL evaluate the profiled output, not the unmodified intermediate.
 
@@ -77,3 +95,8 @@ Completion evidence SHALL distinguish automated XML tests from Mac Word and Wind
 #### Scenario: No Windows environment
 - **WHEN** only macOS is available
 - **THEN** automated and Mac results SHALL be reported separately and Windows validation SHALL remain unchecked.
+
+#### Scenario: Final writer snapshot evidence
+- **WHEN** a writer changes after a platform test artifact was generated
+- **THEN** completion evidence SHALL identify the final writer revision and newly generated input hashes or prove complete package-part equivalence with the previously validated input.
+- **AND** an older artifact alone SHALL NOT establish final-revision platform acceptance.
