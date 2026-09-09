@@ -73,7 +73,7 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 `paraId` 是段落的 `w14:paraId` 屬性值，可用 che-word-mcp 的讀取工具找出來。
 
-**Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後；僅 `word/document.xml` 主 part——headers/footers 的 raw slot 不支援）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。
+**Raw channel 文件（例如含不支援的 rich／foreign-form 表格之官方表單）的 slot 同樣可用**（raw-channel-slot-support，#171 後；僅 `word/document.xml` 主 part——headers/footers 的 raw slot 不支援）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。
 
 > ⚠️ **raw-channel slot 需要 macdoc CLI 0.8.0+，或 che-word-mcp 4.0.6+。** CLI 0.7.0 的 export 與 render 表現不一樣（以 0.7.0 與 0.8.0 兩個官方 release binary 實測，見 PsychQuant/macdoc#198）：export（`reverse --slot`）會直接報錯，說找不到段落；**render 不會報錯**，它把 `// @slot-raw` 當成一般註解略過，照樣印「已寫入」、exit 0，但輸出的是**沒填值的模板**（PsychQuant/macdoc#198）。che-word-mcp 4.0.6 以前的 `execute_script` **沒有實測過**；它和 CLI 用的是同一個 ooxml-swift importer，推測也一樣沉默，但未經驗證。腳本和 render 用的 binary 不一定是同一版，所以填官方表單之前先確認 `macdoc --version`；render 完成後用下面最後一點的方式核對填入的值確實在文件裡。
 
@@ -127,7 +127,9 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 |---|---|---|
 | 預設 full-fidelity，缺 paraId | `document.xml` 走 raw；缺真 paraId 的位置不能直接 raw-slot 定位 | 保留全部內容，維持 byte-equal 目標 |
 | 缺 paraId，明確選 `--paragraphs-only` | 產生段落 DSL，合成 `p1`、`p2`…，可指定 slot | 省略非段落內容；不保證 byte-equal，版面與格式也不保證完整 |
-| `word/document.xml` 含**任一表格** | 整個 `document.xml` 走 raw；`--paragraphs-only` 會省略表格，不能當成完整文件的替代方案 | 保留 full-fidelity；要提升可讀性需另行支援 table 的 typed 表示 |
+| 明確選 `--paragraphs-only`，且文件含**任一表格** | 只產生段落 DSL，表格一律省略，不能當成完整文件的替代方案 | 僅在接受捨棄全部表格與其他非段落內容時使用 |
+| full-fidelity 遇到 canonical minimal table | 可用 `appendTable` 表示，具備 typed DSL 升級資格 | 仍須整個 part 的其他內容都受支援，且試重建通過 byte-equal；不能只因表格簡單就保證整個 part 走 DSL |
+| full-fidelity 遇到不支援的 rich／foreign-form table | 該表格無法轉成 typed DSL，可能以 `table` 原因讓整個 `document.xml` 落 raw | raw 仍保留完整內容與 byte-equal 目標 |
 | byte-mismatch／parse-error | 不能由根因名稱推定 `--paragraphs-only` 適用 | 保留 full-fidelity，依實際重建或解析失敗另行調查 |
 
 歷史樣本與本次可重現合成案例必須分開判讀：
@@ -144,9 +146,10 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 歷史樣本的百分比只描述該份檔案，不能套用到同一工具產生的其他 docx。處理方式取決於實際根因：
 
-- `word/document.xml` 只要含**任一表格** → 整個 part 一定是 raw。拿到的是「穿著 Swift 語法的 byte-equal 封存檔」
-- 它能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）
-- **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條 118 KB 的單行整條重新 escape，diff 顯示「一行變了」
+- `--paragraphs-only` 遇到**任何表格都會省略**，所以不能作為含表格文件的完整替代方案。
+- full-fidelity 能將 canonical minimal table 表成 `appendTable`；但整個 `document.xml` 是否升級為 DSL，仍取決於所有內容都可表示且試重建 byte-equal。rich／foreign-form table 不受支援時，才可能以 `table` 原因讓整個 part 落 raw。
+- 對確實落 raw 的文件，腳本仍能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）。
+- **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條大型單行重新 escape，diff 顯示「一行變了」。
 
 若唯一根因是 `word/document.xml = paragraph-no-paraId`，且接受只保留段落，可明確改走 paragraphs-only。診斷與相容路徑依 CLI 版本不同：
 
@@ -168,7 +171,7 @@ paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify
 
 > **發布狀態**：`--paragraphs-only` 是 CLI 0.7.0 已有功能；coverage-only、coverage 中的新版根因資訊，以及預設 reverse 偵測到精確根因時寫入 stderr 的提示，尚未隨正式 CLI 發布。完整診斷流程需使用包含 #176、#177 與 #181 相應變更的本機開發版。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
 
-若根因是 `word/document.xml` 含任一表格，raw channel 不是設定問題；要保留表格又取得可讀的完整 Swift 文件原始碼，仍需 ooxml-swift 支援 table 的 typed 表示與 sub-part 局部降級，目前都不存在。若根因是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格，也沒有證據顯示 table 支援能解決。
+若 full-fidelity 回報的根因是 `table`，表示表格超出目前可轉成 `appendTable` 的 canonical minimal shape；保留完整內容時該 part 走 raw，而 `--paragraphs-only` 會直接省略表格。即使表格符合 canonical minimal shape，也必須等整個 part 通過試重建，才能確認走 DSL。若根因是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格。
 
 ## 典型情境：以官方範本定點填寫
 
