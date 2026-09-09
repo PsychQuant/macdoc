@@ -127,32 +127,36 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 |---|---|---|
 | 預設 full-fidelity，缺 paraId | `document.xml` 走 raw；缺真 paraId 的位置不能直接 raw-slot 定位 | 保留全部內容，維持 byte-equal 目標 |
 | 缺 paraId，明確選 `--paragraphs-only` | 產生段落 DSL，合成 `p1`、`p2`…，可指定 slot | 省略非段落內容；不保證 byte-equal，版面與格式也不保證完整 |
-| table／byte-mismatch／parse-error 等 | 不能把 `--paragraphs-only` 當成完整文件的替代方案 | 保留 full-fidelity；需另行處理根因 |
+| `word/document.xml` 含**任一表格** | 整個 `document.xml` 走 raw；`--paragraphs-only` 會省略表格，不能當成完整文件的替代方案 | 保留 full-fidelity；要提升可讀性需另行支援 table 的 typed 表示 |
+| byte-mismatch／parse-error | 不能由根因名稱推定 `--paragraphs-only` 適用 | 保留 full-fidelity，依實際重建或解析失敗另行調查 |
 
-實測兩個對照：
+歷史樣本與本次可重現合成案例必須分開判讀：
 
 ```
-REC-O-01 官方表單（115 個 paraId，但有 1 個表格）
+歷史樣本：REC-O-01 官方表單（115 個 paraId，但有 1 個表格）
   → Aggregate: 0.0% DSL (0 / 190479 bytes across 16 parts)
   → 產出 24 行 / 212 KB，document.xml 那一行約 118 KB
 
-macdoc convert 產的 2 段落簡單文件（0 個 paraId）
-  → Aggregate: 0.0% DSL (0 / 8572 bytes across 9 parts)
+本次可重現合成案例：直接建立一份不帶 paraId 的純段落 docx
+  → 預設 full-fidelity 回報 paragraph-no-paraId
+  → --paragraphs-only 產生 Paragraph(id: "p1")，可再指定 --slot body=p1
 ```
 
-**兩個最直覺的輸入都是 0.0%，但處理方式並不相同。** 所以：
+歷史樣本的百分比只描述該份檔案，不能套用到同一工具產生的其他 docx。處理方式取決於實際根因：
 
-- 表格密集的官方表單 → **一定**是 raw。拿到的是「穿著 Swift 語法的 byte-equal 封存檔」
+- `word/document.xml` 只要含**任一表格** → 整個 part 一定是 raw。拿到的是「穿著 Swift 語法的 byte-equal 封存檔」
 - 它能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條 118 KB 的單行整條重新 escape，diff 顯示「一行變了」
 
-若唯一根因是 `word/document.xml = paragraph-no-paraId`，且接受只保留段落，可明確改走 paragraphs-only：
+若唯一根因是 `word/document.xml = paragraph-no-paraId`，且接受只保留段落，可明確改走 paragraphs-only。診斷與相容路徑依 CLI 版本不同：
 
 ```bash
-# 先確認實際根因
+# 本機開發版：須確認同時包含 #176 的根因資訊與 #177 的 coverage-only 支援
 macdoc word reverse legacy.docx --coverage
 
-# 取得段落 DSL；輸出中的合成 ID 才是後續依據
+# 正式 v0.7.0：不支援上面的 coverage-only，也不會顯示新版根因資訊。
+# 若已從文件來源或檢查結果確認它是可捨棄非段落內容的 legacy 純段落文件，
+# 可直接走 v0.7.0 已支援的明確替代路徑。
 macdoc word reverse legacy.docx --paragraphs-only --to-mdocx legacy.mdocx.swift
 
 # 讀過 legacy.mdocx.swift、確認實際段落 ID 是 p1 後才指定 slot；不可猜 ID
@@ -160,11 +164,11 @@ macdoc word reverse legacy.docx --paragraphs-only \
   --slot body=p1 --to-mdocx slot.mdocx.swift
 ```
 
-paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`，也不保證版面或格式完整。以上範例各用不同輸出路徑，重跑時不會因既有檔案而要求 `--force`。
+paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`，也不保證版面或格式完整。以上兩個輸出路徑不同，只能避免兩條範例彼此撞檔；重跑其中任一條仍會被預設拒絕，必須換新輸出路徑，或先取得使用者同意才加 `--force` 覆寫。
 
-> **發布狀態**：`--paragraphs-only` 是 CLI 0.7.0 已有功能；當預設 reverse 偵測到此精確根因時主動寫入 stderr 的提示，尚未隨正式 CLI 發布，需使用包含 PsychQuant/macdoc#181 修正的 CLI。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
+> **發布狀態**：`--paragraphs-only` 是 CLI 0.7.0 已有功能；coverage-only、coverage 中的新版根因資訊，以及預設 reverse 偵測到精確根因時寫入 stderr 的提示，尚未隨正式 CLI 發布。完整診斷流程需使用包含 #176、#177 與 #181 相應變更的本機開發版。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
 
-若根因是表格、byte-mismatch、parse-error 或其他原因，raw channel 不是設定問題；要取得人類可讀的完整 Swift 文件原始碼，仍需 ooxml-swift 支援 rich table 的 typed 表示與 sub-part 局部降級，目前都不存在。
+若根因是 `word/document.xml` 含任一表格，raw channel 不是設定問題；要保留表格又取得可讀的完整 Swift 文件原始碼，仍需 ooxml-swift 支援 table 的 typed 表示與 sub-part 局部降級，目前都不存在。若根因是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格，也沒有證據顯示 table 支援能解決。
 
 ## 典型情境：以官方範本定點填寫
 
