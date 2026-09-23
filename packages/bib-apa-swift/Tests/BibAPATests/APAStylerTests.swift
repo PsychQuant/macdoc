@@ -317,6 +317,8 @@ final class APAStylerTests: XCTestCase {
         XCTAssertEqual(plainText("\\'{\\aa}"), "ǻ")
         XCTAssertEqual(plainText("\\'\\o"), "ǿ")
         XCTAssertEqual(plainText("\\'{\\ae}"), "ǽ")
+        XCTAssertEqual(plainText("\\'\\o berg"), "ǿberg", "the space ends the control word")
+        XCTAssertEqual(plainText("\\'\\o{} berg"), "ǿ berg", "an explicit {} keeps the space")
     }
 
     func testFullPlaceholderExhaustionDegradesWithoutCrashing() {
