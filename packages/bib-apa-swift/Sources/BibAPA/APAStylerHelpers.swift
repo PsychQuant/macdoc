@@ -25,13 +25,20 @@ public struct AuthorName: Equatable, Sendable {
 /// Parse biblatex author string into structured name parts.
 /// Handles: "Last, First and Last, First" / "{Corporate Name}" / "Last, First, Jr."
 public func parseAuthors(_ entry: BibEntry) -> [AuthorName] {
-    guard let raw = field(entry, "AUTHOR") else { return [] }
+    // Decode accents before splitting (macdoc#197). Protective braces survive
+    // decoding on purpose: `parseSingleAuthor` still needs the outer pair to
+    // recognise a corporate author, so they are removed only after parsing.
+    guard let raw = field(entry, "AUTHOR").map(decodeLaTeX) else { return [] }
 
     let authorStrings = raw.components(separatedBy: " and ")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }
 
-    return authorStrings.map(parseSingleAuthor)
+    return authorStrings.map(parseSingleAuthor).map {
+        AuthorName(lastName: removeProtectiveBraces($0.lastName),
+                   firstName: removeProtectiveBraces($0.firstName),
+                   suffix: removeProtectiveBraces($0.suffix))
+    }
 }
 
 public func parseSingleAuthor(_ raw: String) -> AuthorName {
@@ -177,6 +184,118 @@ public func stripBraces(_ text: String) -> String {
         }
     }
     return result
+}
+
+// MARK: - LaTeX text decoding (macdoc#197)
+
+/// Accent commands whose argument is a single following character (`\'e`) or a
+/// braced group (`\'{e}`). Symbol commands may be followed directly by the base;
+/// letter commands (`\c`, `\v`, …) need a brace or a space before it.
+private let latexAccentMarks: [Character: Character] = [
+    "'": "\u{0301}", "`": "\u{0300}", "^": "\u{0302}", "\"": "\u{0308}",
+    "~": "\u{0303}", "=": "\u{0304}", ".": "\u{0307}",
+    "u": "\u{0306}", "v": "\u{030C}", "H": "\u{030B}", "c": "\u{0327}",
+    "k": "\u{0328}", "r": "\u{030A}", "d": "\u{0323}", "b": "\u{0331}",
+]
+private let latexSymbolAccents: Set<Character> = ["'", "`", "^", "\"", "~", "=", "."]
+
+/// Letter macros that stand for a whole character. Matched as whole command
+/// names, so `\l` never swallows the start of an unrelated `\label`.
+private let latexLetterMacros: [String: String] = [
+    "ss": "ß", "o": "ø", "O": "Ø", "ae": "æ", "AE": "Æ", "oe": "œ", "OE": "Œ",
+    "aa": "å", "AA": "Å", "l": "ł", "L": "Ł", "i": "ı", "j": "ȷ",
+]
+
+/// Escaped special characters. `\{` and `\}` become private-use placeholders so
+/// `plainText` can remove protective braces without eating literal ones.
+private let latexEscapes: [Character: String] = [
+    "&": "&", "%": "%", "$": "$", "#": "#", "_": "_", "{": "\u{E000}", "}": "\u{E001}",
+]
+
+/// Decode biblatex text markup to Unicode: accent macros, letter macros and
+/// escaped special characters. Protective braces are left in place — sentence
+/// case still needs them — and only an accent macro's own argument braces are
+/// consumed. Unknown commands are kept verbatim.
+public func decodeLaTeX(_ text: String) -> String {
+    guard text.contains("\\") else { return text }
+    let chars = Array(text)
+    var out = ""
+    var i = 0
+    while i < chars.count {
+        guard chars[i] == "\\", i + 1 < chars.count else {
+            out.append(chars[i]); i += 1; continue
+        }
+        let cmd = chars[i + 1]
+        if let escaped = latexEscapes[cmd] {
+            out += escaped; i += 2; continue
+        }
+        if let mark = latexAccentMarks[cmd],
+           let (base, next) = latexAccentArgument(chars, from: i + 2, symbolCommand: latexSymbolAccents.contains(cmd)) {
+            out += (base + String(mark)).precomposedStringWithCanonicalMapping
+            i = next; continue
+        }
+        if cmd.isLetter {
+            var j = i + 1
+            while j < chars.count, chars[j].isLetter { j += 1 }
+            let name = String(chars[(i + 1)..<j])
+            if let letter = latexLetterMacros[name] {
+                out += letter
+                // A macro name ends at `{}` or one space; both are part of the command.
+                if j + 1 < chars.count, chars[j] == "{", chars[j + 1] == "}" { j += 2 }
+                else if j < chars.count, chars[j] == " " { j += 1 }
+                i = j; continue
+            }
+        }
+        out.append(chars[i]); i += 1
+    }
+    return out
+}
+
+/// Read an accent's base character: `{e}`, `{\i}`, a bare `e`, or (for letter
+/// commands) `␣e`. Returns the base and the index after the argument.
+private func latexAccentArgument(_ chars: [Character], from start: Int, symbolCommand: Bool) -> (String, Int)? {
+    var i = start
+    if !symbolCommand {
+        guard i < chars.count, chars[i] == "{" || chars[i] == " " else { return nil }
+        if chars[i] == " " { i += 1 }
+    }
+    guard i < chars.count else { return nil }
+    if chars[i] == "{" {
+        var j = i + 1
+        var base = ""
+        if j + 1 < chars.count, chars[j] == "\\", chars[j + 1] == "i" || chars[j + 1] == "j" {
+            base = chars[j + 1] == "i" ? "i" : "j"; j += 2
+        } else if j < chars.count, chars[j] != "}" {
+            base = String(chars[j]); j += 1
+        }
+        guard !base.isEmpty, j < chars.count, chars[j] == "}" else { return nil }
+        return (base, j + 1)
+    }
+    if chars[i] == "\\", i + 1 < chars.count, chars[i + 1] == "i" || chars[i + 1] == "j" {
+        return (chars[i + 1] == "i" ? "i" : "j", i + 2)
+    }
+    guard chars[i].isLetter else { return nil }
+    return (String(chars[i]), i + 1)
+}
+
+/// Rendered plain text for a non-sentence-case field: decode LaTeX, then drop
+/// every protective brace. Escaped braces (`\{`, `\}`) survive as literals.
+public func plainText(_ text: String) -> String {
+    removeProtectiveBraces(decodeLaTeX(stripBraces(text)))
+}
+
+/// Remove `{` and `}` left after decoding, then restore escaped literal braces.
+public func removeProtectiveBraces(_ text: String) -> String {
+    String(text.filter { $0 != "{" && $0 != "}" })
+        .replacingOccurrences(of: "\u{E000}", with: "{")
+        .replacingOccurrences(of: "\u{E001}", with: "}")
+}
+
+/// Rendered text for a sentence-case field (titles): decode LaTeX first so an
+/// accent macro's argument braces are not mistaken for protection, apply APA
+/// sentence case (which needs the protective braces), then drop what is left.
+public func sentenceCaseText(_ text: String) -> String {
+    removeProtectiveBraces(toSentenceCase(decodeLaTeX(stripBraces(text))))
 }
 
 /// Convert to APA sentence case. Preserves content inside braces as-is.
