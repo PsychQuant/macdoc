@@ -13,7 +13,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.0.0"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
-        .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", from: "0.1.0"),
+        .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", from: "0.1.1"),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
         .package(name: "WordToHTML", path: "packages/word-to-html-swift"),
         .package(name: "HTMLToWord", path: "packages/html-to-word-swift"),
@@ -41,7 +41,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
         // Direct dependency for `macdoc word reverse` (script transcoder:
         // ScriptExporter / SidecarStore / DocxReader live in OOXMLSwift).
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.0.0"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.9.0"),
     ],
     targets: [
         .target(
