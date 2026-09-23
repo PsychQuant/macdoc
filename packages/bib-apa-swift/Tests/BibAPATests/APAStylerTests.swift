@@ -328,4 +328,54 @@ final class APAStylerTests: XCTestCase {
         // together with the protective ones. It must not crash.
         XCTAssertEqual(plainText(everyPrivateUse + " \\{x\\}"), everyPrivateUse + " x")
     }
+
+    // MARK: - Protected text in subtitles (macdoc#201)
+
+    func testSubtitleKeepsProtectedText() {
+        let entry = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "Main {SEM} Title", "JOURNALTITLE": "J", "DATE": "2020",
+            "SUBTITLE": "The {SEM} Approach for {GitHub} Users",
+        ])
+        guard case .article(let a) = APAStyler.style(entry) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.title, "Main SEM title: The SEM approach for GitHub users")
+    }
+
+    // MARK: - A leading protected segment is the first word (macdoc#203)
+
+    func testLeadingProtectedSegmentCountsAsTheFirstWord() {
+        XCTAssertEqual(toSentenceCase("{SEM} Models Today"), "SEM models today")
+        XCTAssertEqual(toSentenceCase("{GitHub} As A Platform"), "GitHub as a platform")
+        XCTAssertEqual(toSentenceCase("Models Of {SEM}"), "Models of SEM", "unchanged when the title starts unprotected")
+        let entry = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "Main", "JOURNALTITLE": "J", "DATE": "2020",
+            "SUBTITLE": "{GitHub} Basics For All",
+        ])
+        guard case .article(let a) = APAStyler.style(entry) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.title, "Main: GitHub basics for all")
+    }
+
+    // MARK: - " and " inside braces does not split names (macdoc#202)
+
+    func testCorporateNameContainingAndIsOneAuthor() {
+        let report = makeEntry(type: "REPORT", fields: [
+            "AUTHOR": "{Research and Development Council}", "TITLE": "Annual report",
+            "INSTITUTION": "X", "DATE": "2020",
+        ])
+        guard case .report(let r) = APAStyler.style(report) else { XCTFail("Expected .report"); return }
+        XCTAssertEqual(r.authors, "Research and Development Council.")
+
+        let mixed = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane and {Research and Development Council}", "TITLE": "T",
+            "JOURNALTITLE": "J", "DATE": "2020",
+        ])
+        guard case .article(let a) = APAStyler.style(mixed) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.authors, "Doe, J., & Research and Development Council.")
+
+        let chapter = makeEntry(type: "INCOLLECTION", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "C", "BOOKTITLE": "B", "PUBLISHER": "P", "DATE": "2020",
+            "EDITOR": "{Science and Technology Board}",
+        ])
+        guard case .chapter(let c) = APAStyler.style(chapter) else { XCTFail("Expected .chapter"); return }
+        XCTAssertEqual(c.editors, "Science and Technology Board (Ed.)")
+    }
 }

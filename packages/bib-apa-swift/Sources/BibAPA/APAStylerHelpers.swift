@@ -395,13 +395,33 @@ public func removeProtectiveBraces(_ text: String) -> String {
     String(text.filter { $0 != "{" && $0 != "}" })
 }
 
+/// Split a name list on ` and ` only at brace depth 0: inside `{…}` the word
+/// "and" is part of a corporate name, not a separator (#202).
+func splitNamesAtTopLevel(_ list: String) -> [String] {
+    let chars = Array(list)
+    var names: [String] = []
+    var current = ""
+    var depth = 0
+    var i = 0
+    while i < chars.count {
+        let c = chars[i]
+        if c == "{" { depth += 1 } else if c == "}" { depth = max(0, depth - 1) }
+        if depth == 0, c == " ", i + 4 < chars.count, String(chars[i..<(i + 5)]) == " and " {
+            names.append(current); current = ""; i += 5; continue
+        }
+        current.append(c); i += 1
+    }
+    names.append(current)
+    return names
+}
+
 /// Parse a biblatex name list (AUTHOR / EDITOR): decode accents, split on
 /// ` and `, parse each name, then drop protective braces. The outer braces of
 /// a corporate name must survive until `parseSingleAuthor` has seen them.
 public func parseNameList(_ raw: String) -> [AuthorName] {
     let literal = LiteralBraces(avoiding: raw)
     let decoded = decodeLaTeX(raw, literal: literal, protectUnknown: false)
-    return decoded.components(separatedBy: " and ")
+    return splitNamesAtTopLevel(decoded)
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }
         .map(parseSingleAuthor)
@@ -453,7 +473,12 @@ public func toSentenceCase(_ title: String) -> String {
 
     var isFirst = true
     let processed = segments.map { segment -> String in
-        if segment.protected { return segment.text }
+        if segment.protected {
+            // A protected segment with letters is a word: it stays as written and
+            // uses up "first word", so the next word is lowercased (#203).
+            if segment.text.contains(where: \.isLetter) { isFirst = false }
+            return segment.text
+        }
 
         let words = segment.text.components(separatedBy: " ")
         let result = words.enumerated().map { (_, word) -> String in
