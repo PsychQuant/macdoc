@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.5.2] - 2026-09-23
+
+### Changed
+
+- `binary_version` 0.7.0 → **0.8.0**，`binary_sha256` 換成 v0.8.0 的值；shell 1.5.1 → 1.5.2。CLI 0.8.0（Developer ID 簽章、
+  Apple 公證，arm64）自 0.7.0 以來的使用者可見變化：
+  - **Markdown 數學轉成 Word 原生 OMath**（`convert --to docx`，#154）。
+  - **確定性的 token 計數路由**（#170）。
+  - 偵測不支援的 Notability 容器並明確回報（#148）。
+  - 依賴 **ooxml-swift 3.8.0**：讀進來的 `<w:b w:val="0"/>` 等明確關不再被當成開、存檔不再把沒動過的 run 改成粗體（#173）；
+    `word reverse --slot` 可以指定多 run 的格式化段落（新文字放進第一個非空白的 carrier run，#131）；匯出腳本正確跳脫 CRLF。
+  - `word render --verify-against` 的成功訊息說出比對範圍（#178）；`--coverage` 可單獨執行，降 raw 時說出可行的替代做法（#177、#176）。
+  - 第一方依賴全面改用版本範圍，不再有 `branch:` 釘選（#184）。
+
+### Fixed
+
+- SessionStart 首次安裝時不再印出 `.macdoc.installed_version: No such file or directory`。讀 sidecar 那行的
+  `2>/dev/null` 寫在 `<` 之後，而 redirection 由左到右生效，所以檔案不存在時的錯誤在被導走之前就印出來了。行為不變。
+
+### 驗證
+
+對**下載回來的 release binary**：發布的 `.sha256` 與下載檔一致、簽章需求（Team `6W377FS7BS`）通過、公證 ticket 的 cdhash
+與 binary 相同、`--version` 回報 0.8.0；tag 指向 `0f9547e`。
+
 ## [1.5.1] - 2026-09-01
 
 ### Fixed

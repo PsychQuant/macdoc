@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.14] - 2026-09-23
+
+### Changed
+
+- shell 4.0.13 → 4.0.14，`binary_version` 維持 4.0.11。只為了把 `README.md` 的文件修正帶給 marketplace 使用者：寫著
+  「當前版本 Plugin shell v3.20.2 / Binary v3.20.0」的舊段落改標為歷史紀錄，「OOXML 引擎」一行不再寫死 `ooxml-swift v0.24.0`
+  （版本以 binary repo 的 `Package.swift` 為準）。沒有行為變更。
+
 ## [4.0.13] - 2026-09-23
 
 ### Changed
