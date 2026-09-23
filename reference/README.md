@@ -41,7 +41,7 @@ git clone --depth 1 https://github.com/genspark-ai/genoffice.git   # 43M,只讀 
 
 ### python-docx → `ooxml-swift` Phase 1 設計對照
 
-`word-aligned-state-sync` Phase 1 要把 `Paragraph` / `Run` / `Table` / `SectionProperties` 從「typed model with parsed children」改成「typed view over shared XmlNode tree + op emitter on mutation」。python-docx 多年用 lxml-tree-backed wrapper 走過同樣的路,是最直接的參考實作。
+`word-aligned-state-sync` Phase 1 把 `Paragraph` / `Run` / `Table` / `SectionProperties` 從「typed model with parsed children」改成了「typed view over shared XmlNode tree + op emitter on mutation」（整個 change 已於 2026-07-06 完成並 archive，見 `openspec/changes/archive/2026-07-06-word-aligned-state-sync/`；追蹤見 PsychQuant/macdoc#127）。python-docx 多年用 lxml-tree-backed wrapper 走過同樣的路,是當時最直接的參考實作。
 
 關鍵參考路徑:
 - `python-docx/src/docx/oxml/` — XML element 類別(對應我們的 `Tree/`)
