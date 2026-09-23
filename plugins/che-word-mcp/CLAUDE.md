@@ -80,6 +80,20 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 
 Plugin shell 與 binary 版本獨立。Plugin shell 升 minor 反映文件/skill/CLAUDE.md 變動；binary 版升反映 MCP server 內部新增 tool 或修 bug。
 
+## `false` 是明確取消（binary 4.0.11+；PsychQuant/macdoc#173、#174）
+
+`format_text` 的 `bold` / `italic` / `underline`，以及 `create_style` / `update_style` 的 `bold` / `italic`，都是三態：
+
+| 參數 | 行為 |
+|------|------|
+| `true` | 加上 |
+| `false` | 明確取消：寫成 `<w:b w:val="0"/>` 這類明確的關（底線則是移除），會蓋過段落樣式或 basedOn 樣式帶來的格式 |
+| 省略 | 不變 |
+
+4.0.10 以前 `false` 是回報成功的 no-op。`as_revision: true` 以該 run 既有的屬性為起點，只覆寫呼叫端給的欄位。`paragraph_index` 只計 body 直屬段落（不計表格與 block-level SDT）——與 `get_paragraphs` 的編號不同，文件有 block-level SDT 時兩者會錯開。
+
+**已知問題**：run 裡 ooxml-swift 沒有建模的屬性（至少 `vanish` 隱藏文字、`bCs`、`iCs`）在文件做過任何 typed 編輯後存檔會遺失，連沒被動到的 run 也一樣，隱藏文字因此變成看得見；工具仍回報成功。追蹤於 PsychQuant/ooxml-swift#164。
+
 ## Save-time image-consistency gate（binary 4.0.6+，4.0.10 定型；PsychQuant/macdoc#175）
 
 `save_document` / `finalize_document` / 帶顯式 `path` 的 `checkpoint` 在寫檔前先序列化並用 ooxml-swift `PackageInspector` 檢查：若會寫出**本 session 新產生**的孤兒 image relationship（rels/media 存在但該 part 內無引用——#175「插圖回報成功但存檔後圖不在」的簽名），回 `E_IMAGE_CONSISTENCY` 拒絕寫檔（正本不動、session 存活）；檢查本身失敗回 `E_IMAGE_CONSISTENCY_INSPECTION`。
