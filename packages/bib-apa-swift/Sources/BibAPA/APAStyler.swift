@@ -206,9 +206,10 @@ public struct APAStyler {
     private static func buildTitle(_ entry: BibEntry) -> String {
         var full = sentenceCaseText(entry.title ?? "")
         if let sub = field(entry, "SUBTITLE"), !sub.isEmpty {
-            // No extra `.lowercased()`: sentence case already lowercased what it
-            // may, and protected text (`{SEM}`, `{GitHub}`) must survive (#201).
-            full += ": \(capitalizeFirst(sentenceCaseText(sub)))"
+            // Neither `.lowercased()` nor `capitalizeFirst`: sentence case already
+            // capitalises the first unprotected word, and protected text must
+            // survive as written — `{SEM}`, `{GitHub}`, `{iPhone}` (#201).
+            full += ": \(sentenceCaseText(sub))"
         }
         return full
     }
