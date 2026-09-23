@@ -12,7 +12,7 @@
 
 ---
 
-當前版本：Plugin shell **v3.20.2** / Binary **v3.20.0**（#116 起解耦）— closes [PsychQuant/che-word-mcp#160](https://github.com/PsychQuant/che-word-mcp/issues/160) — 兩個新 MCP tools 暴露 [PsychQuant/ooxml-swift v0.24.0](https://github.com/PsychQuant/ooxml-swift/releases/tag/v0.24.0) 的 `spliceOMath` API 給 MCP callers，跨 document 拷貝 verbatim `<m:oMath>` XML 區塊。
+**Plugin shell v3.20.2 / Binary v3.20.0（歷史紀錄；目前版本見文末「版本」段）**（#116 起解耦）— closes [PsychQuant/che-word-mcp#160](https://github.com/PsychQuant/che-word-mcp/issues/160) — 兩個新 MCP tools 暴露 [PsychQuant/ooxml-swift v0.24.0](https://github.com/PsychQuant/ooxml-swift/releases/tag/v0.24.0) 的 `spliceOMath` API 給 MCP callers，跨 document 拷貝 verbatim `<m:oMath>` XML 區塊。
 
 - **`splice_omath_from_source`** — 單一 OMath splice，low-level。Source 用 `source_path`（Direct mode 唯讀）或 `source_doc_id`（Session mode）；target 必須是 session-mode `doc_id`。Position 支援 `atStart` / `atEnd` / `afterText` / `beforeText`（後兩者配合 `anchor` + 可選 `instance`）。`omath_index` 0-based、按 source-document order 跨 carrier 統一排序。`rpr_mode` 控制 source Run rPr 怎麼帶到 target Run（`full` 預設 verbatim / `omathOnly` 白名單 / `discard` 空 rPr）；`namespace_policy` 控制 prefix vs URI 處理（`lenient` 預設接受 `mml:` vs `m:` prefix mismatch / `strict` 任何 prefix 不同就 throw）。回傳 `Spliced 1 OMath block (...)` 或 structured error。
 - **`splice_paragraph_omath_from_source`** — paragraph-level batch convenience。把 source paragraph 內所有 OMath 按 source-document order splice 到 target paragraph 對應位置（內部用 ~10 chars source-text-context 自動推 anchor）。回傳 splice 數量或 `contextAnchorNotFound(omath_index, snippet)`（partial-success state 已留在 target）。
@@ -194,7 +194,7 @@ binary 4.0.6+（4.0.10 定型）：存檔前 **image-consistency gate**——會
 
 ## Round-trip Fidelity（v3.5.0 true byte-preservation）
 
-底層 `ooxml-swift v0.24.0` 採用 **preserve-by-default + dirty tracking** 架構：`open_document` 保留原始 archive tempDir；`save_document` overlay 模式透過 `WordDocument.modifiedParts: Set<String>` 精確判斷哪些 part 真正被改動，**未改動的 typed-managed part 完全不重寫**——byte-for-byte 保留 `word/theme/`、`webSettings.xml`、`people.xml`、`commentsExtended/Extensible/Ids`、`glossary/`、`customXml/`、**以及 `word/document.xml`、`styles.xml`、`fontTable.xml`、`header*.xml`、`footer*.xml`、`comments.xml`、`footnotes.xml`、`endnotes.xml`** 等所有 typed parts。v0.19.x 額外解決 #56 P0：`<w:document>` root 34 個 `xmlns:*` declarations 完整保留，`<w:bookmarkStart>` / `<w:hyperlink>` / `<w:fldSimple>` / `<mc:AlternateContent>` 結構化 wrapper 全程 round-trip（pre-v0.19.0 會 silently 丟掉 wrapper 內 354 個 `<w:t>` text nodes）。
+底層 `ooxml-swift`（v0.24.0 起）採用 **preserve-by-default + dirty tracking** 架構：`open_document` 保留原始 archive tempDir；`save_document` overlay 模式透過 `WordDocument.modifiedParts: Set<String>` 精確判斷哪些 part 真正被改動，**未改動的 typed-managed part 完全不重寫**——byte-for-byte 保留 `word/theme/`、`webSettings.xml`、`people.xml`、`commentsExtended/Extensible/Ids`、`glossary/`、`customXml/`、**以及 `word/document.xml`、`styles.xml`、`fontTable.xml`、`header*.xml`、`footer*.xml`、`comments.xml`、`footnotes.xml`、`endnotes.xml`** 等所有 typed parts。v0.19.x 額外解決 #56 P0：`<w:document>` root 34 個 `xmlns:*` declarations 完整保留，`<w:bookmarkStart>` / `<w:hyperlink>` / `<w:fldSimple>` / `<mc:AlternateContent>` 結構化 wrapper 全程 round-trip（pre-v0.19.0 會 silently 丟掉 wrapper 內 354 個 `<w:t>` text nodes）。
 
 NTPU 學位論文模板的中文字體（DFKai-SB / 華康中楷體）no-op `save_document` 後完整保留 13 fontTable + 6 distinct headers + 4 footers + three-segment PAGE field + `<w15:presenceInfo>` identity。
 
@@ -394,7 +394,7 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 
 - **語言**: Swift（macOS 13.0+）
 - **MCP SDK**: swift-sdk 0.12+
-- **OOXML 引擎**: [`ooxml-swift v0.24.0`](https://github.com/PsychQuant/ooxml-swift)（preserve-by-default + dirty tracking + revision generation + `document.xml` lossless round-trip）
+- **OOXML 引擎**: [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift)（版本以 binary repo 的 `Package.swift` 為準；preserve-by-default + dirty tracking + revision generation + `document.xml` lossless round-trip）
 - **LaTeX parser**: [`latex-math-swift v0.1.0+`](https://github.com/PsychQuant/latex-math-swift)（v3.2.0+）
 - **Markdown export**: [`word-to-md-swift`](https://github.com/PsychQuant/word-to-md-swift) + [`markdown-swift`](https://github.com/PsychQuant/markdown-swift)
 
