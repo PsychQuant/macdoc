@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.5.3] - 2026-09-23
+
+### Fixed
+
+- **`swiftify` skill 寫明 raw-channel slot 的版本下限**（PsychQuant/macdoc#198）。先前版本列只寫「CLI 0.7.0+」，
+  第 3 步又說 raw-channel slot 可用，讀者會推論 0.7.0 已經支援。實際上 0.7.0 的 ooxml-swift 比 raw slot 那一版還早：
+  `reverse --slot` 對這類段落會報錯，但 **render 不會**——它把 `// @slot-raw` 當成註解，印「已寫入」、exit 0，
+  輸出沒填值的模板。現在寫明需要 CLI **0.8.0+** 或 che-word-mcp **4.0.6+**，也說清楚舊版 render 的沉默行為和核對方式。
+  順手修正同一段「三個行為細節」其實列了四點。`binary_version` 不變（0.8.0）。
+
 ## [1.5.2] - 2026-09-23
 
 ### Changed
