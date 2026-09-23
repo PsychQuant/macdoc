@@ -1,10 +1,10 @@
 # che-word-mcp
 
-## 文件格式 profile：原始碼建置功能，尚未發布
+## 文件格式 profile（che-word-mcp 4.1.0+）
 
-macdoc#185／che-word-mcp#223 的原始碼整合新增 `create_document`、`open_document`、`execute_script` 的可選 `profile`，值限 `inherit` 或 `official`。本機最終驗收使用 OOXMLSwift `3aa221aa3bba3657af68f1c8d22416d3efe9863e` 的 editable dependency；目前 plugin wrapper 下載的既有 binary 尚未提供此功能，追蹤中的遠端 pin 也不是這份本機修補。本次未提高 `binary_version`，也未發布 binary。
+macdoc#185／che-word-mcp#223 替 `create_document`、`open_document`、`execute_script` 加上可選的 `profile`，值限 `inherit` 或 `official`。建立在 ooxml-swift 3.9.0 的 profile／store 之上；4.0.x 以前的 binary 沒有這個參數。
 
-新版 MCP 與新版 macdoc 共用 `~/.config/macdoc/config.json` 的 `document.defaultProfile` 和 `document.officialSnapshot`。先透過整合建置的 macdoc `config document import-official --template /path/to/Normal.dotm` 保存快照；匯入不切換預設值，要預設使用 official 再執行 `config document set-default official`。
+新版 MCP 與新版 macdoc 共用 `~/.config/macdoc/config.json` 的 `document.defaultProfile` 和 `document.officialSnapshot`。先用 macdoc CLI 0.9.0+ 的 `config document import-official --template /path/to/Normal.dotm` 保存快照；匯入不切換預設值，要預設使用 official 再執行 `config document set-default official`。
 
 | 操作 | 未指定 profile | 明示 profile |
 |---|---|---|

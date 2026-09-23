@@ -286,18 +286,16 @@ macdoc config ai set transcription codex
 
 設定檔位置：`~/.config/macdoc/config.json`
 
-### 文件格式設定（原始碼建置功能，尚未發布）
+### 文件格式設定（CLI 0.9.0+）
 
-此功能由 [#185](https://github.com/PsychQuant/macdoc/issues/185) 追蹤，需要尚未發布的 OOXMLSwift profile/store 與 PDFToLaTeXCore 設定保留變更。本機驗收以 SwiftPM editable dependencies 整合，其中最終 OOXMLSwift 修補為 `3aa221aa3bba3657af68f1c8d22416d3efe9863e`；追蹤中的遠端 pins 未改成此本機提交。目前發布的 macdoc 0.7.0 與 plugin 自動下載 binary 尚未提供以下參數。
-
-完成相依套件整合並建置後，使用該工作樹的 binary：
+[#185](https://github.com/PsychQuant/macdoc/issues/185) 新增的文件格式 profile，建立在 ooxml-swift 3.9.0 的 profile／store 與 pdf-to-latex-swift 0.1.1 的設定保留修正之上。CLI 0.8.0 以前沒有以下命令與參數。
 
 ```bash
-.build/debug/macdoc config document show
-.build/debug/macdoc config document import-official --template /path/to/Normal.dotm
-.build/debug/macdoc config document set-default official
-.build/debug/macdoc convert --to docx notes.md --profile inherit --output notes.docx
-.build/debug/macdoc word render notes.mdocx.swift --to-docx notes.docx --profile official --force
+macdoc config document show
+macdoc config document import-official --template /path/to/Normal.dotm
+macdoc config document set-default official
+macdoc convert --to docx notes.md --profile inherit --output notes.docx
+macdoc word render notes.mdocx.swift --to-docx notes.docx --profile official --force
 ```
 
 CLI 與新版 Word MCP 共用 `~/.config/macdoc/config.json` 的 `document` 區段。新文件採明示 `profile` → `document.defaultProfile` → `inherit`；既有文件與腳本 replay 只有明示 profile 才套用。`inherit` 保留既有文件格式；對尚未序列化的新文件，只移除可由記憶體 provenance 證明為 factory 產生的預設字型，保留呼叫者明示字型，例如程式碼 Menlo。CLI／MCP 的 creation adapter 會在首次序列化前套用；provenance 不寫入 OOXML，所以檔案讀回後的字型視為來源文件所有，不以 style ID 或相同字型值猜測並刪除。
