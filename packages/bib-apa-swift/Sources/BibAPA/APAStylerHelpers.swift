@@ -200,17 +200,25 @@ private let latexEscapes: [Character: String] = ["&": "&", "%": "%", "$": "$", "
 
 /// Stand-ins for literal braces (`\{`, `\}`, and the argument braces of a
 /// command we keep verbatim), so removing *protective* braces cannot delete
-/// them. Chosen per call from the private-use area so they never collide with
-/// a character already present in the input.
+/// them. Chosen per call from the private-use areas (BMP and planes 15–16,
+/// ~137k scalars) so they never collide with a character already present in
+/// the input. If an input somehow uses every one of them, fall back to plain
+/// braces: literal braces are then removed with the protective ones — a
+/// degraded rendering, never a crash.
 struct LiteralBraces {
     let open: Character
     let close: Character
 
     init(avoiding text: String) {
         let used = Set(text.unicodeScalars.map(\.value))
-        var free = (0xE000...0xF8FF).lazy.filter { !used.contains(UInt32($0)) }.makeIterator()
-        open = Character(Unicode.Scalar(UInt32(free.next()!))!)
-        close = Character(Unicode.Scalar(UInt32(free.next()!))!)
+        let pool = [0xE000...0xF8FF, 0xF0000...0xFFFFD, 0x100000...0x10FFFD]
+        var free = pool.lazy.joined().filter { !used.contains(UInt32($0)) }.makeIterator()
+        if let a = free.next().flatMap({ Unicode.Scalar(UInt32($0)) }),
+           let b = free.next().flatMap({ Unicode.Scalar(UInt32($0)) }) {
+            open = Character(a); close = Character(b)
+        } else {
+            open = "{"; close = "}"
+        }
     }
 
     func restore(_ text: String) -> String {
@@ -247,7 +255,10 @@ func decodeLaTeX(_ text: String, literal: LiteralBraces, protectUnknown: Bool) -
         if cmd == "{" { out.append(literal.open); i += 2; continue }
         if cmd == "}" { out.append(literal.close); i += 2; continue }
         if let mark = latexSymbolAccents[cmd] {
-            if let (base, next) = latexAccentBase(chars, from: i + 2) {
+            // Lexing: no spaces are skipped after a control symbol. Argument
+            // reading: the accent macro's undelimited argument skips leading
+            // spaces, so `\' e` is é in LaTeX.
+            if let (base, next) = latexAccentBase(chars, from: skipWhitespace(chars, from: i + 2)) {
                 out += (base + String(mark)).precomposedStringWithCanonicalMapping
                 i = next
             } else {
@@ -275,7 +286,12 @@ func decodeLaTeX(_ text: String, literal: LiteralBraces, protectUnknown: Bool) -
         // Unknown command: keep `\name` and any argument groups exactly as written.
         var verbatim = "\\" + name
         var k = j
-        while k < chars.count, chars[k] == "{", let close = matchingBrace(chars, from: k) {
+        while true {
+            let groupStart = skipWhitespace(chars, from: k)
+            guard groupStart < chars.count, chars[groupStart] == "{",
+                  let close = matchingBrace(chars, from: groupStart) else { break }
+            verbatim += String(chars[k..<groupStart])   // the spacing, as written
+            k = groupStart
             verbatim.append(literal.open)
             verbatim += String(chars[(k + 1)..<close].map { $0 == "{" ? literal.open : $0 == "}" ? literal.close : $0 })
             verbatim.append(literal.close)

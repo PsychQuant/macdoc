@@ -268,4 +268,39 @@ final class APAStylerTests: XCTestCase {
         guard case .report(let r) = APAStyler.style(report) else { XCTFail("Expected .report"); return }
         XCTAssertEqual(r.number, "Technical Report A")
     }
+
+    // MARK: - #197 verify round 2 (Codex)
+
+    func testSymbolAccentArgumentMayFollowWhitespace() {
+        XCTAssertEqual(plainText("\\' e"), "é")
+        XCTAssertEqual(plainText("\\'\te"), "é")
+        XCTAssertEqual(plainText("\\\" {o}"), "ö")
+    }
+
+    func testUnknownCommandKeepsSpacedArgumentsVerbatim() {
+        XCTAssertEqual(plainText("\\unknown {x}"), "\\unknown {x}")
+        XCTAssertEqual(sentenceCaseText("A \\emph {Nice} Title"), "A \\emph {Nice} title")
+        XCTAssertEqual(plainText("\\unknown text"), "\\unknown text", "no group: nothing consumed")
+        XCTAssertEqual(sentenceCaseText("See {\\emph{X}} Now"), "See \\emph{X} now", "unknown command inside a protected group")
+    }
+
+    func testPlaceholderPoolExhaustionDoesNotCrash() {
+        let everyBMPPrivateUse = String(String.UnicodeScalarView((0xE000...0xF8FF).compactMap(Unicode.Scalar.init)))
+        let input = everyBMPPrivateUse + " \\{x\\}"
+        XCTAssertEqual(plainText(input), everyBMPPrivateUse + " {x}", "falls back to the supplementary private-use planes")
+    }
+
+    func testEditionAndPagesAreDecoded() {
+        let book = makeEntry(type: "BOOK", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "DATE": "2020", "PUBLISHER": "P", "EDITION": "{2}",
+        ])
+        guard case .book(let b) = APAStyler.style(book) else { XCTFail("Expected .book"); return }
+        XCTAssertEqual(b.edition, "2nd ed.")
+
+        let article = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "JOURNALTITLE": "J", "DATE": "2020", "PAGES": "{1--51}",
+        ])
+        guard case .article(let a) = APAStyler.style(article) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.pages, "1–51")
+    }
 }
