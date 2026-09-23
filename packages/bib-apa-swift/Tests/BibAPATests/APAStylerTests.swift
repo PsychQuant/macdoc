@@ -303,4 +303,27 @@ final class APAStylerTests: XCTestCase {
         guard case .article(let a) = APAStyler.style(article) else { XCTFail("Expected .article"); return }
         XCTAssertEqual(a.pages, "1–51")
     }
+
+    // MARK: - #197 verify round 3 (Codex)
+
+    func testZeroArgumentTextCommandsDoNotSwallowAProtectedGroup() {
+        XCTAssertEqual(plainText("Using \\LaTeX {SEM}"), "Using LaTeX SEM")
+        XCTAssertEqual(plainText("\\LaTeX{} and \\BibTeX"), "LaTeX and BibTeX")
+        XCTAssertEqual(plainText("A\\ldots B"), "A… B")
+        XCTAssertEqual(sentenceCaseText("Typesetting With \\LaTeX {SEM}"), "Typesetting with LaTeX SEM")
+    }
+
+    func testAccentOverLetterMacro() {
+        XCTAssertEqual(plainText("\\'{\\aa}"), "ǻ")
+        XCTAssertEqual(plainText("\\'\\o"), "ǿ")
+        XCTAssertEqual(plainText("\\'{\\ae}"), "ǽ")
+    }
+
+    func testFullPlaceholderExhaustionDegradesWithoutCrashing() {
+        let pool = [0xE000...0xF8FF, 0xF0000...0xFFFFD, 0x100000...0x10FFFD]
+        let everyPrivateUse = String(String.UnicodeScalarView(pool.joined().compactMap(Unicode.Scalar.init)))
+        // Documented degradation: with no free stand-in, literal braces are removed
+        // together with the protective ones. It must not crash.
+        XCTAssertEqual(plainText(everyPrivateUse + " \\{x\\}"), everyPrivateUse + " x")
+    }
 }

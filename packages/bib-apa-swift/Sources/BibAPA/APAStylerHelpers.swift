@@ -177,9 +177,9 @@ public func stripBraces(_ text: String) -> String {
 // MARK: - LaTeX text decoding (macdoc#197)
 
 /// Accent commands and their combining marks. Symbol accents (`\'`) are control
-/// symbols: TeX does not skip spaces after them, so the base must follow
-/// directly. Letter accents (`\c`, `\v`, …) are control words: TeX skips any
-/// whitespace after them, and they must be the whole command name.
+/// symbols and letter accents (`\c`, `\v`, …) are control words; either way
+/// the accent macro reads an undelimited argument, which skips leading spaces
+/// (`\' e`, `\c  c`). A letter accent must be the whole command name.
 private let latexSymbolAccents: [Character: Character] = [
     "'": "\u{0301}", "`": "\u{0300}", "^": "\u{0302}", "\"": "\u{0308}",
     "~": "\u{0303}", "=": "\u{0304}", ".": "\u{0307}",
@@ -193,6 +193,16 @@ private let latexLetterAccents: [String: Character] = [
 private let latexLetterMacros: [String: String] = [
     "ss": "ß", "o": "ø", "O": "Ø", "ae": "æ", "AE": "Æ", "oe": "œ", "OE": "Œ",
     "aa": "å", "AA": "Å", "l": "ł", "L": "Ł", "i": "ı", "j": "ȷ",
+]
+
+/// Zero-argument text commands that appear in bibliography titles. They are
+/// decoded explicitly because an unknown command's arity cannot be known: an
+/// unknown command keeps a following brace group as its argument (verbatim),
+/// which would be wrong for these (`\LaTeX {SEM}` is LaTeX followed by a
+/// protected group, not a one-argument call).
+private let latexTextCommands: [String: String] = [
+    "LaTeX": "LaTeX", "TeX": "TeX", "BibTeX": "BibTeX", "LaTeXe": "LaTeX2ε",
+    "ldots": "…", "dots": "…", "textendash": "–", "textemdash": "—",
 ]
 
 /// Escaped special characters (braces are handled separately as literals).
@@ -276,6 +286,18 @@ func decodeLaTeX(_ text: String, literal: LiteralBraces, protectUnknown: Bool) -
             out += (base + String(mark)).precomposedStringWithCanonicalMapping
             i = next; continue
         }
+        if let text = latexTextCommands[name] {
+            // Protected in sentence case, like a verbatim command: "LaTeX" keeps its case.
+            out += protectUnknown ? "{\(text)}" : text
+            var k = afterSpaces
+            if k + 1 < chars.count, chars[k] == "{", chars[k + 1] == "}" { k += 2 }
+            // TeX swallows the spaces after a control word, so `\LaTeX {SEM}` prints
+            // "LaTeXSEM" — almost always an authoring slip. Word-level commands keep
+            // one space when the source had one; in-word letter macros (`Stra\ss e`)
+            // below follow TeX, because that idiom depends on the space vanishing.
+            if k == afterSpaces, afterSpaces > j, afterSpaces < chars.count { out += " " }
+            i = k; continue
+        }
         if let letter = latexLetterMacros[name] {
             out += letter
             // TeX swallows the spaces after a control word; `\ss{}` ends it explicitly.
@@ -312,7 +334,9 @@ private func latexAccentBase(_ chars: [Character], from start: Int) -> (String, 
     if chars[start] == "{" {
         guard let close = matchingBrace(chars, from: start) else { return nil }
         let content = String(chars[(start + 1)..<close]).filter { $0 != "{" && $0 != "}" && !$0.isWhitespace }
-        if content == "\\i" || content == "\\j" { return (content == "\\i" ? "i" : "j", close + 1) }
+        if content.hasPrefix("\\"), let base = latexAccentMacroBase(String(content.dropFirst())) {
+            return (base, close + 1)
+        }
         guard content.count == 1, let only = content.first, only != "\\" else { return nil }
         return (String(only), close + 1)
     }
@@ -320,13 +344,21 @@ private func latexAccentBase(_ chars: [Character], from start: Int) -> (String, 
         var j = start + 1
         while j < chars.count, chars[j].isLetter { j += 1 }
         let name = String(chars[(start + 1)..<j])
-        guard name == "i" || name == "j" else { return nil }
+        guard let base = latexAccentMacroBase(name) else { return nil }
         var k = j
         if k + 1 < chars.count, chars[k] == "{", chars[k + 1] == "}" { k += 2 }
-        return (name, k)
+        return (base, k)
     }
     guard chars[start].isLetter else { return nil }
     return (String(chars[start]), start + 1)
+}
+
+/// A letter macro used as an accent's base: dotless `\i`/`\j` take the accent
+/// as plain i/j (an accented dotless i has no precomposed form); others keep
+/// their letter (`\'{\aa}` → ǻ, `\'{\o}` → ǿ).
+private func latexAccentMacroBase(_ name: String) -> String? {
+    if name == "i" || name == "j" { return name }
+    return latexLetterMacros[name]
 }
 
 private func skipWhitespace(_ chars: [Character], from start: Int) -> Int {
