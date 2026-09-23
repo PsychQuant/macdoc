@@ -208,4 +208,64 @@ final class APAStylerTests: XCTestCase {
         XCTAssertEqual(plainText("set \\{a, b\\}"), "set {a, b}")
         XCTAssertEqual(plainText("Plain text"), "Plain text")
     }
+
+    // MARK: - #197 verify round 1 (Codex): parser boundaries and remaining fields
+
+    func testDotlessIOnlyMatchesTheWholeCommandName() {
+        XCTAssertEqual(decodeLaTeX("\\'\\input"), "\\'\\input", "\\input is not \\i; keep it verbatim")
+        XCTAssertEqual(decodeLaTeX("\\'\\i"), "í")
+        XCTAssertEqual(decodeLaTeX("\\'\\i{}"), "í")
+        XCTAssertEqual(decodeLaTeX("\\'{\\i{}}"), "í")
+    }
+
+    func testAccentArgumentsFollowTeXSpacingAndNesting() {
+        XCTAssertEqual(decodeLaTeX("\\c  c"), "ç", "control words skip all following spaces")
+        XCTAssertEqual(decodeLaTeX("\\v\ts"), "š", "including tabs")
+        XCTAssertEqual(decodeLaTeX("\\'{{e}}"), "é", "nested group")
+        XCTAssertEqual(plainText("\\'{{e}}"), "é", "must not leak as \\'e after braces are removed")
+        XCTAssertEqual(decodeLaTeX("Stra\\ss e"), "Straße", "a letter macro swallows the following space")
+    }
+
+    func testUnknownCommandsSurviveTheRenderedOutput() {
+        XCTAssertEqual(plainText("\\emph{Nice} work"), "\\emph{Nice} work")
+        XCTAssertEqual(sentenceCaseText("A \\emph{Nice} Title"), "A \\emph{Nice} title")
+        XCTAssertEqual(plainText("\\unknown{a {b} c}"), "\\unknown{a {b} c}")
+    }
+
+    func testMalformedInputDoesNotCrashOrLeakBraces() {
+        XCTAssertEqual(plainText("abc\\"), "abc\\")
+        XCTAssertFalse(plainText("\\'{e").contains("{"))
+        XCTAssertEqual(plainText("}{"), "")
+    }
+
+    func testPrivateUseCharactersInInputAreNotRewritten() {
+        XCTAssertEqual(plainText("A\u{E000}B\u{E001}C {x}"), "A\u{E000}B\u{E001}Cx".replacingOccurrences(of: "Cx", with: "C x"))
+        XCTAssertEqual(plainText("set \\{a\\} and \u{E000}"), "set {a} and \u{E000}")
+    }
+
+    func testEditorsVolumeNumberAndCorporateAuthorsAreDecoded() {
+        let chapter = makeEntry(type: "INCOLLECTION", fields: [
+            "AUTHOR": "{Soci\\'{e}t\\'{e} de Statistique}", "TITLE": "C", "DATE": "2020",
+            "BOOKTITLE": "B", "EDITOR": "Sch\\\"{o}nemann, J\\\"{o}rg", "VOLUME": "{12}", "PUBLISHER": "P",
+        ])
+        guard case .chapter(let c) = APAStyler.style(chapter) else { XCTFail("Expected .chapter"); return }
+        XCTAssertEqual(c.authors, "Société de Statistique.")
+        XCTAssertEqual(c.editors, "J. Schönemann (Ed.)")
+        XCTAssertEqual(c.volume, "Vol. 12")
+
+        let article = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "JOURNALTITLE": "J", "DATE": "2020",
+            "VOLUME": "{7}", "NUMBER": "{3}", "DOI": "10.1000/a\\_b",
+        ])
+        guard case .article(let a) = APAStyler.style(article) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.volume, "7")
+        XCTAssertEqual(a.issue, "3")
+        XCTAssertEqual(a.doi, "https://doi.org/10.1000/a\\_b", "DOI is verbatim; never decode it")
+
+        let report = makeEntry(type: "REPORT", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "DATE": "2020", "TYPE": "Technical Report", "NUMBER": "{A}",
+        ])
+        guard case .report(let r) = APAStyler.style(report) else { XCTFail("Expected .report"); return }
+        XCTAssertEqual(r.number, "Technical Report A")
+    }
 }

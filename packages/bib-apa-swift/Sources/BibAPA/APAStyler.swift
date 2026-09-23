@@ -55,8 +55,8 @@ public struct APAStyler {
             date: formatDate(entry),
             title: title,
             journal: journal,
-            volume: field(entry, "VOLUME"),
-            issue: field(entry, "NUMBER"),
+            volume: field(entry, "VOLUME").map(plainText),
+            issue: field(entry, "NUMBER").map(plainText),
             pages: field(entry, "PAGES").map(normalizePages),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
@@ -71,7 +71,7 @@ public struct APAStyler {
             date: formatDate(entry),
             title: title,
             edition: formatEdition(field(entry, "EDITION")),
-            volume: field(entry, "VOLUME"),
+            volume: field(entry, "VOLUME").map(plainText),
             publisher: field(entry, "PUBLISHER").map(plainText),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
@@ -91,7 +91,7 @@ public struct APAStyler {
             editors: editorStr,
             bookTitle: bookTitle,
             edition: formatEdition(field(entry, "EDITION")),
-            volume: field(entry, "VOLUME").map { "Vol. \($0)" },
+            volume: field(entry, "VOLUME").map { "Vol. \(plainText($0))" },
             pages: pages,
             publisher: field(entry, "PUBLISHER").map(plainText),
             doi: normalizeDOI(entry),
@@ -130,9 +130,9 @@ public struct APAStyler {
         if let num = field(entry, "NUMBER"), !num.isEmpty {
             let typeLabel = field(entry, "TYPE") ?? ""
             if !typeLabel.isEmpty {
-                number = "\(plainText(typeLabel)) \(num)"
+                number = "\(plainText(typeLabel)) \(plainText(num))"
             } else {
-                number = "No. \(num)"
+                number = "No. \(plainText(num))"
             }
         } else {
             number = nil
@@ -214,8 +214,7 @@ public struct APAStyler {
 
     private static func buildEditorString(_ entry: BibEntry) -> String? {
         guard let edRaw = field(entry, "EDITOR"), !edRaw.isEmpty else { return nil }
-        let editors = edRaw.components(separatedBy: " and ")
-            .map { parseSingleAuthor($0.trimmingCharacters(in: .whitespaces)) }
+        let editors = parseNameList(edRaw)
         let edNames = editors.map(formatSingleAuthorForIn).joined(separator: ", ")
         let edLabel = editors.count == 1 ? "Ed." : "Eds."
         return "\(edNames) (\(edLabel))"
