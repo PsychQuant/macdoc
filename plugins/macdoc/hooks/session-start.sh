@@ -64,7 +64,9 @@ fi
 # removes the verify-then-exec path-swap window; missing/stale sidecars cause a
 # verified replacement download rather than probing untrusted executable code.
 GUARD="$INSTALL_DIR/.${BINARY_NAME}.installed_version"
-HAVE=$(tr -d '[:space:]' < "$GUARD" 2>/dev/null || true)
+# 2>/dev/null must precede the < redirection: redirections apply left to
+# right, so a missing sidecar (first install) otherwise prints an error.
+HAVE=$(tr -d '[:space:]' 2>/dev/null < "$GUARD" || true)
 $RESIDENT_VERIFIED && [ "$HAVE" = "$WANT" ] && exit 0
 
 mkdir -p "$INSTALL_DIR" 2>/dev/null || soft_exit "cannot create $INSTALL_DIR — skipping auto-install"
