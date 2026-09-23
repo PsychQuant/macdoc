@@ -24,7 +24,7 @@ description: |
 |---|---|
 | ✅ **保證** | byte-equal 重播。驗證通過 = 重建出的每個 XML part 與參考檔逐位元組相同 |
 | ✅ **保證** | 具名 slot 填寫。指定的段落換成新內容，其餘部分逐字不動 |
-| ⚠️ **版本** | 「失敗不破壞」與「預設拒絕覆寫」需要 macdoc CLI **0.7.0+**（已發布）。MCP 面的對應行為已隨 che-word-mcp **4.0.0** 出貨 |
+| ⚠️ **版本** | 「失敗不破壞」與「預設拒絕覆寫」需要 macdoc CLI **0.7.0+**（MCP 面：che-word-mcp **4.0.0+**）。**raw-channel slot**（第 3 步的 `// @slot-raw`）需要 CLI **0.8.0+**（MCP 面：che-word-mcp **4.0.6+**）；更舊的 render 不會報錯，而是輸出沒填值的模板 |
 | ✅ **保證** | 失敗不破壞。驗證沒過就什麼都不寫出——輸出路徑上原本有檔就原封不動，原本沒檔就不會憑空出現 |
 | ❌ **不保證** | 產物可讀。**任何輸入都不保證**產出人類可讀、可手改的 Swift |
 
@@ -73,7 +73,11 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 `paraId` 是段落的 `w14:paraId` 屬性值，可用 che-word-mcp 的讀取工具找出來。
 
-**Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後；僅 `word/document.xml` 主 part——headers/footers 的 raw slot 不支援）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。三個行為細節：
+**Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後；僅 `word/document.xml` 主 part——headers/footers 的 raw slot 不支援）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。
+
+> ⚠️ **raw-channel slot 需要 macdoc CLI 0.8.0+，或 che-word-mcp 4.0.6+。** 兩端的舊版表現不一樣：舊版 export（`reverse --slot`）會直接報錯，說找不到段落；舊版 **render 不會報錯**，它把 `// @slot-raw` 當成一般註解略過，照樣印「已寫入」、exit 0，但輸出的是**沒填值的模板**（PsychQuant/macdoc#198）。腳本和 render 用的 binary 不一定是同一版，所以填官方表單之前先確認 `macdoc --version`；render 完成後用下面最後一點的方式核對填入的值確實在文件裡。
+
+四個行為細節：
 
 - **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，段內**所有其餘子內容**——多個 run、書籤錨點、超連結、內容控制項、修訂範圍標記——坍縮成一個 run，格式取文字最長那個 run 的 rPr（含藏在 hyperlink 等 inline 包裝內的 run）。段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式或段內錨點的文件不適用 slot。
 - **Default 重播恆 byte-equal**：slot 值等於原文字時完全不動該 part（identity shortcut），所以第 5 步的 `--verify-against` 驗證照常成立，不需要任何新驗證模式。
