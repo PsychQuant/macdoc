@@ -9,11 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.5.5] - 2026-09-23
+
+### Fixed
+
+- **依 #198 的 Codex 跨模型審查修正四處過度概括**（PsychQuant/macdoc#198；上一輪 verify 時 Codex 因額度限制沒跑成，這次補跑）。
+  - swiftify 版本列不再泛稱「更舊的 render 不會報錯」：只有 CLI 0.7.0 實測過，更早的 CLI 與 che-word-mcp 4.0.6 以前標明未實測。
+  - 「含表格的文件會走 raw-channel slot」改成條件句：文件落在 raw channel 時才需要 0.8.0+，是否落 raw 以 `--coverage`
+    或腳本裡的 `// @slot-raw` 為準（swiftify「典型情境」第 0 步與 macdoc skill 的 `--slot` 列）。
+  - 警告框寫明實測用的是 0.7.0 與 0.8.0 兩個官方 release binary。
+  - 更正 1.5.4 條目對 1.5.3 的描述（1.5.3 也改了版本列，不只第 3 步）。
+- `binary_version` 不變（0.8.0）。
+
 ## [1.5.4] - 2026-09-23
 
 ### Fixed
 
-- **版本下限補進讀者實際會照抄的地方**（PsychQuant/macdoc#198 verify 的 in-scope fix）。1.5.3 只在第 3 步加了警告框，
+- **版本下限補進讀者實際會照抄的地方**（PsychQuant/macdoc#198 verify 的 in-scope fix）。1.5.3 更新了版本列與第 3 步的警告框，
   但 issue 自己點名的受影響路徑是 swiftify 的「典型情境：以官方範本定點填寫」——那段 bash 正好就是出事的重現路徑。
   現在它多了第 0 步 `macdoc --version`，第 4 步也註明「已寫入」不代表值有填進去。macdoc skill 的 `--slot` 選項列
   同樣補上 raw-channel slot 需要 0.8.0+。

@@ -123,7 +123,7 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 | 選項 | 屬於 | 說明 |
 |------|------|------|
 | `--coverage` | reverse | 印 per-part 的 DSL/raw 覆蓋率報告 |
-| `--slot <name>=<paraId>` | reverse | 指定段落成為腳本的具名參數（strict，不推斷）。含表格的文件會走 raw-channel slot，**需要 0.8.0+**：0.7.0 的 render 不報錯，而是輸出沒填值的模板（見 swiftify skill）|
+| `--slot <name>=<paraId>` | reverse | 指定段落成為腳本的具名參數（strict，不推斷）。文件落在 raw channel 時（含複雜表格的官方表單常見；以 `--coverage` 或腳本裡的 `// @slot-raw` 為準），slot **需要 0.8.0+**：0.7.0 的 render 不報錯，而是輸出沒填值的模板（見 swiftify skill）|
 | `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）|
 | `--from-oplog` | reverse | 強制用 oplog sidecar |
 | `--verify-against <docx>` | render | 對照參考檔做 byte-equal 驗證；**不給就不驗** |
