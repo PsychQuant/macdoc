@@ -345,8 +345,11 @@ private func latexAccentBase(_ chars: [Character], from start: Int) -> (String, 
         while j < chars.count, chars[j].isLetter { j += 1 }
         let name = String(chars[(start + 1)..<j])
         guard let base = latexAccentMacroBase(name) else { return nil }
+        // Like any control word: `{}` ends it explicitly, otherwise the spaces
+        // that terminate the name are swallowed (`\'\o berg` is ǿberg).
         var k = j
         if k + 1 < chars.count, chars[k] == "{", chars[k + 1] == "}" { k += 2 }
+        else { k = skipWhitespace(chars, from: k) }
         return (base, k)
     }
     guard chars[start].isLetter else { return nil }
