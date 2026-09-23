@@ -378,4 +378,35 @@ final class APAStylerTests: XCTestCase {
         guard case .chapter(let c) = APAStyler.style(chapter) else { XCTFail("Expected .chapter"); return }
         XCTAssertEqual(c.editors, "Science and Technology Board (Ed.)")
     }
+
+    // MARK: - #201/#202/#203 verify (Codex) edge cases
+
+    func testSubtitleStartingWithLowercaseProtectedTextIsNotCapitalized() {
+        let entry = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "Main", "JOURNALTITLE": "J", "DATE": "2020",
+            "SUBTITLE": "{iPhone} Methods",
+        ])
+        guard case .article(let a) = APAStyler.style(entry) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.title, "Main: iPhone methods")
+
+        let plain = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "Main", "JOURNALTITLE": "J", "DATE": "2020",
+            "SUBTITLE": "the methods",
+        ])
+        guard case .article(let p) = APAStyler.style(plain) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(p.title, "Main: The methods", "an unprotected first word is still capitalised")
+    }
+
+    func testProtectedSegmentsWithoutLettersDoNotConsumeTheFirstWord() {
+        XCTAssertEqual(toSentenceCase("{123} Models Today"), "123 Models today")
+        XCTAssertEqual(toSentenceCase("{!!!} Models Today"), "!!! Models today")
+        XCTAssertEqual(toSentenceCase("{123A} Models Today"), "123A models today")
+    }
+
+    func testNameSplittingWithEscapedAndUnbalancedBraces() {
+        XCTAssertEqual(parseNameList("Doe, Jane and Roe, Rick \\{x\\}").map(\.lastName), ["Doe", "Roe"],
+                       "an escaped brace does not change the depth")
+        // Documented lenient recovery: an unclosed brace keeps the rest as one name.
+        XCTAssertEqual(parseNameList("{Unclosed and Doe, Jane").count, 1)
+    }
 }
