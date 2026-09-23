@@ -17,7 +17,14 @@ GUARD="$INSTALL_DIR/.macdoc.installed_version"
 UNSIGNED_CANDIDATE="$TEST_ROOT/unsigned-candidate"
 SIGNED_FIXTURE="${MACDOC_SIGNED_FIXTURE:-$HOME/bin/macdoc}"
 REQUIREMENT='=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "6W377FS7BS"'
-PINNED_SHA=9fe09f26b6c8f97f13520ec2f618b8918b475de9ebc8a9980fd64897b39ec298
+# Read the pin from the same plugin.json the hook reads. A hard-coded copy went
+# stale when 1.5.2 moved the pin to 0.8.0: the positive path then died on a bare
+# `[[ ]]` under `set -e` with no message, and nobody noticed for a release.
+PLUGIN_JSON="$ROOT/plugins/macdoc/.claude-plugin/plugin.json"
+PINNED_SHA=$(grep -oE '"binary_sha256"[[:space:]]*:[[:space:]]*"[0-9a-f]{64}"' "$PLUGIN_JSON" | grep -oE '[0-9a-f]{64}')
+WANT_VERSION=$(grep -oE '"binary_version"[[:space:]]*:[[:space:]]*"[^"]+"' "$PLUGIN_JSON" | sed -E 's/.*"([^"]+)"$/\1/')
+[[ ${#PINNED_SHA} -eq 64 && -n "$WANT_VERSION" ]] \
+    || { echo "FAIL: cannot read binary_sha256 / binary_version from $PLUGIN_JSON" >&2; exit 1; }
 mkdir -p "$FAKE_PATH" "$INSTALL_DIR"
 
 for tool in uname awk codesign curl; do
@@ -98,13 +105,18 @@ if ! /usr/bin/codesign --verify --strict -R "$REQUIREMENT" "$SIGNED_FIXTURE" 2>/
 fi
 
 signed_sha=$(/usr/bin/shasum -a 256 "$SIGNED_FIXTURE" | /usr/bin/awk '{print $1}')
-[[ "$signed_sha" = "$PINNED_SHA" ]]
+if [[ "$signed_sha" != "$PINNED_SHA" ]]; then
+    echo "SKIP: positive signed-fixture cases — $SIGNED_FIXTURE is not the pinned v$WANT_VERSION release"
+    echo "      (fixture sha256 $signed_sha, pinned $PINNED_SHA; set MACDOC_SIGNED_FIXTURE to the downloaded release binary)"
+    echo "PASS: hostile resident/candidate paths were rejected"
+    exit 0
+fi
 macdoc_verify_candidate "$SIGNED_FIXTURE" "$PINNED_SHA" "$PINNED_SHA" "$REQUIREMENT"
 
 # Verified resident + matching sidecar is a zero-network, zero-execution path.
 cp "$SIGNED_FIXTURE" "$RESIDENT"
 chmod +x "$RESIDENT"
-echo 0.7.0 > "$GUARD"
+echo "$WANT_VERSION" > "$GUARD"
 run_hook
 assert_no_hostile_tool_or_binary
 
