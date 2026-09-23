@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.5.4] - 2026-09-23
+
+### Fixed
+
+- **版本下限補進讀者實際會照抄的地方**（PsychQuant/macdoc#198 verify 的 in-scope fix）。1.5.3 只在第 3 步加了警告框，
+  但 issue 自己點名的受影響路徑是 swiftify 的「典型情境：以官方範本定點填寫」——那段 bash 正好就是出事的重現路徑。
+  現在它多了第 0 步 `macdoc --version`，第 4 步也註明「已寫入」不代表值有填進去。macdoc skill 的 `--slot` 選項列
+  同樣補上 raw-channel slot 需要 0.8.0+。
+- **警告框不再把沒實測過的 MCP 行為說成已知**。「兩端的舊版表現不一樣」改寫成明確只講 CLI 0.7.0（兩個 release binary
+  實測）；che-word-mcp 4.0.6 以前的 `execute_script` 標明未經驗證。`binary_version` 不變（0.8.0）。
+
 ## [1.5.3] - 2026-09-23
 
 ### Fixed
