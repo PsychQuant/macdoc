@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.1.0] - 2026-09-24
+
+### Changed
+
+- `binary_version` 4.0.11 → **4.1.0**；shell 4.0.14 → 4.1.0。binary 4.1.0（Developer ID 簽章、Apple 公證，universal）的變化：
+  - **`create_document`、`open_document`、`execute_script` 可選 `profile`（`inherit` / `official`）**，與 macdoc CLI 0.9.0+
+    共用 `~/.config/macdoc/config.json` 的文件格式設定（PsychQuant/macdoc#185、PsychQuant/che-word-mcp#223）。
+    不給 `profile` 時行為與 4.0.x 相同。
+  - 套用 profile 之後，theme 工具的修改會真的保存；`open_document` 套用 official 後 autosave 失敗時回滾 session。
+  - 依賴 ooxml-swift 3.9.0：`execute_script` 以 raw-channel slot 填官方表單的**空白欄位**時，填入的文字沿用段落標記的
+    字型，不再落到 docDefaults（PsychQuant/macdoc#199）。
+  - MCP handshake 回報的 server 版本由停在 `1.17.0` 改為實際版號（PsychQuant/che-word-mcp#211 第 2 項）。
+- README 的文件格式 profile 一節由「原始碼建置功能，尚未發布」改為版本下限說明。
+
 ## [4.0.14] - 2026-09-23
 
 ### Changed
