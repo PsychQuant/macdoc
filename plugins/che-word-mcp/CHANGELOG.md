@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.0.13] - 2026-09-23
+
+### Changed
+
+- `binary_version` 4.0.10 → **4.0.11**；shell 4.0.12 → 4.0.13。binary 4.0.11 帶進 ooxml-swift **3.8.0**：
+  - `format_text` 的 `bold` / `italic` / `underline: false` 真的取消格式（過去是回報成功的 no-op），省略的欄位維持不變；
+    `as_revision: true` 以該 run 既有的屬性為起點，取消粗體時不再順帶清掉沒指定的斜體、字型等（che-word-mcp#197；
+    PsychQuant/macdoc#173、#174）。`update_style` / `create_style` 的 `false` 同理生效。
+  - 讀進來的 `<w:b w:val="0"/>`（以及 italic / strike / noProof 的明確關）不再被當成開：過去任何觸發 typed 重寫的存檔，都會把
+    沒動過的 run 改成粗體（ooxml-swift#115）。
+  - 同時帶出 binary 端先前已合併、尚未發布的修正：三個浮水印寫側工具改為誠實失敗（#201）、所有以 `Error:` 字串回傳的拒絕
+    在協定層都是 `isError: true`（#202）。升級注意見 binary repo CHANGELOG 的 4.0.11。
+- `CLAUDE.md` 新增「`false` 是明確取消」一節（三態語意、`paragraph_index` 與 `get_paragraphs` 編號不同），並記下已知問題：
+  未建模的 run 屬性（`vanish` 等）在 typed 編輯後存檔會遺失（PsychQuant/ooxml-swift#164）。`README.md` 裡寫著「當前版本 v3.17.6」
+  的舊段落改標為歷史紀錄——同一份 README 的「版本」段已規定不再寫死版號。
+
 ## [4.0.12] - 2026-09-03
 
 ### Changed
