@@ -1,15 +1,15 @@
 # macdoc plugin
 
-## 文件格式 profile：原始碼建置功能，尚未發布
+## 文件格式 profile（macdoc CLI 0.9.0+）
 
-macdoc#185 新增 CLI 與 Word MCP 共用的文件格式設定。需要整合尚未發布的 OOXMLSwift profile/store 與 PDFToLaTeXCore 設定保留變更；本機最終驗收使用 OOXMLSwift `3aa221aa3bba3657af68f1c8d22416d3efe9863e` 的 editable dependency，沒有把遠端 pin 偽裝成已發布版本。目前 plugin 下載的 macdoc 0.7.0 不支援。完成本機 SwiftPM editable 相依套件建置後，使用該工作樹的 `.build/debug/macdoc`。
+macdoc#185 新增 CLI 與 Word MCP（che-word-mcp 4.1.0+）共用的文件格式設定，建立在 ooxml-swift 3.9.0 的 profile／store 與 pdf-to-latex-swift 0.1.1 的設定保留修正之上。CLI 0.8.0 以前沒有這些命令與參數。
 
 ```bash
-.build/debug/macdoc config document show
-.build/debug/macdoc config document import-official --template /path/to/Normal.dotm
-.build/debug/macdoc config document set-default official
-.build/debug/macdoc convert --to docx notes.md --profile inherit --output notes.docx
-.build/debug/macdoc word render notes.mdocx.swift --to-docx result.docx --profile official
+macdoc config document show
+macdoc config document import-official --template /path/to/Normal.dotm
+macdoc config document set-default official
+macdoc convert --to docx notes.md --profile inherit --output notes.docx
+macdoc word render notes.mdocx.swift --to-docx result.docx --profile official
 ```
 
 設定位於 `~/.config/macdoc/config.json`，格式如下；既有 AI/OCR 與未知欄位會保留：

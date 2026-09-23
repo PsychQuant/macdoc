@@ -50,9 +50,9 @@ macdoc word reverse form.docx --to-mdocx form.mdocx.swift --coverage
 
 MCP：`get_script_coverage(source_path)`
 
-上面這種同時提供 `--to-mdocx` 的 coverage 形式可用於正式 CLI v0.7.0；只給 `--coverage`
-而不產出腳本的 coverage-only 形式，以及具名根因的新提示，仍屬未發布的本機開發版行為。
-v0.7.0 的 channel／百分比輸出不能指出 raw 的確切原因。
+上面這種同時提供 `--to-mdocx` 的 coverage 形式 CLI 0.7.0 起就能用。只給 `--coverage`、
+不產出腳本的 coverage-only 形式，以及報告中具名的 `paragraph-no-paraId` 說明，需要 CLI
+**0.8.0+**（#176、#177）；0.7.0 的 channel／百分比輸出不能指出 raw 的確切原因。
 
 輸出長這樣：
 
@@ -125,8 +125,8 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 **DSL 升級是 per-part 全有全無，不是逐段降級。** 一個 part 裡只要有任何一處無法用 typed 形式 byte-equal 地重建，**整個 part** 就落到 raw。
 
-以下是**非窮舉**的常見情況與處置表，不是 CLI 會逐項列出的 raw 根因目錄。目前未發布的
-CLI 新提示只會具名指出 `word/document.xml = paragraph-no-paraId`；`table`、`byte-mismatch`、
+以下是**非窮舉**的常見情況與處置表，不是 CLI 會逐項列出的 raw 根因目錄。CLI 的具名提示
+（0.8.0+）只會指出 `word/document.xml = paragraph-no-paraId`；`table`、`byte-mismatch`、
 `parse-error` 是用來說明內部判定與處置差異的分類，不會各自印在 CLI 報告中。只看到
 `Aggregate: 0.0% DSL` 也無法反推出是哪一類原因。
 
@@ -158,15 +158,15 @@ CLI 新提示只會具名指出 `word/document.xml = paragraph-no-paraId`；`tab
 - 對確實落 raw 的文件，腳本仍能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）。
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條大型單行重新 escape，diff 顯示「一行變了」。
 
-只有在檢視文件來源與實際內容、確認唯一根因是 `word/document.xml = paragraph-no-paraId`，而且接受只保留段落時，才可明確改走 paragraphs-only。不能只由 CLI 的 raw／0% 摘要推定；即使開發版具名提示該原因，也要確認非段落內容可捨棄。無法確認時保留 full-fidelity，不把其他原因類推成 lossy 模式。診斷與相容路徑依 CLI 版本不同：
+只有在檢視文件來源與實際內容、確認唯一根因是 `word/document.xml = paragraph-no-paraId`，而且接受只保留段落時，才可明確改走 paragraphs-only。不能只由 CLI 的 raw／0% 摘要推定；即使 CLI 具名提示該原因，也要確認非段落內容可捨棄。無法確認時保留 full-fidelity，不把其他原因類推成 lossy 模式。診斷與相容路徑依 CLI 版本不同：
 
 ```bash
-# 本機開發版：須確認同時包含 #176 的 paragraph-no-paraId 提示與 #177 的 coverage-only 支援
+# CLI 0.8.0+：coverage-only，報告會具名指出 paragraph-no-paraId（#176、#177）
 macdoc word reverse legacy.docx --coverage
 
-# 正式 v0.7.0：不支援上面的 coverage-only，也不會顯示新版根因資訊。
+# CLI 0.7.0：不支援上面的 coverage-only，也不會顯示根因。
 # 若已從文件來源或檢查結果確認它是可捨棄非段落內容的 legacy 純段落文件，
-# 可直接走 v0.7.0 已支援的明確替代路徑。
+# 可直接走 0.7.0 起就有的明確替代路徑。
 macdoc word reverse legacy.docx --paragraphs-only --to-mdocx legacy.mdocx.swift
 
 # 讀過 legacy.mdocx.swift、確認實際段落 ID 是 p1 後才指定 slot；不可猜 ID
@@ -176,7 +176,7 @@ macdoc word reverse legacy.docx --paragraphs-only \
 
 paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`，也不保證版面或格式完整。以上兩個輸出路徑不同，只能避免兩條範例彼此撞檔；重跑其中任一條仍會被預設拒絕，必須換新輸出路徑，或先取得使用者同意才加 `--force` 覆寫。
 
-> **發布狀態**：`--paragraphs-only` 與帶 `--to-mdocx` 的 coverage 是 CLI 0.7.0 已有功能；coverage-only、coverage 中具名的 `paragraph-no-paraId` 說明，以及預設 reverse 偵測到同一原因時寫入 stderr 的提示，尚未隨正式 CLI 發布。這些新提示不代表 CLI 會逐項印出其他內部分類。完整診斷流程需使用包含 #176、#177 與 #181 相應變更的本機開發版。plugin 的 `binary_version` 仍固定為已發布的 0.7.0。
+> **版本對照**：`--paragraphs-only` 與帶 `--to-mdocx` 的 coverage 是 CLI 0.7.0 起就有的功能；coverage-only 與報告中具名的 `paragraph-no-paraId` 說明需要 **0.8.0+**（#176、#177）；預設 reverse（不帶 `--coverage`）偵測到同一原因時寫入 stderr 的提示需要 **0.9.0+**（#181）。這些提示都不代表 CLI 會逐項印出其他內部分類。
 
 若經核心分析確認內部分類是 `table`，表示表格超出目前可轉成 `appendTable` 的 canonical minimal shape；保留完整內容時該 part 走 raw，而 `--paragraphs-only` 會直接省略表格。即使表格符合 canonical minimal shape，也必須等整個 part 通過試重建，才能確認走 DSL。若分析確認是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格，也不能只靠 CLI 的 0.0% 判定。
 

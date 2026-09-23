@@ -19,7 +19,7 @@ description: |
 |--------|------|---------|
 | `convert` | 格式轉換 | SRT→HTML、MD→HTML、DOCX→MD |
 | `ocr` | （已移除 #145）| 文字辨識改用 bestocr |
-| `config` | 設定管理 | AI CLI 工具、OCR host/model 預設值 |
+| `config` | 設定管理 | AI CLI 工具、OCR host/model 預設值、文件格式 profile |
 | `pdf` | PDF→LaTeX | 學術 PDF 處理（較少用） |
 | `bib` | BibLaTeX→APA | 參考文獻格式轉換 |
 | `word` | docx ⇄ `.mdocx.swift` 腳本 | 把文件變成可重播的重建腳本、再放回 docx |
@@ -62,6 +62,8 @@ pip install playwright && playwright install chromium
 | `--hard-breaks` | 軟換行視為硬換行 |
 | `--frontmatter` | 包含 YAML frontmatter |
 | `--html-extensions` | MD 中保留 `<u>/<sup>/<sub>/<mark>` |
+| `--profile inherit\|official` | 轉 DOCX 時套用的文件格式 profile（CLI 0.9.0+；見下方 `config document`）|
+| `--document-config <path>` | 改用指定的文件設定檔（CLI 0.9.0+）|
 
 ### 常用工作流
 
@@ -127,6 +129,7 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 | `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）|
 | `--from-oplog` | reverse | 強制用 oplog sidecar |
 | `--verify-against <docx>` | render | 對照參考檔做 byte-equal 驗證；**不給就不驗** |
+| `--profile inherit\|official` | render | 驗證與發布前套用文件格式 profile；**不給就不讀設定檔、照腳本重播**（CLI 0.9.0+）|
 | `--force` | 兩者 | 先檢查精確目標並取得使用者對該檔案的明確事前同意，才可覆寫；不給就拒絕且不動既有檔案 |
 
 完整的覆寫同意邊界與使用新路徑的工作流見 [`swiftify`](../swiftify/SKILL.md) skill。
@@ -209,6 +212,25 @@ macdoc config ocr list
 #   local → localhost:11434
 ```
 
+### config document — 文件格式 profile（CLI 0.9.0+）
+
+與 che-word-mcp 4.1.0+ 共用 `~/.config/macdoc/config.json` 的 `document` 區段。
+
+```bash
+macdoc config document show                                   # defaultProfile 與已匯入的快照
+macdoc config document import-official --template 範本.dotx    # 匯入安全格式快照；不改預設值
+macdoc config document set-default official                    # 之後新建的文件預設套用 official
+```
+
+| profile | 意思 |
+|---------|------|
+| `inherit` | 沿用文件自己的格式（新文件只去掉程式產生的預設字型）|
+| `official` | 套用匯入的範本快照：styles、section、theme、fonts；**不帶正文、不改原範本** |
+
+**何時會讀設定檔**：新文件（`convert --to docx`）未給 `--profile` 時才退回 `defaultProfile`；
+既有文件與腳本重播（`word render`）只有明確給 `--profile` 才套用。省略 `--template` 時讀目前
+帳號 Word 的 Normal.dotm。快照缺失或損毀會直接報錯，不會靜默退回 inherit。
+
 ---
 
 ## 與其他工具的搭配
@@ -224,5 +246,6 @@ macdoc config ocr list
 
 ## 版本紀錄
 
+- **1.6.0**：新增 `config document`（文件格式 profile）與 `convert` / `word render` 的 `--profile`（需要 CLI 0.9.0）
 - **1.1.0**：新增 `config ocr` 子命令組,支援具名 host profile(`--host kyle` 等),預設 host/model 可存 config
 - **1.0.0**：初版
