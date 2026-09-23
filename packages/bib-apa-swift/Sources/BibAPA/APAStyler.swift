@@ -48,7 +48,7 @@ public struct APAStyler {
 
     private static func styleArticle(_ entry: BibEntry) -> APAArticleRef {
         let title = buildTitle(entry)
-        let journal = field(entry, "JOURNALTITLE").map(stripBraces) ?? ""
+        let journal = field(entry, "JOURNALTITLE").map(plainText) ?? ""
 
         return APAArticleRef(
             authors: formatAuthorsString(entry),
@@ -72,7 +72,7 @@ public struct APAStyler {
             title: title,
             edition: formatEdition(field(entry, "EDITION")),
             volume: field(entry, "VOLUME"),
-            publisher: field(entry, "PUBLISHER").map(stripBraces),
+            publisher: field(entry, "PUBLISHER").map(plainText),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
         )
@@ -80,7 +80,7 @@ public struct APAStyler {
 
     private static func styleChapter(_ entry: BibEntry) -> APAChapterRef {
         let chapterTitle = buildTitle(entry)
-        let bookTitle = toSentenceCase(stripBraces(field(entry, "BOOKTITLE") ?? ""))
+        let bookTitle = sentenceCaseText(field(entry, "BOOKTITLE") ?? "")
         let editorStr = buildEditorString(entry)
         let pages = field(entry, "PAGES").map { "pp. \(normalizePages($0))" }
 
@@ -93,7 +93,7 @@ public struct APAStyler {
             edition: formatEdition(field(entry, "EDITION")),
             volume: field(entry, "VOLUME").map { "Vol. \($0)" },
             pages: pages,
-            publisher: field(entry, "PUBLISHER").map(stripBraces),
+            publisher: field(entry, "PUBLISHER").map(plainText),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
         )
@@ -102,7 +102,7 @@ public struct APAStyler {
     private static func styleThesis(_ entry: BibEntry) -> APAThesisRef {
         let thesisType: String
         if let addon = field(entry, "TITLEADDON"), !addon.isEmpty {
-            thesisType = stripBraces(addon)
+            thesisType = plainText(addon)
         } else if entry.normalizedType == "MASTERSTHESIS" {
             thesisType = "Master's thesis"
         } else if let bibType = field(entry, "TYPE")?.lowercased(), bibType.contains("mathesis") {
@@ -111,7 +111,7 @@ public struct APAStyler {
             thesisType = "Doctoral dissertation"
         }
 
-        let institution = (field(entry, "INSTITUTION") ?? field(entry, "SCHOOL")).map(stripBraces)
+        let institution = (field(entry, "INSTITUTION") ?? field(entry, "SCHOOL")).map(plainText)
 
         return APAThesisRef(
             authors: formatAuthorsString(entry),
@@ -125,12 +125,12 @@ public struct APAStyler {
     }
 
     private static func styleReport(_ entry: BibEntry) -> APAReportRef {
-        let titleAddon = field(entry, "TITLEADDON").map(stripBraces)
+        let titleAddon = field(entry, "TITLEADDON").map(plainText)
         let number: String?
         if let num = field(entry, "NUMBER"), !num.isEmpty {
             let typeLabel = field(entry, "TYPE") ?? ""
             if !typeLabel.isEmpty {
-                number = "\(stripBraces(typeLabel)) \(num)"
+                number = "\(plainText(typeLabel)) \(num)"
             } else {
                 number = "No. \(num)"
             }
@@ -144,7 +144,7 @@ public struct APAStyler {
             title: buildTitle(entry),
             titleAddon: titleAddon,
             number: number,
-            institution: field(entry, "INSTITUTION").map(stripBraces),
+            institution: field(entry, "INSTITUTION").map(plainText),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
         )
@@ -153,7 +153,7 @@ public struct APAStyler {
     private static func stylePresentation(_ entry: BibEntry) -> APAPresentationRef {
         let presentationType: String
         if let addon = field(entry, "TITLEADDON"), !addon.isEmpty {
-            presentationType = stripBraces(addon)
+            presentationType = plainText(addon)
         } else {
             presentationType = "Conference presentation"
         }
@@ -163,8 +163,8 @@ public struct APAStyler {
             date: formatDate(entry),
             title: buildTitle(entry),
             presentationType: presentationType,
-            conference: field(entry, "EVENTTITLE").map(stripBraces),
-            venue: field(entry, "VENUE").map(stripBraces),
+            conference: field(entry, "EVENTTITLE").map(plainText),
+            venue: field(entry, "VENUE").map(plainText),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
         )
@@ -175,7 +175,7 @@ public struct APAStyler {
             authors: formatAuthorsString(entry),
             date: formatDate(entry),
             title: buildTitle(entry),
-            publisher: field(entry, "PUBLISHER").map(stripBraces),
+            publisher: field(entry, "PUBLISHER").map(plainText),
             doi: normalizeDOI(entry),
             url: doi(entry) == nil ? field(entry, "URL").map(stripBraces) : nil
         )
@@ -204,10 +204,9 @@ public struct APAStyler {
     /// alias with identical behaviour, which made `buildTitle` read as if it
     /// did NOT handle subtitles — it is gone; this is the only spelling.
     private static func buildTitle(_ entry: BibEntry) -> String {
-        let cleanTitle = stripBraces(entry.title ?? "")
-        var full = toSentenceCase(cleanTitle)
+        var full = sentenceCaseText(entry.title ?? "")
         if let sub = field(entry, "SUBTITLE"), !sub.isEmpty {
-            full += ": \(capitalizeFirst(toSentenceCase(stripBraces(sub)).lowercased()))"
+            full += ": \(capitalizeFirst(sentenceCaseText(sub).lowercased()))"
         }
         return full
     }

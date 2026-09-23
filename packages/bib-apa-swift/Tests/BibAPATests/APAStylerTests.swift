@@ -117,4 +117,95 @@ final class APAStylerTests: XCTestCase {
         guard case .presentation(let pres) = APAStyler.style(entry) else { XCTFail("Expected .presentation"); return }
         XCTAssertEqual(pres.title, "Main title")
     }
+
+    // MARK: - LaTeX leaks into rendered fields (macdoc#197)
+
+    /// Only fields that went through `toSentenceCase` lost their mid-string
+    /// protective braces, and no field decoded accent macros or `\&`. These are
+    /// the two entries from the issue's reproduction, asserted field by field.
+    func testMidStringBracesAndEscapesAreRemovedFromEveryField() {
+        let entry = makeEntry(type: "PRESENTATION", fields: [
+            "AUTHOR": "Doe, Jane",
+            "TITLE": "A Talk About {GitHub} and {SEM}",
+            "TITLEADDON": "Invited talk",
+            "EVENTTITLE": "Research \\& Evaluation {SIG} Webinar, {SITE} 2026",
+            "VENUE": "Online",
+            "EVENTDATE": "2026-08-27",
+            "DATE": "2026",
+        ])
+        guard case .presentation(let pres) = APAStyler.style(entry) else { XCTFail("Expected .presentation"); return }
+        XCTAssertEqual(pres.title, "A talk about GitHub and SEM")
+        XCTAssertEqual(pres.conference, "Research & Evaluation SIG Webinar, SITE 2026")
+        XCTAssertEqual(pres.presentationType, "Invited talk")
+    }
+
+    func testAccentMacrosAreDecodedInEveryField() {
+        let entry = makeEntry(type: "PRESENTATION", fields: [
+            "AUTHOR": "Doe, Jane",
+            "TITLE": "The {Cram\\'{e}r-Rao} Bound and {Sch\\\"{o}nemann}'s Problem",
+            "TITLEADDON": "Oral presentation",
+            "EVENTTITLE": "Soci\\'{e}t\\'{e} de Statistique Annual Meeting",
+            "VENUE": "Montr\\'{e}al, Canada",
+            "EVENTDATE": "2025-10-18/2025-10-19",
+            "DATE": "2025",
+        ])
+        guard case .presentation(let pres) = APAStyler.style(entry) else { XCTFail("Expected .presentation"); return }
+        XCTAssertEqual(pres.title, "The Cramér-Rao bound and Schönemann's problem")
+        XCTAssertEqual(pres.conference, "Société de Statistique Annual Meeting")
+        XCTAssertEqual(pres.venue, "Montréal, Canada")
+    }
+
+    func testOtherPlainFieldsLoseBracesAndDecode() {
+        let article = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "DATE": "2020",
+            "JOURNALTITLE": "Journal of {R} \\& {SAS} Users",
+        ])
+        guard case .article(let a) = APAStyler.style(article) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.journal, "Journal of R & SAS Users")
+
+        let thesis = makeEntry(type: "THESIS", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "DATE": "2020", "TYPE": "phdthesis",
+            "INSTITUTION": "Universit\\\"{a}t {Z}\\\"{u}rich",
+        ])
+        guard case .thesis(let th) = APAStyler.style(thesis) else { XCTFail("Expected .thesis"); return }
+        XCTAssertEqual(th.institution, "Universität Zürich")
+    }
+
+    func testAuthorNamesAreDecodedBeforeParsing() {
+        let entry = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Sch\\\"{o}nemann, J\\\"{o}rg and {\\'E}mile, Zo\\\"{e}",
+            "TITLE": "T", "JOURNALTITLE": "J", "DATE": "2020",
+        ])
+        guard case .article(let a) = APAStyler.style(entry) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.authors, "Schönemann, J., & Émile, Z.")
+    }
+
+    func testURLIsNotDecoded() {
+        let url = "https://example.org/a\\_b?q=1\\%20"
+        let entry = makeEntry(type: "ARTICLE", fields: [
+            "AUTHOR": "Doe, Jane", "TITLE": "T", "JOURNALTITLE": "J", "DATE": "2020", "URL": url,
+        ])
+        guard case .article(let a) = APAStyler.style(entry) else { XCTFail("Expected .article"); return }
+        XCTAssertEqual(a.url, url, "biblatex treats URL as verbatim; decoding would change the address")
+    }
+
+    func testDecodeLaTeXForms() {
+        let cases: [(String, String)] = [
+            ("Cram\\'er", "Cramér"), ("Cram\\'{e}r", "Cramér"), ("Cram{\\'e}r", "Cram{é}r"),
+            ("Cram{\\'{e}}r", "Cram{é}r"), ("\\\"{o}", "ö"), ("\\`{a}", "à"), ("\\^{o}", "ô"),
+            ("\\~{n}", "ñ"), ("\\c{c}", "ç"), ("\\c c", "ç"), ("\\v{s}", "š"), ("\\'{\\i}", "í"),
+            ("\\ss", "ß"), ("Stra\\ss{}e", "Straße"), ("{\\o}", "{ø}"), ("\\aa", "å"), ("\\l{}", "ł"),
+            ("A \\& B", "A & B"), ("50\\%", "50%"), ("\\$5", "$5"), ("\\#1", "#1"), ("a\\_b", "a_b"),
+            ("\\unknown{x}", "\\unknown{x}"), ("no macros here", "no macros here"),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(decodeLaTeX(input), expected, "decodeLaTeX(\(input))")
+        }
+    }
+
+    func testPlainTextRemovesProtectiveBracesButKeepsEscapedOnes() {
+        XCTAssertEqual(plainText("{SIG} and {Cram\\'{e}r}"), "SIG and Cramér")
+        XCTAssertEqual(plainText("set \\{a, b\\}"), "set {a, b}")
+        XCTAssertEqual(plainText("Plain text"), "Plain text")
+    }
 }
