@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.6.0] - 2026-09-24
+
+### Changed
+
+- `binary_version` 0.8.0 → **0.9.0**，`binary_sha256` 換成 v0.9.0 的值；shell 1.5.5 → 1.6.0。CLI 0.9.0（Developer ID 簽章、
+  Apple 公證，arm64）自 0.8.0 以來的使用者可見變化：
+  - **文件格式 profile**（#185）：`macdoc config document show / import-official / set-default`；`convert --to docx` 與
+    `word render` 的 `--profile inherit|official` 與 `--document-config`。與 che-word-mcp 4.1.0+ 共用
+    `~/.config/macdoc/config.json` 的 `document` 區段。`config ai` / `config ocr` 寫入時不再洗掉這個區段
+    （pdf-to-latex-swift 0.1.1）。
+  - **預設 `word reverse` 在 stderr 提示 `--paragraphs-only`**：只在 `word/document.xml` 因 `paragraph-no-paraId` 落 raw 時出現（#181）。
+  - **raw-channel slot 填入官方表單的空白欄位時，文字沿用段落標記的字型**，不再落到 docDefaults（#199，ooxml-swift 3.9.0）。
+  - bib 轉換器的整合測試改用 repo 內的合成 fixture，clean clone 可跑（#186）。
+- **skills**：
+  - `macdoc` skill 新增 `config document` 一節，並補上 `--profile` 選項。
+  - `swiftify` 把 coverage-only、具名根因、stderr 提示依實際出貨版本分層（0.8.0 的 #176/#177、0.9.0 的 #181）；表格與 raw
+    的敘述更正為「canonical minimal table 可 typed 升級，不支援的 rich 表格才可能讓整個 part 落 raw」（#181、#200）；
+    覆寫一律先取得使用者同意，範例改用新的輸出路徑。
+- README 的文件格式 profile 一節由「原始碼建置功能，尚未發布」改為版本下限說明。
+
 ## [1.5.5] - 2026-09-23
 
 ### Fixed
