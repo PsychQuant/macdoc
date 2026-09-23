@@ -75,7 +75,7 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 **Raw channel 文件（含表格的官方表單等）的 slot 同樣可用**（raw-channel-slot-support，#171 後；僅 `word/document.xml` 主 part——headers/footers 的 raw slot 不支援）：段落改以 paraId 在 carried XML 內定位，腳本出現 `// @slot-raw <name> <paraId>` directive。
 
-> ⚠️ **raw-channel slot 需要 macdoc CLI 0.8.0+，或 che-word-mcp 4.0.6+。** 兩端的舊版表現不一樣：舊版 export（`reverse --slot`）會直接報錯，說找不到段落；舊版 **render 不會報錯**，它把 `// @slot-raw` 當成一般註解略過，照樣印「已寫入」、exit 0，但輸出的是**沒填值的模板**（PsychQuant/macdoc#198）。腳本和 render 用的 binary 不一定是同一版，所以填官方表單之前先確認 `macdoc --version`；render 完成後用下面最後一點的方式核對填入的值確實在文件裡。
+> ⚠️ **raw-channel slot 需要 macdoc CLI 0.8.0+，或 che-word-mcp 4.0.6+。** CLI 0.7.0 的 export 與 render 表現不一樣（兩個官方 release binary 實測）：export（`reverse --slot`）會直接報錯，說找不到段落；**render 不會報錯**，它把 `// @slot-raw` 當成一般註解略過，照樣印「已寫入」、exit 0，但輸出的是**沒填值的模板**（PsychQuant/macdoc#198）。che-word-mcp 4.0.6 以前的 `execute_script` **沒有實測過**；它和 CLI 用的是同一個 ooxml-swift importer，推測也一樣沉默，但未經驗證。腳本和 render 用的 binary 不一定是同一版，所以填官方表單之前先確認 `macdoc --version`；render 完成後用下面最後一點的方式核對填入的值確實在文件裡。
 
 四個行為細節：
 
@@ -150,6 +150,10 @@ macdoc convert 產的 2 段落簡單文件（0 個 paraId）
 ## 典型情境：以官方範本定點填寫
 
 ```bash
+# 0. 確認版本：官方表單幾乎都含表格，slot 會走 raw channel（`// @slot-raw`），需要 0.8.0+。
+#    0.7.0 的 render 不會報錯，而是輸出沒填值的模板（見第 3 步 Slot 一節的警告框）
+macdoc --version
+
 # 1. 先看落在哪條 channel（決定期待值，不決定可不可用）
 macdoc word reverse 範本.docx --to-mdocx 範本.mdocx.swift --coverage
 
@@ -163,6 +167,7 @@ macdoc word render 範本.mdocx.swift --to-docx 重建.docx --verify-against 範
 
 # 4. 改腳本裡的 slot 參數值，然後重建出已填表單
 #    （改一次 slot 值就重跑一次，第二次起輸出檔已存在 → 要 --force）
+#    「已寫入」只代表寫出了檔案，不代表值有填進去——一定要做下面的核對
 macdoc word render 範本.mdocx.swift --to-docx 已填.docx --force
 ```
 
