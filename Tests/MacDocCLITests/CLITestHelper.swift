@@ -236,7 +236,12 @@ enum CLITestHelper {
     ///   is correct, not that `runProcess` actually uses it for its own
     ///   pipes (the same factory-vs-call-site gap macdoc#225 fixed for
     ///   `PageOCRRunner`). Always `nil` in production; adding it does not
-    ///   change behavior for any real caller.
+    ///   change behavior for any real caller. This callback runs while
+    ///   `spawnLock` is still held (see that property's doc comment) — it
+    ///   must not call back into `runProcess` itself, which would deadlock
+    ///   on `spawnLock.lock()` (Codex round-3). `RunProcessFDInheritanceTests
+    ///   .runProcessOwnPipesDoNotLeak`'s callback only does a raw
+    ///   `posix_spawn` probe, which never touches `spawnLock`.
     /// - Parameter onSpawnFailureCleanup: **Test-only.** Called right after
     ///   `closeWriteEndsForSpawnFailureCleanup` runs in the `catch` block
     ///   below, i.e. only when `process.run()` actually throws. macdoc#224
