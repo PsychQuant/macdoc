@@ -1,4 +1,4 @@
-.PHONY: release debug install clean metallib
+.PHONY: release debug install clean metallib check-bib-fixtures
 
 # Build release binary + Metal shaders
 release:
@@ -23,3 +23,8 @@ metallib:
 clean:
 	swift package clean
 	rm -f .build/release/mlx.metallib .build/debug/mlx.metallib
+
+# Verify the three bib-apa-to-*-swift packages' bundled portable-references.bib
+# fixtures haven't drifted apart (macdoc#189)
+check-bib-fixtures:
+	./scripts/tests/check-bib-fixture-consistency.sh
