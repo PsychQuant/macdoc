@@ -187,8 +187,11 @@ extension MacDoc {
             @Option(name: .long, help: "執行模式 (local|ollama)。")
             var mode: String = "local"
 
-            @Option(name: .long, help: "Ollama host (預設 localhost:11434)。")
-            var host: String = "localhost:11434"
+            // 沒有靜態預設值（#218）：nil 代表「使用者沒給」，才能落到
+            // config ocr 設定的 default host profile；若連 config 都沒設，
+            // AIConfig.resolveOCRHost 自己 fallback 到 localhost:11434。
+            @Option(name: .long, help: "Ollama host；可以是 config ocr 的 profile 名稱，或原始位址（沒給時看 config ocr，最後 fallback localhost:11434）。")
+            var host: String?
 
             @Option(name: .long, help: "起始頁碼。")
             var firstPage: Int?
@@ -199,11 +202,40 @@ extension MacDoc {
             @Option(name: .long, help: "頁面渲染 DPI。")
             var pageDPI: Double = 200
 
-            @Option(name: .long, help: "HuggingFace 模型 repo。")
-            var model: String = "EZCon/GLM-OCR-8bit-mlx"
+            // 同樣沒有靜態預設值：--mode local 與 --mode ollama 的「沒給時」
+            // 預設值語意不同（前者是 HuggingFace repo id，後者是 Ollama
+            // model tag），必須先知道有沒有明確給值才能決定套哪一個。
+            @Option(name: .long, help: "模型名稱：--mode local 是 HuggingFace repo（沒給時用 \(Self.defaultLocalModel)），--mode ollama 是 Ollama model tag（沒給時看 config ocr 的 default model）。")
+            var model: String?
 
             @Flag(name: .long, help: "強制啟用 PDFKit 交叉比對（向量 PDF 自動啟用）。")
             var withPdfkit: Bool = false
+
+            @OptionGroup var configOptions: OCRConfigOptions
+
+            /// --mode local 且沒給 --model 時的內建預設值，維持 #218 之前的行為。
+            static let defaultLocalModel = "EZCon/GLM-OCR-8bit-mlx"
+
+            /// #218：--host 的優先序（明確給的 flag > config ocr 的 default host
+            /// profile > 內建預設 localhost:11434）全交給
+            /// `AIConfig.resolveOCRHost`：它已經實作了這個優先序（明確給的名稱
+            /// 先當 profile 名查，查不到就當原始位址；沒給才落到 config 的
+            /// default profile，還是沒有才 fallback localhost:11434）。抽成獨立
+            /// 靜態函式，這樣測試不必真的跑 OCR pipeline就能核對優先序。
+            static func resolveHost(explicit: String?, config: AIConfig) -> String {
+                config.resolveOCRHost(explicit)
+            }
+
+            /// #218：--model 的優先序。--mode local 與 --mode ollama「沒給時」的
+            /// 預設值語意不同（前者是 HuggingFace repo id，後者是 Ollama model
+            /// tag），所以只有 --mode ollama 沒給 --model 時才套用 config ocr 的
+            /// default model；--mode local 沒給時一律用內建的 HuggingFace repo
+            /// 預設值，不受 config 影響（--mode 刻意不接 config，理由見
+            /// `run()` 內的註解）。
+            static func resolveModel(explicit: String?, mode: String, configDefaultModel: String) -> String {
+                if let explicit { return explicit }
+                return mode == "ollama" ? configDefaultModel : defaultLocalModel
+            }
 
             mutating func run() async throws {
                 let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -219,9 +251,25 @@ extension MacDoc {
                     firstPage: firstPage, lastPage: lastPage
                 )
 
+                // #218：優先序是「明確給的 flag > config ocr 設定 > 內建預設」
+                // for --host 和 --model（見 resolveHost / resolveModel 上的註解）。
+                //
+                // --mode／backend 刻意不接 config 的 ocrDefaultBackend：那個
+                // 欄位在 AIConfig 結構本身的預設值就是 "ollama"（不是「使用者
+                // 特意選的」），且無法跟「使用者真的執行過 config ocr
+                // set-backend」區分——任何跑過 `config ai detect` 之類無關指令
+                // 的人都會在 config.json 裡留下這個值。貿然接上會讓完全沒碰過
+                // OCR 設定的人，pdf ocr 的預設模式從本機 local 被靜默換成需要
+                // 外部服務的 ollama。--mode 因此仍必須每次明確指定。
+                let aiConfig = try configOptions.load()
+                let resolvedHost = Self.resolveHost(explicit: host, config: aiConfig)
+                let resolvedModel = Self.resolveModel(
+                    explicit: model, mode: mode, configDefaultModel: aiConfig.ocrDefaultModel
+                )
+
                 let runnerMode: PageOCRRunner.Mode
                 if mode == "ollama" {
-                    runnerMode = .ollama(host: host)
+                    runnerMode = .ollama(host: resolvedHost)
                 } else {
                     runnerMode = .local
                 }
@@ -229,7 +277,7 @@ extension MacDoc {
                 let runner = PageOCRRunner(
                     mode: runnerMode,
                     withPDFKit: withPdfkit,
-                    model: model
+                    model: resolvedModel
                 )
 
                 let results = try await runner.run(
