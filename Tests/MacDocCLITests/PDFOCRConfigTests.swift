@@ -168,6 +168,13 @@ final class PDFOCRHostModelResolutionTests: XCTestCase {
 /// into `PageOCRRunner`'s own `model` property would have had no observable
 /// effect at all. `makeOllamaBackend` is a plain struct construction (no
 /// I/O), so this can be pinned directly without a reachable Ollama server.
+///
+/// Scope, honestly (Codex round-2 finding #2): this only proves the
+/// factory itself passes `model` through. It does not prove `run()` still
+/// calls this factory with the resolved model instead of, say, a literal —
+/// that wiring is a single line at the call site inside `run()`, which
+/// needs a real (or injected) OCR pipeline run to observe and is out of
+/// reach of a fast unit test.
 final class PageOCRRunnerBackendTests: XCTestCase {
     func testOllamaBackendUsesTheGivenModelNotAHardcodedOne() {
         let backend = PageOCRRunner.makeOllamaBackend(host: "h:1234", model: "my-custom-tag")
