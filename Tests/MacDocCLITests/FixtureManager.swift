@@ -149,7 +149,10 @@ enum FixtureManager {
 
     // MARK: - Minimal DOCX Generator
 
-    private static func createMinimalDocx(at url: URL) {
+    /// Internal (not private) so tests that need a private copy — e.g. the
+    /// cli-spec route probe, which runs in parallel with suites rewriting the
+    /// shared `test.docx` — can generate into their own directory.
+    static func createMinimalDocx(at url: URL) {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("docx-gen-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -203,7 +206,8 @@ enum FixtureManager {
 
     // MARK: - Minimal PDF Generator
 
-    private static func createMinimalPDF(at url: URL) {
+    /// Internal for the same reason as `createMinimalDocx(at:)`.
+    static func createMinimalPDF(at url: URL) {
         guard let context = CGContext(url as CFURL, mediaBox: nil, nil) else { return }
 
         var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
