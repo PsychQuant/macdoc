@@ -113,8 +113,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/pdf-to-latex-swift.git",
       "state" : {
-        "revision" : "6f9be91852a652fabf749c1cb9a9c91ff02f48ee",
-        "version" : "0.4.0"
+        "revision" : "7a9131da43df5bf4494cc44ac61bd7a417d82903",
+        "version" : "0.5.0"
       }
     },
     {
