@@ -4,6 +4,17 @@ All notable changes to the che-pptx-mcp plugin shell will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-09-24
+
+### Changed
+
+- `binary_version` 0.3.0 → **0.4.0**（依賴 pptx-swift 0.4.0）：
+  - 含群組的簡報存檔後，群組與其中的形狀、圖片、文字不再消失，巢狀與子座標系都保留；外部連結圖片（`r:link`）保留（PsychQuant/pptx-swift#5）。
+  - 含音訊、影片或換場音效的簡報拒絕存檔（回可讀的錯誤），不再存出播放能力已遺失的檔案；`open_presentation` 開檔時就指出受影響的投影片。
+  - 布林參數（`autosave`）改為嚴格 JSON 型別（PsychQuant/che-pptx-mcp#10）；repo 的 CI 新增 macOS `swift test` 與 actionlint。
+- skill 的誠實邊界同步更新：拿掉「群組存檔會遺失」，補上旋轉／翻轉未建模（PsychQuant/pptx-swift#7）、含媒體的簡報無法存檔、`r:link` 保留、布林參數嚴格化。
+- gitlink `mcp/che-pptx-mcp` 指向 v0.4.0 的 release commit。
+
 ## [0.3.0] - 2026-09-24
 
 ### Changed
