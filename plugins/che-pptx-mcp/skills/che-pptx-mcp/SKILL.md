@@ -61,6 +61,7 @@ Edits stay in memory until `save_presentation` unless the session was opened wit
 | Shapes | `insert_text_shape`, `update_shape_text`, `delete_shape`, `set_shape_position`, `set_shape_size`, `set_shape_fill` |
 | Tables | `get_tables`, `get_table_data`, `insert_table`, `update_cell` |
 | Images | `list_images`, `export_image`, `insert_image`, `delete_image` |
+| Geometry (cm, binary 0.2.0+) | `set_placeholder_geometry`, `place_picture_at`, `fit_picture_to_native_aspect` |
 | Notes/theme | `get_slide_notes`, `add_notes`, `set_transition`, `get_theme`, `get_slide_master`, `get_slide_layouts` |
 | Export | `export_markdown` |
 
@@ -70,8 +71,11 @@ Read tools accept either `source_path` or `doc_id` when their schema offers both
 
 - No PDF export, slide rendering, PNG preview, or PowerPoint/Keynote automation tool is currently exposed. Do not promise a visual preview; use another renderer after saving when one is available.
 - `export_image` returns an embedded image as base64; it does not render a slide.
-- `insert_image`, text-shape placement, position, and size use EMU.
-- Rich text runs, layout-based slide creation, and the #90 centimetre geometry tools are not part of the current published surface.
+- `insert_image`, text-shape placement, `set_shape_position`, and `set_shape_size` use EMU. The three geometry tools (binary 0.2.0+, PsychQuant/macdoc#90) take centimetres and convert to EMU internally (360000 EMU per cm).
+- `set_placeholder_geometry` works on any top-level shape, picture, or table frame; groups and group children are rejected. Off-slide placement is applied and returned with a warning; non-positive sizes are an error before anything changes.
+- `place_picture_at` derives the height from the image's native aspect when `height_cm` is omitted; images ImageIO cannot decode need an explicit `height_cm`. Cropping (`srcRect`) and EXIF orientation are not modelled yet, so fitting a cropped or rotated photo can distort it (PsychQuant/pptx-swift#2).
+- **Saved decks with inserted pictures may need repair in PowerPoint**: the writer does not yet write the slide image relationships for pictures added in a session (`insert_image` and `place_picture_at` alike; PsychQuant/pptx-swift#1). Tell the user before relying on a saved deck with new pictures.
+- Rich text runs and layout-based slide creation are not part of the current published surface.
 
 ## Common mistakes
 
