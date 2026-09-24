@@ -59,7 +59,7 @@ All transform code lives in the `CLISpec` library target (no dependencies beyond
 
 ### Route probe against the binary's convert dispatch
 
-Because the route table is not introspectable, a test checks the overlay's `macdoc convert` conversions against observable behavior: for every source extension and target that appear in those conversions, it runs `macdoc convert` on an empty probe file inside a temporary directory with `PATH=/usr/bin:/bin` (so playwright is never launched). A pair in the overlay SHALL NOT produce the `不支援從` diagnostic; a pair outside it SHALL produce exactly `不支援從 .<ext> 轉換到 <target>`. The `tokens` route (any extension) is excluded; it is covered by `TokenCountCommandTests`.
+Because the route table is not introspectable, a test checks the overlay's `macdoc convert` conversions against observable behavior: for every source extension and target that appear in those conversions or in a fixed probe vocabulary (all extensions and targets known when the vocabulary was last updated, plus candidate formats such as `txt`, `rtf`, `epub`), it runs `macdoc convert` on an empty probe file inside a temporary directory with `PATH=/usr/bin:/bin` (so playwright is never launched). A pair in the overlay SHALL NOT produce the `不支援從` diagnostic; a pair outside it SHALL produce exactly `不支援從 .<ext> 轉換到 <target>`. The `tokens` route (any extension) is excluded; it is covered by `TokenCountCommandTests`.
 
 ### CONVERSIONS.md consistency by label equality
 
@@ -88,7 +88,7 @@ Each overlay conversion carries a `label` equal to the first cell of its row in 
 
 - [ArgumentParser changes the experimental dump format] → The decoder checks `serializationVersion` and fails with a named error; field renames surface as decode failures in `CLISpecBuilderTests` / `CLISpecDriftTests` rather than as a silently thinner spec.
 - [Help-text or default edits make the drift test fail] → Intended: that is the signal the spec must be regenerated. The failure message states the command (`make cli-spec`).
-- [The overlay drifts from the untyped route switch] → The route probe fails in both directions: an overlay route the binary rejects, and a binary route missing from the overlay.
+- [The overlay drifts from the untyped route switch] → The route probe fails in both directions: an overlay route the binary rejects, and a binary route missing from the overlay (verified by mutation: dropping `LaTeX → Word` from the overlay and adding a fake `txt → html` both fail the probe). Residual gap: a new `switch` case for an extension outside the probe vocabulary is caught only by the CONVERSIONS.md check, and only if that file is updated.
 - [A future user-declared `help` subcommand or `--version` flag would be dropped by builtin normalization] → Recorded in the spec; macdoc declares neither today, and such a declaration would collide with ArgumentParser's own builtins anyway.
 - [The root package graph gains a target (shared resource per the #72 routing correction)] → The target is additive, has no dependencies, is linked only by the test target, and leaves Package.resolved untouched.
 - [Record mode could mask drift if set in CI] → Record mode requires the exact value `1`; the Makefile is the only place that sets it.

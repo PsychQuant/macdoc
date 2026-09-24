@@ -225,7 +225,7 @@ The test suite SHALL regenerate the specification from the freshly built binary 
 
 ### Requirement: Convert routes match the binary's dispatch
 
-For the conversions whose `command` is `macdoc convert` and whose `from` is not `"*"`, let E be the union of their source extensions and T the union of their targets. For every pair (e, t) in E × T, running `macdoc convert --to t --output <temp path> <temp dir>/probe.e` on an empty file with `PATH=/usr/bin:/bin` SHALL NOT produce the diagnostic `不支援從` when (e, t) belongs to a listed conversion, and SHALL exit non-zero with stderr containing `不支援從 .e 轉換到 t` when it does not.
+For the conversions whose `command` is `macdoc convert` and whose `from` is not `"*"`, let E be the union of their source extensions with the probe vocabulary's extensions, and T the union of their targets with the probe vocabulary's targets. The probe vocabulary is a fixed list kept in the route-probe test; it SHALL contain every source extension and target used by those conversions (so removing a conversion from the overlay while the binary still dispatches it is detected) plus candidate formats (sources `txt`, `rtf`, `odt`, `epub`, `pptx`, `xlsx`, `csv`, `typ`, `ipynb`, `mdocx`; targets `txt`, `rtf`, `epub`, `tex`, `pptx`, `srt`). For every pair (e, t) in E × T, running `macdoc convert --to t --output <temp path> <temp dir>/probe.e` on an empty file with `PATH=/usr/bin:/bin` SHALL NOT produce the diagnostic `不支援從` when (e, t) belongs to a listed conversion, and SHALL exit non-zero with stderr containing `不支援從 .e 轉換到 t` when it does not.
 
 #### Scenario: Listed and unlisted pairs
 
@@ -242,6 +242,8 @@ For the conversions whose `command` is `macdoc convert` and whose `from` is not 
 | (srt, md) | `不支援從 .srt 轉換到 md` |
 | (tex, html) | `不支援從 .tex 轉換到 html` |
 | (bib, docx) | `不支援從 .bib 轉換到 docx` |
+| (pdf, tex) | `不支援從 .pdf 轉換到 tex` (PDF → LaTeX is the `macdoc pdf` pipeline) |
+| (txt, md) | `不支援從 .txt 轉換到 md` (candidate format) |
 
 ### Requirement: CONVERSIONS.md agrees with the specification
 

@@ -48,9 +48,10 @@ reference-vector 精確值混為一談。
 |  → Target | Markdown | HTML | Word (.docx) | LaTeX | JSON | PDF | SRT |
 |----------:|:--------:|:----:|:------------:|:-----:|:----:|:---:|:---:|
 | **Markdown** | — | ✅ `md-to-html` | ✅ `md-to-word` (OMath opt-in) | · | · | · | · |
-| **HTML** | ✅ `html-to-md` | — | ✅ `html-to-word` | · | · | · | · |
+| **HTML** | ✅ `html-to-md` | — | ✅ `html-to-word` | · | · | ✅ `playwright` | · |
 | **Word (.docx)** | ✅ `word-to-md` | ✅ `word-to-html` | — | · | · | · | · |
 | **PDF** | ✅ `pdf-to-md` | · | ✅ `pdf-to-docx` | ✅ `pdf-to-latex` | · | — | · |
+| **LaTeX (.tex)** | · | · | ✅ `tex-to-docx` | — | · | · | · |
 | **BibLaTeX (.bib)** | ✅ `bib-apa-to-md` | ✅ `bib-apa-to-html` | · | · | ✅ `bib-apa-to-json` | · | · |
 | **SRT** | · | ✅ `srt-to-html` | · | · | · | · | — |
 | **舊版 Note (.note)** | · | ✅ `note-to-html` | · | · | · | ✅ `note-to-pdf` | · |
@@ -71,9 +72,12 @@ Notability 轉換目前支援舊版 plist-based `.note`（`Session.plist`）。�
 | BibLaTeX → APA JSON | `bib-apa-to-json-swift` | ✅ implemented | pre-rendered HTML + anchors |
 | PDF → Markdown | `pdf-to-md-swift` | ✅ implemented | direct path via PDFKit, heading/list heuristics |
 | Word → HTML | `word-to-html-swift` | ✅ implemented | direct path preserves Word semantics |
+| Word → Marker | `marker-word-converter-swift` | ✅ implemented | directory output：Markdown + `_meta.json` + `images/`（`--to marker`） |
 | HTML → Word | `html-to-word-swift` | ✅ implemented | SwiftSoup → OOXML writer |
+| HTML → PDF | `playwright`（外部 CLI） | ✅ implemented | `playwright pdf`，A4；需先 `pip install playwright && playwright install chromium` |
 | Markdown → Word | `md-to-word-swift` | ✅ implemented | swift-markdown AST → OOXML writer; native OMath is opt-in with `macdoc convert input.md --to docx --math omath --output output.docx` (`literal` is the default) |
 | PDF → DOCX | `pdf-to-docx-swift` | ✅ implemented | PDFKit text extraction → OOXML writer |
+| LaTeX → Word | `tex-to-docx-swift` | ✅ implemented | preamble / `\newcommand` 設定映射到 OOXML 樣式（heuristic output） |
 | 舊版 Note → HTML | `note-to-html-swift` | ✅ implemented | plist-based `.note` → interactive HTML player with audio-synced stroke replay |
 | 舊版 Note → PDF | `note-to-pdf-swift` | ✅ implemented | plist-based `.note` → rendered PDF |
 | UTF-8 text → Token count | `token-counter-swift` | ✅ implemented | measurement route；GPT-4o offline，Claude 僅在逐次同意後連線 |
@@ -83,6 +87,14 @@ Notability 轉換目前支援舊版 plist-based `.note`（`Session.plist`）。�
 Native Word OMath applies only to the Markdown → Word (`.docx`) route and must be enabled with `--math omath`. Without `--math`, or with `--math literal`, dollar-delimited formulas remain literal Markdown text.
 
 OMath mode supports the [versioned `latex-math-swift` macro subset](https://github.com/PsychQuant/latex-math-swift#supported-macros): fractions and radicals, subscript and superscript, accents, delimiters, n-ary operators, functions, limits, text, Greek symbols, and common operators. Full TeX support and Pandoc texmath parity are outside this capability. Every other conversion route rejects `--math omath`.
+
+## Machine-readable counterpart
+
+`cli-spec.yaml`（repo 根目錄，`make cli-spec` 產生）的 `conversions` 與上方 Converter Details
+表逐列對應：每一列的第一欄就是一個 conversion 的 `label`。`CLISpecConversionsDocTests`
+檢查兩邊的 label 集合相等，`CLISpecRouteProbeTests` 檢查 `macdoc convert` 實際接受的路由與
+spec 一致；新增路由時三處（`MacDoc+Convert.swift`、`Sources/CLISpec/MacDocCLIMetadata.swift`、
+本檔）一起改。
 
 ## Rules
 
