@@ -124,3 +124,47 @@ DerivedData）。
 binary 路徑（例如某次命令列 `swift build --scratch-path ...` 產出的 binary）。單純從 Xcode 內部
 建置並不會讓這些測試自動找到 Xcode 自己編譯出的 binary——`.build` 與 DerivedData 是兩套互不相通
 的產物目錄。
+
+## `make test-release`（#188 的腳本化替代流程）
+
+```sh
+make test-release
+```
+
+固化上面「release resolver 驗證」段落的既有替代流程：先 `make release`（`swift build -c
+release` + metallib），再以 `swift build -c release --show-bin-path` 解析出的路徑設定
+`MACDOC_TEST_BINARY`，最後對預設 debug XCTest bundle 跑 `swift test --disable-swift-testing`。
+迴歸測試在 `scripts/tests/make-test-release.sh`（用假的 `swift` 指令斷言呼叫序列，秒級執行，
+不需要真的建置）。
+
+### #188 現況（2026-09-24 複驗）：目前無法重現
+
+issue #188 記載的原始重現基準是 macdoc e339b40（未記錄精確 toolchain 版本）。本次在目前
+worktree HEAD（3427eee7）、以下 toolchain 下，**逐字重跑 issue 本文的重現指令**：
+
+```sh
+swift build -c release
+swift test -c release --filter 'CLITestHelperBinaryPathTests|MarkdownOMathRouteTests|WordReverse' -v
+```
+
+Toolchain：`swift-driver version: 1.168.6 Apple Swift version 6.4
+(swiftlang-6.4.0.34.1 clang-2100.3.34.1)`，`Target: arm64-apple-macosx27.2.0`，macOS 27.2
+(26B5086k)。
+
+結果：**完整成功**，未觀察到 `--test-bundle-path` 錯誤——XCTest 26 tests 全部 passed（含
+`CLITestHelperBinaryPathTests`、三組 `WordReverse*Tests`），Swift Testing 17 tests 全部 passed
+（`MarkdownOMathRouteTests` 套件），exit code 0。重跑兩次（一次因外部 `timeout 300` 在連結階段被
+中斷、一次不設 timeout 完整跑到底）結果一致。
+
+另外，依 #188 diagnosis 的靜態假說（testTarget 直接依賴 executableTarget 這種 package-graph
+形狀本身觸發此限制）建了一個最小 throwaway 套件（同形狀：ArgumentParser `@main`
+executableTarget + 直接依賴它的 testTarget，內含 XCTest 與 Swift Testing 各一），分別以
+`ParsableCommand` 與 `AsyncParsableCommand`（macdoc 實際使用的協定）兩種變體在 `-c release` 下跑
+`swift test`，**兩者皆完整通過，同樣未重現**。
+
+**結論**：目前無法確認此限制仍是活的缺陷——可能是自 issue 記錄以來 Xcode/Swift toolchain 已修正
+此行為，也可能原始失敗與某次特定的建置中斷/暫存狀態有關而非決定性的套件結構問題（本次確實有
+一次因外部 timeout 使建置在連結中途被打斷，重跑後才乾淨完成，顯示建置狀態確實可能是變因之一）。
+上方的 `make test-release` 仍保留作為低成本防禦性做法（與本文件既有建議的指令一致），但這不代表
+「已修復」；若之後在其他機器/CI 上重現此錯誤，請補上當時的 `swift --version` 輸出與是否為乾淨
+建置，一併記錄於 #188。
