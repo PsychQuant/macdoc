@@ -148,7 +148,7 @@ final class PDFOCRHostModelResolutionTests: XCTestCase {
     func testOllamaModeLoadsConfigAndAppliesItsSettings() throws {
         var loadWasCalled = false
         let cfg = config(ocrHosts: ["kyle": "10.0.0.5:11434"], ocrDefaultHost: "kyle", ocrDefaultModel: "my-ollama-tag")
-        let (runnerMode, model) = MacDoc.PDF.OCRPages.resolveRunSettings(
+        let (runnerMode, model) = try MacDoc.PDF.OCRPages.resolveRunSettings(
             mode: "ollama", host: nil, model: nil,
             loadConfig: { loadWasCalled = true; return cfg }
         )
