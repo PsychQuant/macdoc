@@ -83,7 +83,7 @@ MCP：`export_script(..., slots: [{name, para_id}])`
 
 四個行為細節：
 
-- **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，段內**所有其餘子內容**——多個 run、書籤錨點、超連結、內容控制項、修訂範圍標記——坍縮成一個 run，格式取文字最長那個 run 的 rPr（含藏在 hyperlink 等 inline 包裝內的 run）。段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式或段內錨點的文件不適用 slot。
+- **替換語意是「坍縮為主 run」**：段落的 pPr（對齊、縮排等段落格式）保留，段內**所有其餘子內容**——多個 run、書籤錨點、超連結、內容控制項、修訂範圍標記——坍縮成一個 run，格式取文字最長那個 run 的 rPr（含藏在 hyperlink 等 inline 包裝內的 run）。**段落裡一個 run 都沒有時**（官方表單的待填欄位常見），改取段落標記的 `<w:pPr><w:rPr>`，與在 Word 空段落打字的行為一致；標記上的修訂資訊（`w:ins`／`w:del`／`w:rPrChange` 等）不會複製過去。這一點需要 CLI **0.9.0+** 或 che-word-mcp **4.1.0+**：較舊的版本填出的 run 沒有 rPr，Word 會套用 docDefaults，例如標楷體的欄位變成新細明體（PsychQuant/macdoc#199）。段內局部格式（例如只有一個字有底線）不會保留。表單填寫場景這正是要的行為；要保留 run 級混排格式或段內錨點的文件不適用 slot。
 - **Default 重播恆 byte-equal**：slot 值等於原文字時完全不動該 part（identity shortcut），所以第 5 步的 `--verify-against` 驗證照常成立，不需要任何新驗證模式。
 - **三個 refuse 情境**：paraId 在 DSL log 與 raw part 都找不到（錯誤訊息指出兩個查找域）；paraId 由超過一個 `<w:p>` 承載（直接拒絕、不猜第一個）；paraId 存在但不在段落上（Word 也會把 `w14:paraId` 寫在表格列 `<w:tr>` 上——錯誤訊息會指出實際承載元素）。填錯官方表單欄位比失敗更糟。
 - **填值後輸出的保證邊界**：`--verify-against` 驗的是「腳本本身」（all-default 重播 byte-equal）；填了新值的輸出**不可能**過全包 byte-equal（值變了）。填值輸出的保證來自 render 本身：替換後會做 XML well-formedness 檢查，失敗直接報錯、不寫檔——render 成功即保證輸出是 well-formed 的 OOXML。要人工核對填了什麼，用 che-word-mcp 的 `compare_documents` 對照原檔。
