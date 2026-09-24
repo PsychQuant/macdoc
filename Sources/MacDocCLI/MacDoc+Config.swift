@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import PDFToLaTeXCore
 
-/// `config ocr` 各子命令與 `pdf ocr`（#218）共用的設定檔路徑選項。
+/// `config ocr`、`config ai` 各子命令與 `pdf ocr`（#218）共用的設定檔路徑選項。
 /// 預設讀寫 `~/.config/macdoc/config.json`；`--config` 可指到別的路徑，
 /// 測試用它指向暫存檔，不必動使用者真正的設定檔。
 struct OCRConfigOptions: ParsableArguments {
@@ -46,14 +46,22 @@ extension MacDoc {
                     abstract: "自動偵測已安裝的 AI CLI 工具，寫入設定檔。"
                 )
 
+                @OptionGroup var options: OCRConfigOptions
+
                 mutating func run() throws {
-                    let config = AIConfig.detect()
-                    try config.save()
+                    // 只覆寫偵測負責的三個欄位；OCR host／model 等其他欄位沿用既有設定（#226）。
+                    // `AIConfig.detect()` 從全新的 `AIConfig()` 開始，直接存檔會把它們打回預設值。
+                    let detected = AIConfig.detect()
+                    var config = try options.load()
+                    config.available = detected.available
+                    config.transcription = detected.transcription
+                    config.agent = detected.agent
+                    try options.save(config)
                     print("偵測完成:")
                     print("  available: \(config.available.joined(separator: ", "))")
                     print("  transcription: \(config.transcription)")
                     print("  agent: \(config.agent)")
-                    print("  config: \(AIConfig.defaultConfigURL.path)")
+                    print("  config: \(options.configURL.path)")
                 }
             }
 
@@ -64,12 +72,14 @@ extension MacDoc {
                     abstract: "顯示目前的 AI 設定。"
                 )
 
+                @OptionGroup var options: OCRConfigOptions
+
                 mutating func run() throws {
-                    let config = try AIConfig.load()
+                    let config = try options.load()
                     print("available: \(config.available.joined(separator: ", "))")
                     print("transcription: \(config.transcription)")
                     print("agent: \(config.agent)")
-                    print("config: \(AIConfig.defaultConfigURL.path)")
+                    print("config: \(options.configURL.path)")
                 }
             }
 
@@ -86,8 +96,10 @@ extension MacDoc {
                 @Argument(help: "設定值（codex、claude 或 gemini）。")
                 var value: String
 
+                @OptionGroup var options: OCRConfigOptions
+
                 mutating func run() throws {
-                    var config = try AIConfig.load()
+                    var config = try options.load()
 
                     switch key {
                     case "transcription":
@@ -98,7 +110,7 @@ extension MacDoc {
                         throw ValidationError("未知的設定鍵: \(key)。可用: transcription, agent")
                     }
 
-                    try config.save()
+                    try options.save(config)
                     print("已設定 \(key) = \(value)")
                 }
             }
