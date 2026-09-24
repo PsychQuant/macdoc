@@ -8,6 +8,7 @@
 cd reference/
 git clone https://github.com/dolanmiu/docx.git docx-js
 git clone https://github.com/python-openxml/python-docx.git
+git clone https://github.com/scanny/python-pptx.git
 git clone https://github.com/ml-explore/mlx-swift-lm.git
 git clone https://github.com/jgm/pandoc.git
 git clone https://github.com/apple/swift-argument-parser.git
@@ -21,6 +22,7 @@ git clone --depth 1 https://github.com/genspark-ai/genoffice.git   # 43M,只讀 
 |------|------|----------|------|
 | `docx-js/` | git repo | https://github.com/dolanmiu/docx | Node.js OOXML 函式庫。`word-builder-swift` 是其 1:1 Swift 移植,寫新 API 前先看 JS 對應實作。**典範:typed builder** |
 | `python-docx/` | git repo | https://github.com/python-openxml/python-docx | Python + lxml 的 OOXML 函式庫。**典範:tree-backed wrapper**——每個 `Document` / `Paragraph` / `Run` 包一個 lxml `_Element`,typed accessor 讀寫該 element。`word-aligned-state-sync` 的 Phase 1 (typed views as tree projections) 直接對照它。詳見 `docs/docx-libraries-comparison.md` |
+| `python-pptx/` | git repo | https://github.com/scanny/python-pptx | Python 的 PresentationML 函式庫。只作為 **API 形狀參考**：`Cm`／`Emu`／`Length` 這類量測單位 util 的設計，對應 `pptx-swift` 的公分幾何模組（v0.2.0+，PsychQuant/macdoc#90）。**不移植任何程式碼** |
 | `mlx-swift-lm/` | git repo | https://github.com/ml-explore/mlx-swift-lm | Apple MLX Swift LLM runtime。`pdf-to-latex-swift` Phase 1 的 local GLM-OCR backend 用它載模型 |
 | `pandoc/` | git repo | https://github.com/jgm/pandoc | Haskell 文件轉換工具。macdoc 不依賴 pandoc,純粹參考它怎麼處理邊界情況(複雜 table、field、footnote 跨段落) |
 | `genoffice/` | git repo (shallow) | https://github.com/genspark-ai/genoffice | Genspark 的 AI-native office suite(Electron GUI)。**不是競品**——它沒有 MCP / CLI / public API,AI 綁自家雲端帳號;但 `packages/` 下的 engine 是純 TS、無 Electron 依賴,是**唯一同時涵蓋 docx + xlsx + pptx + pdf 的現代開源對照組**。看三件事:xlsx 缺口、patch-narrowly round-trip、pptx 功能廣度。深入分析見 `docs/genoffice-roundtrip-comparison.md`。Apache-2.0(`ee/` 另授權) |
