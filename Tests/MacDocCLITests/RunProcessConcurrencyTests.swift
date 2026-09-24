@@ -9,24 +9,29 @@ import Testing
 /// 這裡刻意開出比 pool 寬度多好幾倍的並行呼叫，逼出那個狀態。
 @Suite("runProcess under a saturated cooperative pool")
 struct RunProcessConcurrencyTests {
-    @Test("many concurrent runProcess calls all finish", .timeLimit(.minutes(1)))
+    /// 子行程先睡 1 秒：在任何一個子行程結束之前，所有 task 都已經進入 `runProcess` 同步等待，
+    /// cooperative pool 因此確實飽和（只是送出很多 task 不保證這一點）。每個子行程另外往 stderr
+    /// 寫超過 pipe 容量的 100 KB，兩個 pipe 都必須被完整讀到，而且不能因背壓卡住。
+    @Test("many concurrent runProcess calls all finish with both pipes fully read", .timeLimit(.minutes(1)))
     func concurrentCallsFinish() async throws {
         let count = ProcessInfo.processInfo.activeProcessorCount * 3
-        let outputs = try await withThrowingTaskGroup(of: String.self) { group in
+        let stderrBytes = 100_000
+        let outputs = try await withThrowingTaskGroup(of: (String, Int).self) { group in
             for index in 0..<count {
                 group.addTask {
                     let result = try CLITestHelper.runProcess(
                         executableURL: URL(fileURLWithPath: "/bin/sh"),
-                        arguments: ["-c", "sleep 0.2; echo \(index)"],
+                        arguments: ["-c", "sleep 1; printf '%s' \(index); head -c \(stderrBytes) /dev/zero | tr '\\0' x >&2"],
                         currentDirectory: nil,
                         timeout: 30)
-                    return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return (result.stdout, result.stderr.utf8.count)
                 }
             }
-            var collected: [String] = []
+            var collected: [(String, Int)] = []
             for try await output in group { collected.append(output) }
             return collected
         }
-        #expect(Set(outputs) == Set((0..<count).map(String.init)))
+        #expect(Set(outputs.map(\.0)) == Set((0..<count).map(String.init)), "stdout 必須逐字完整，不做任何裁切")
+        #expect(outputs.allSatisfy { $0.1 == stderrBytes }, "stderr 必須完整讀到 \(stderrBytes) bytes")
     }
 }
