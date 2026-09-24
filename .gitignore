@@ -18,118 +18,39 @@ xcuserdata/
 *.code-workspace
 
 # Local packages & MCP (separate git repos)
+#
+# packages/* is a single-level glob: it only matches packages/<pkg> itself,
+# never anything below it. Once a package directory is re-included with
+# `!packages/<pkg>/`, git recurses into it and everything below is tracked
+# by default — no per-file/per-subdirectory `!` exception is needed, or has
+# any effect, inside an already-opened package (#191). The generic .build/,
+# .swiftpm/, DerivedData/, .DS_Store rules above still apply at any depth,
+# so build artifacts stay ignored without extra rules here.
+#
+# Do NOT widen a line to `!packages/<pkg>/**` — that unconditionally
+# re-includes everything below the package root, including .build/ etc.,
+# for any package that doesn't ship its own nested .gitignore.
+#
+# New package that should be tracked: add one line, `!packages/<new-pkg>/`.
+# Package that stays local-only: add no line; packages/* keeps it ignored.
 packages/*
-!packages/token-counter-swift/
-!packages/token-counter-swift/Package.swift
-!packages/token-counter-swift/Sources/
-!packages/token-counter-swift/Sources/TokenCounter/
-!packages/token-counter-swift/Sources/TokenCounter/**
-!packages/token-counter-swift/Tests/
-!packages/token-counter-swift/Tests/TokenCounterTests/
-!packages/token-counter-swift/Tests/TokenCounterTests/**
-!packages/srt-to-html-swift/
-!packages/srt-to-html-swift/Package.swift
-!packages/srt-to-html-swift/Sources/
-!packages/srt-to-html-swift/Sources/SRTToHTML/
-!packages/srt-to-html-swift/Sources/SRTToHTML/SRTConverter.swift
-!packages/srt-to-html-swift/Tests/
-!packages/srt-to-html-swift/Tests/SRTToHTMLTests/
-!packages/srt-to-html-swift/Tests/SRTToHTMLTests/SRTConverterTests.swift
-!packages/md-to-html-swift/
-!packages/md-to-html-swift/Package.swift
-!packages/md-to-html-swift/Sources/
-!packages/md-to-html-swift/Sources/MDToHTML/
-!packages/md-to-html-swift/Sources/MDToHTML/MarkdownConverter.swift
-!packages/md-to-html-swift/Tests/
-!packages/md-to-html-swift/Tests/MDToHTMLTests/
-!packages/md-to-html-swift/Tests/MDToHTMLTests/MarkdownConverterTests.swift
-!packages/docx-workflow-swift/
-!packages/docx-workflow-swift/Package.swift
-!packages/docx-workflow-swift/README.md
-!packages/docx-workflow-swift/CHANGELOG.md
-!packages/docx-workflow-swift/Sources/
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/DocxWorkflowLib.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/Manifest.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/Anchor.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/VerifyAssertions.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/AnchorResolver.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/ParagraphSnapshot.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/EditPlanner.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/Executor.swift
-!packages/docx-workflow-swift/Sources/DocxWorkflowLib/Verifier.swift
-!packages/docx-workflow-swift/Tests/
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ManifestDecodingTests.swift
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorDecodingTests.swift
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifyAssertionsDecodingTests.swift
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/AnchorResolverTests.swift
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/ExecutorTests.swift
-!packages/docx-workflow-swift/Tests/DocxWorkflowLibTests/VerifierTests.swift
-!packages/html-to-md-swift/
-!packages/html-to-md-swift/Package.swift
-!packages/html-to-md-swift/Sources/
-!packages/html-to-md-swift/Sources/HTMLToMD/
-!packages/html-to-md-swift/Sources/HTMLToMD/HTMLConverter.swift
-!packages/html-to-md-swift/Tests/
-!packages/html-to-md-swift/Tests/HTMLToMDTests/
-!packages/html-to-md-swift/Tests/HTMLToMDTests/HTMLConverterTests.swift
-!packages/marker-word-converter-swift/
-!packages/marker-word-converter-swift/Package.swift
-!packages/marker-word-converter-swift/Sources/
-!packages/marker-word-converter-swift/Sources/MarkerWordConverter/
-!packages/marker-word-converter-swift/Sources/MarkerWordConverter/MarkerWordConverter.swift
-!packages/tex-to-docx-swift/
-!packages/tex-to-docx-swift/Package.swift
-!packages/tex-to-docx-swift/Sources/
-!packages/tex-to-docx-swift/Sources/TeXToDOCX/
-!packages/tex-to-docx-swift/Sources/TeXToDOCX/TeXToDOCXConverter.swift
-!packages/tex-to-docx-swift/Sources/TeXToDOCX/TeXWordBuilder.swift
-!packages/tex-to-docx-swift/Sources/TeXToDOCX/TeXPreambleParser.swift
-!packages/tex-to-docx-swift/Tests/
-!packages/tex-to-docx-swift/Tests/TeXToDOCXTests/
-!packages/bib-apa-to-html-swift/
-!packages/bib-apa-to-html-swift/Package.swift
-!packages/bib-apa-to-html-swift/Sources/
-!packages/bib-apa-to-html-swift/Sources/BibAPAToHTML/
-!packages/bib-apa-to-html-swift/Sources/BibAPAToHTML/APACSS.swift
-!packages/bib-apa-to-html-swift/Sources/BibAPAToHTML/BibToAPAHTMLFormatter.swift
-!packages/bib-apa-to-html-swift/Sources/BibAPAToHTML/HTMLRenderer.swift
-!packages/bib-apa-to-html-swift/Sources/BibAPAToHTML/Reexports.swift
-!packages/bib-apa-to-html-swift/Tests/
-!packages/bib-apa-to-html-swift/Tests/BibAPAToHTMLTests/
-!packages/bib-apa-to-html-swift/Tests/BibAPAToHTMLTests/HTMLRendererTests.swift
-!packages/bib-apa-to-json-swift/
-!packages/bib-apa-to-json-swift/Package.swift
-!packages/bib-apa-to-json-swift/Sources/
-!packages/bib-apa-to-json-swift/Sources/BibAPAToJSON/
-!packages/bib-apa-to-json-swift/Sources/BibAPAToJSON/BibToAPAJSONFormatter.swift
-!packages/bib-apa-to-json-swift/Tests/
-!packages/bib-apa-to-json-swift/Tests/BibAPAToJSONTests/
-!packages/bib-apa-to-json-swift/Tests/BibAPAToJSONTests/JSONFormatterTests.swift
-!packages/bib-apa-to-md-swift/
-!packages/bib-apa-to-md-swift/Package.swift
-!packages/bib-apa-to-md-swift/Sources/
-!packages/bib-apa-to-md-swift/Sources/BibAPAToMD/
-!packages/bib-apa-to-md-swift/Sources/BibAPAToMD/BibToAPAFormatter.swift
-!packages/bib-apa-to-md-swift/Sources/BibAPAToMD/MarkdownRenderer.swift
-!packages/bib-apa-to-md-swift/Tests/
-!packages/bib-apa-to-md-swift/Tests/BibAPAToMDTests/
-!packages/bib-apa-to-md-swift/Tests/BibAPAToMDTests/BibToAPAFormatterTests.swift
-!packages/bib-apa-to-md-swift/Tests/BibAPAToMDTests/IntegrationTests.swift
 !packages/bib-apa-swift/
-!packages/bib-apa-swift/Package.swift
-!packages/bib-apa-swift/Sources/
-!packages/bib-apa-swift/Sources/BibAPA/
-!packages/bib-apa-swift/Sources/BibAPA/APAReferenceRenderer.swift
-!packages/bib-apa-swift/Sources/BibAPA/APAStyler.swift
-!packages/bib-apa-swift/Sources/BibAPA/APAStylerHelpers.swift
-!packages/bib-apa-swift/Sources/BibAPA/Models/
-!packages/bib-apa-swift/Sources/BibAPA/Models/APAReference.swift
-!packages/bib-apa-swift/Sources/BibAPA/Models/TextSegment.swift
-!packages/bib-apa-swift/Tests/
-!packages/bib-apa-swift/Tests/BibAPATests/
-!packages/bib-apa-swift/Tests/BibAPATests/APAStylerTests.swift
+!packages/bib-apa-to-html-swift/
+!packages/bib-apa-to-json-swift/
+!packages/bib-apa-to-md-swift/
+!packages/biblatex-apa-swift/
+!packages/docx-workflow-swift/
+!packages/html-to-md-swift/
+!packages/html-to-word-swift/
+!packages/marker-word-converter-swift/
+!packages/md-to-html-swift/
+!packages/md-to-word-swift/
+!packages/pdf-to-docx-swift/
+!packages/pdf-to-md-swift/
+!packages/srt-to-html-swift/
+!packages/tex-to-docx-swift/
+!packages/token-counter-swift/
+!packages/word-to-html-swift/
 
 # Local test files (personal .note, .pptx, .docx etc.)
 test-files/
