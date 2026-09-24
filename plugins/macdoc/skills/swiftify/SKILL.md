@@ -40,7 +40,7 @@ description: |
 macdoc word reverse form.docx --to-mdocx form.mdocx.swift
 ```
 
-MCP：`export_script(source_path, output_path)`
+MCP：`export_script(source_path, output_path)`；段落模式是 `export_script(source_path, output_path, paragraphs_only: true)`（che-word-mcp 4.3.0+），對應 CLI 的 `--paragraphs-only`，代價相同（見下方「paragraphs-only」一段）。
 
 ### 2. Coverage — 判讀落在哪條 channel（**不要跳過這步**）
 
@@ -48,7 +48,7 @@ MCP：`export_script(source_path, output_path)`
 macdoc word reverse form.docx --to-mdocx form.mdocx.swift --coverage
 ```
 
-MCP：`get_script_coverage(source_path)`
+MCP：`get_script_coverage(source_path)`。che-word-mcp 4.3.0+ 的每個 raw part 都帶 `raw_reason`：CLI 只具名 `paragraph-no-paraId`，MCP 會列出每一個 part 的根因。
 
 上面這種同時提供 `--to-mdocx` 的 coverage 形式 CLI 0.7.0 起就能用。只給 `--coverage`、
 不產出腳本的 coverage-only 形式，以及報告中具名的 `paragraph-no-paraId` 說明，需要 CLI
@@ -128,7 +128,8 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 以下是**非窮舉**的常見情況與處置表，不是 CLI 會逐項列出的 raw 根因目錄。CLI 的具名提示
 （0.8.0+）只會指出 `word/document.xml = paragraph-no-paraId`；`table`、`byte-mismatch`、
 `parse-error` 是用來說明內部判定與處置差異的分類，不會各自印在 CLI 報告中。只看到
-`Aggregate: 0.0% DSL` 也無法反推出是哪一類原因。
+`Aggregate: 0.0% DSL` 也無法反推出是哪一類原因。MCP 的 `raw_reason`（che-word-mcp 4.3.0+）則**會**把這些內部分類原樣列出；
+它的值不是封閉列舉，讀到表外的值時照「根因不明」處理。
 
 | 根因／模式 | 可讀 DSL／slot | 保真與限制 |
 |---|---|---|
@@ -170,7 +171,7 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 - full-fidelity 能將 canonical minimal table 表成 `appendTable`；但整個 `document.xml` 是否升級為 DSL，仍取決於所有內容都可表示且試重建 byte-equal。rich／foreign-form table 不受支援時，才可能以 `table` 原因讓整個 part 落 raw。
 - 對確實落 raw 的文件，腳本仍能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）。
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條大型單行重新 escape，diff 顯示「一行變了」。
-- **`--paragraphs-only` 目前是 CLI-only**：che-word-mcp 的 `export_script`／`get_script_coverage` 沒有對應的參數或工具，也不會像 CLI 0.9.0+ 那樣在回應裡具名 `paragraph-no-paraId`（見 che-word-mcp skill「產物可讀嗎？先看 coverage」一節）。純走 MCP、碰到 `word/document.xml` 落 raw 的呼叫端，目前判定根因與改走段落 DSL 這條備援路徑都只能透過 macdoc CLI 完成——上面「每一步都列 CLI 與 MCP 兩個入口」的通則在這個備援路徑上不成立，是已知落差而非尚未寫進文件。
+- **MCP 的對等路徑**（che-word-mcp 4.3.0+）：`export_script` 帶 `paragraphs_only: true` 與 CLI `--paragraphs-only` 寫出的腳本逐位元組相同（由 che-word-mcp 的 gated parity 測試比對）。**唯一例外**是來源旁有 oplog sidecar：MCP 會拒絕，CLI 會改匯出 sidecar。另外 MCP 的 `export_script` 會直接覆寫既有的 `output_path`，CLI 預設拒絕。
 
 只有在檢視文件來源與實際內容、確認唯一根因是 `word/document.xml = paragraph-no-paraId`，而且接受只保留段落時，才可明確改走 paragraphs-only。不能只由 CLI 的 raw／0% 摘要推定；即使 CLI 具名提示該原因，也要確認非段落內容可捨棄。無法確認時保留 full-fidelity，不把其他原因類推成 lossy 模式。診斷與相容路徑依 CLI 版本不同：
 
@@ -188,9 +189,11 @@ macdoc word reverse legacy.docx --paragraphs-only \
   --slot body=p1 --to-mdocx slot.mdocx.swift
 ```
 
-paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`，也不保證版面或格式完整。以上兩個輸出路徑不同，只能避免兩條範例彼此撞檔；重跑其中任一條仍會被預設拒絕，必須換新輸出路徑，或先取得使用者同意才加 `--force` 覆寫。
+MCP 的對應兩步（che-word-mcp 4.3.0+）：先 `get_script_coverage(source_path)` 確認 `word/document.xml` 的 `raw_reason` 是 `paragraph-no-paraId`，再 `export_script(source_path, output_path, paragraphs_only: true)`；讀過腳本、確認實際段落 ID 之後才加 `slots`。
 
-> **版本對照**：`--paragraphs-only` 與帶 `--to-mdocx` 的 coverage 是 CLI 0.7.0 起就有的功能；coverage-only 與報告中具名的 `paragraph-no-paraId` 說明需要 **0.8.0+**（#176、#177）；預設 reverse（不帶 `--coverage`）偵測到同一原因時寫入 stderr 的提示需要 **0.9.0+**（#181）。這些提示都不代表 CLI 會逐項印出其他內部分類。
+paragraphs-only 產物省略其他內容，不應承諾對原檔通過 `--verify-against`（MCP 的 `verify_byte_equal_against` 同理），也不保證版面或格式完整。以上兩個輸出路徑不同，只能避免兩條範例彼此撞檔；重跑其中任一條仍會被預設拒絕，必須換新輸出路徑，或先取得使用者同意才加 `--force` 覆寫。
+
+> **版本對照**：`--paragraphs-only` 與帶 `--to-mdocx` 的 coverage 是 CLI 0.7.0 起就有的功能；coverage-only 與報告中具名的 `paragraph-no-paraId` 說明需要 **0.8.0+**（#176、#177）；預設 reverse（不帶 `--coverage`）偵測到同一原因時寫入 stderr 的提示需要 **0.9.0+**（#181）。這些提示都不代表 CLI 會逐項印出其他內部分類。MCP 端：`get_script_coverage` 的 `raw_reason` 與 `export_script` 的 `paragraphs_only` 需要 **che-word-mcp 4.3.0+**。
 
 若經核心分析確認內部分類是 `table`，表示表格超出目前可轉成 `appendTable` 的 canonical minimal shape；保留完整內容時該 part 走 raw，而 `--paragraphs-only` 會直接省略表格。即使表格符合 canonical minimal shape，也必須等整個 part 通過試重建，才能確認走 DSL。若分析確認是 byte-mismatch 或 parse-error，則須依實際重建差異或解析錯誤調查；不能把它們一概歸因於表格，也不能只靠 CLI 的 0.0% 判定。
 

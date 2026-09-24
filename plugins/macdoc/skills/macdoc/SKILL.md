@@ -58,7 +58,7 @@ pip install playwright && playwright install chromium
 | `--output <path>` | 輸出檔案路徑 |
 | `--full` | 輸出完整 HTML 文件（含 `<head>`），不只是 fragment |
 | `--css light` | SRT 轉 HTML 時用淺色主題 |
-| `--css dark` | SRT 轉 HTML 時用深色主題 |
+| `--css dark` | SRT 轉 HTML 時用深色主題（SRT／note 不帶 `--css` 時的預設，CLI 0.11.0+；bib 不帶時是 `web`）|
 | `--hard-breaks` | 軟換行視為硬換行 |
 | `--frontmatter` | 包含 YAML frontmatter |
 | `--html-extensions` | MD 中保留 `<u>/<sup>/<sub>/<mark>` |
@@ -126,7 +126,7 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 |------|------|------|
 | `--coverage` | reverse | 印 per-part 的 DSL/raw 覆蓋率報告 |
 | `--slot <name>=<paraId>` | reverse | 指定段落成為腳本的具名參數（strict，不推斷）。文件落在 raw channel 時（含複雜表格的官方表單常見；以 `--coverage` 或腳本裡的 `// @slot-raw` 為準），slot **需要 0.8.0+**：0.7.0 的 render 不報錯，而是輸出沒填值的模板（見 swiftify skill）|
-| `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）|
+| `--paragraphs-only` | reverse | 退回舊的段落反向（**無** byte-equal 保證）；MCP 對應 `export_script` 的 `paragraphs_only`（che-word-mcp 4.3.0+）|
 | `--from-oplog` | reverse | 強制用 oplog sidecar |
 | `--verify-against <docx>` | render | 對照參考檔做 byte-equal 驗證；**不給就不驗** |
 | `--profile inherit\|official` | render | 驗證與發布前套用文件格式 profile；**不給就不讀設定檔、照腳本重播**（CLI 0.9.0+）|
@@ -192,6 +192,8 @@ macdoc config ai set agent claude        # 設定 agentic 後端
 | `set-model <model>` | 設定預設模型（如 glm-ocr） |
 | `set-backend <ollama\|mlx>` | 設定預設後端 |
 
+**誰會讀這些設定**（CLI 0.11.0+）：`pdf ocr --mode ollama` 沒給 `--host`／`--model` 時，改用這裡的預設 host 與 model（優先序：明確的 flag > `config ocr` > 內建預設）。`--mode local` 不讀；`set-backend` 目前沒有任何命令讀取，`pdf ocr` 的 `--mode` 仍要明確指定。0.10.0 以前 `pdf ocr` 完全不讀這些設定。
+
 ```bash
 # 完整範例：設定 kyle 遠端 + local 兩個 profile
 ssh -fN -L 11435:localhost:11434 kyle  # 建 tunnel
@@ -251,6 +253,7 @@ macdoc config document gc --force                             # 實際刪除；�
 
 ## 版本紀錄
 
+- **1.8.0**：`pdf ocr --mode ollama` 會讀 `config ocr` 的 host／model；SRT／note 轉 HTML 不帶 `--css` 時預設 `dark`；`pdf normalize` 會依 PDF 的 page labels 還原頁碼、為偶數頁起始的章節加 `openany`、圖寬改為原書絕對尺寸（需要 CLI 0.11.0）
 - **1.7.0**：新增 `config document gc`（清理未被引用的格式快照）；`pdf normalize` 會還原原書頁碼與圖片比例並印出摘要（需要 CLI 0.10.0）
 - **1.6.0**：新增 `config document`（文件格式 profile）與 `convert` / `word render` 的 `--profile`（需要 CLI 0.9.0）
 - **1.1.0**：新增 `config ocr` 子命令組,支援具名 host profile(`--host kyle` 等),預設 host/model 可存 config
