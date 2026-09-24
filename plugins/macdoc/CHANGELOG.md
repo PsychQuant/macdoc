@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.7.0] - 2026-09-24
+
+### Added
+
+- **`macdoc config document gc`**（PsychQuant/macdoc#194）：列出 `profiles/` 裡未被 `officialSnapshot` 引用的舊格式快照。
+  預設只預覽，`--force` 才刪除；被引用的快照與其他檔案永遠不碰，設定檔損毀時先失敗。
+- **`macdoc pdf normalize` 還原原書頁碼與圖片比例**（PsychQuant/macdoc#9、#10）：依 page marker 插入
+  `\setcounter{page}{N}`，依 figure bbox 補上 `width=<w>\textwidth`，並印出摘要；無法處理的頁或圖逐筆列出原因。
+
+### Changed
+
+- CLI binary **0.9.0 → 0.10.0**（ooxml-swift 3.10.0、pdf-to-latex-swift 0.3.0；兩個 config.json 寫入者共用跨程序鎖，PsychQuant/macdoc#204）。
+
 ## [1.6.2] - 2026-09-24
 
 ### Added

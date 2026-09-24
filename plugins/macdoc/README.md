@@ -8,6 +8,7 @@ macdoc#185 新增 CLI 與 Word MCP（che-word-mcp 4.1.0+）共用的文件格式
 macdoc config document show
 macdoc config document import-official --template /path/to/Normal.dotm
 macdoc config document set-default official
+macdoc config document gc            # 預覽未被引用的舊快照；加 --force 才刪（CLI 0.10.0+）
 macdoc convert --to docx notes.md --profile inherit --output notes.docx
 macdoc word render notes.mdocx.swift --to-docx result.docx --profile official
 ```
