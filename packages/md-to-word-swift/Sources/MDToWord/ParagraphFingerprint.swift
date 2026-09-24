@@ -37,7 +37,7 @@ import Foundation
 ///
 /// - `compute(_:)` ("loose") tolerates markdown-round-trip noise —
 ///   appropriate for `Tier3MetadataRestorer`'s paragraph-*level* gate
-///   (alignment/spacing/etc., none of which depend on character offsets).
+///   (alignment/spacing/etc., none of which depend on scalar offsets).
 /// - `computeExact(_:)` requires byte-for-byte identical text. This is the
 ///   ONLY fingerprint `Tier3MetadataRestorer` may gate per-run restoration
 ///   on: the loose fingerprint's normalization steps are length-changing
