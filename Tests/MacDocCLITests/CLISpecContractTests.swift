@@ -234,5 +234,7 @@ struct CLISpecContractTests {
         let tokens = try conversion("UTF-8 text → Token count")
         #expect(tokens.from == ["*"] && tokens.to == "tokens" && tokens.dependencies == ["anthropic-api"])
         #expect(tokens.options == ["--model", "--allow-network"])
+        // Output behavior is expressed by `output`, never by listing these.
+        #expect(conversions.allSatisfy { !$0.options.contains("--output") && !$0.options.contains("--stdout") })
     }
 }

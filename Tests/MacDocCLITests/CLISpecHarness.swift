@@ -33,52 +33,60 @@ enum CLISpecHarness {
 
     private static let cachedInputs = Result<Inputs, Error> {
         let binary = URL(fileURLWithPath: try CLITestHelper.binaryPath)
-        let dump = try runDraining(binary, ["--experimental-dump-help"])
-        let version = try runDraining(binary, ["--version"])
+        let dump = try runCapturingFiles(binary, ["--experimental-dump-help"])
+        let version = try runCapturingFiles(binary, ["--version"])
         return Inputs(dumpHelpJSON: dump, versionOutput: String(decoding: version, as: UTF8.self))
     }
 
     /// Runs the binary and returns its stdout bytes, failing on a non-zero
-    /// exit. Unlike `CLITestHelper.runProcess` — which waits for the child to
-    /// exit before draining its pipes, so a child writing more than one pipe
-    /// buffer (the dump is ~180 KB) blocks until the timeout kills it — this
-    /// drains stdout and stderr while the child runs.
-    private static func runDraining(_ binary: URL, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
+    /// exit. stdout and stderr go to temporary files, not pipes:
+    /// `CLITestHelper.runProcess` waits for the child to exit before draining
+    /// its pipes, so a child writing more than one pipe buffer (the dump is
+    /// ~180 KB) blocks until the timeout kills it; and a pipe's EOF also
+    /// waits for any concurrently spawned test process that inherited its
+    /// write end (observed as a ~30 s stall while the route probe runs in
+    /// parallel). A file has neither problem: read it after the exit.
+    private static func runCapturingFiles(_ binary: URL, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macdoc-cli-spec-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stdoutURL = directory.appendingPathComponent("stdout")
+        let stderrURL = directory.appendingPathComponent("stderr")
+        FileManager.default.createFile(atPath: stdoutURL.path, contents: nil)
+        FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
+        let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
+        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        defer {
+            try? stdoutHandle.close()
+            try? stderrHandle.close()
+        }
+
         let process = Process()
         process.executableURL = binary
         process.arguments = arguments
         process.currentDirectoryURL = CLITestHelper.repoRoot
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        process.standardOutput = stdoutHandle
+        process.standardError = stderrHandle
         try process.run()
 
-        let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog)
-
-        let stderrBox = DataBox()
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global().async {
-            stderrBox.data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            group.leave()
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
         }
-        let stdout = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        group.wait()
+        if process.isRunning {
+            process.terminate()
+        }
         process.waitUntilExit()
-        watchdog.cancel()
 
+        let stdout = try Data(contentsOf: stdoutURL)
         guard process.terminationStatus == 0 else {
+            let stderr = (try? Data(contentsOf: stderrURL)) ?? Data()
             throw HarnessError.commandFailed(
                 arguments.joined(separator: " "), process.terminationStatus,
-                String(decoding: stderrBox.data, as: UTF8.self))
+                String(decoding: stderr, as: UTF8.self))
         }
         return stdout
-    }
-
-    private final class DataBox: @unchecked Sendable {
-        var data = Data()
     }
 
     /// The full `cli-spec.yaml` text for the current binary and overlay.

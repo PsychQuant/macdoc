@@ -141,6 +141,12 @@ struct CLISpecBuilderTests {
         let plain = try generate()
         let withExtra = try generate(Self.dumpJSON(alphaExtraField: #","futureField":true"#))
         #expect(plain == withExtra)
+        // Every command and argument object (all carry "shouldDisplay"), plus the top level.
+        let everywhere = Self.dumpJSON()
+            .replacingOccurrences(of: #""shouldDisplay":"#, with: #""futureField":{"nested":[1,2]},"shouldDisplay":"#)
+            .replacingOccurrences(of: #"{"serializationVersion":0,"#, with: #"{"serializationVersion":0,"futureTop":"x","#)
+        #expect(everywhere != Self.dumpJSON())
+        #expect(try generate(everywhere) == plain)
     }
 
     @Test("parsing strategies are re-spelled into project names", arguments: [
