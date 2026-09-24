@@ -148,7 +148,9 @@ export_all_images(doc_id, output_dir)
 
 ### Tables (v3.11.0+)
 
-`insert_table`, `get_tables`, `update_cell`, `add_row_to_table`, `delete_row_from_table`, `add_column_to_table`, `delete_column_from_table`, `merge_cells`, `set_cell_width`, `set_cell_vertical_alignment`, `set_row_height`, `set_header_row`, `set_table_alignment`, `set_table_style`, `delete_table`
+`insert_table`, `get_tables`, `update_cell`, `get_cell_paragraphs`, `update_cell_paragraph`, `add_row_to_table`, `delete_row_from_table`, `add_column_to_table`, `delete_column_from_table`, `merge_cells`, `set_cell_width`, `set_cell_vertical_alignment`, `set_row_height`, `set_header_row`, `set_table_alignment`, `set_table_style`, `delete_table`
+
+**多段落儲存格（4.2.0+）**：`update_cell` 會把整格 N 段塌成一段；官方表單的 checkbox 欄（`□(1)`／`□(2)`…）改用 `get_cell_paragraphs` 列出 `[k] 文字`，再以 `update_cell_paragraph`（`table_index`／`row`／`col`／`paragraph_index`，皆從 0 起算）只改那一段。同格其他段落、已建模的段落格式與其他列的同字串都不動；座標越界時失敗，文件不變。`replace_text` 是全域取代，定位字串不唯一時不要用它填表。
 
 ### Hyperlinks (v3.11.0+)
 

@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.2.0] - 2026-09-24
+
+### Added
+
+- **表格儲存格逐段定址：`get_cell_paragraphs`、`update_cell_paragraph`**（PsychQuant/macdoc#156、PsychQuant/che-word-mcp#194）。
+  多段落的儲存格（官方表單的 checkbox 欄）過去只能整格覆寫（塌成一段）或全域取代（誤改其他列）。現在可以列出
+  `[k] 文字`，只改第 k 段；座標越界時失敗且文件不變。skill、CLAUDE.md、README 同步補上用法。
+
+### Changed
+
+- `binary_version` **4.1.0 → 4.2.0**（ooxml-swift 3.10.0：格式 profile 的 OPC relationship 檢查、設定檔跨程序鎖、快照清理）。
+- gitlink `mcp/che-word-mcp` 指向 4.2.0 的 release commit。
+
 ## [4.1.1] - 2026-09-24
 
 ### Changed
