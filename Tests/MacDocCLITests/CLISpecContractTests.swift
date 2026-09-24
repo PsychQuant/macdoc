@@ -56,7 +56,7 @@ struct CLISpecContractTests {
         let paths = try CLISpecHarness.document().commands.map(\.path)
         #expect(Array(paths.prefix(8)) == [
             "macdoc", "macdoc convert", "macdoc pdf", "macdoc pdf init", "macdoc pdf segment",
-            "macdoc pdf render", "macdoc pdf ocr", "macdoc pdf blocks",
+            "macdoc pdf render", "macdoc pdf ocr", "macdoc pdf migrate-figures",
         ])
         #expect(try command("macdoc pdf").defaultSubcommand == "status")
     }
@@ -109,11 +109,10 @@ struct CLISpecContractTests {
     @Test("pdf ocr is a nested path with its defaults and dependencies")
     func pdfOCR() throws {
         let ocr = try command("macdoc pdf ocr")
-        // --mode keeps a static default: it is deliberately NOT read from
-        // `config ocr` (#218 — that setting's own struct-level default would
-        // silently flip everyone's default mode from local to ollama; see
-        // the `macdoc pdf ocr` project note).
-        #expect(try option("--mode", of: "macdoc pdf ocr").defaultValue == "local")
+        // --mode has no static default since pdf-to-latex-swift#11: omitted,
+        // it takes the backend chosen with `config ocr set-backend`, else
+        // local (documented in the `macdoc pdf ocr` project note).
+        #expect(try option("--mode", of: "macdoc pdf ocr").defaultValue == nil)
         #expect(try option("--page-dpi", of: "macdoc pdf ocr").defaultValue == "200.0")
         // --host and --model have no static default as of #218: when
         // omitted, `pdf ocr` falls back to `config ocr`'s setting and only

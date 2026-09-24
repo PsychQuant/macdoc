@@ -52,8 +52,17 @@ public enum MacDocCLIMetadata {
                 "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown.",
                 "--mode local runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release).",
                 "--mode ollama sends page images to the Ollama server at --host.",
-                "#218: --host and --model have no static default. Under --mode ollama, omitting either falls back first to the matching `macdoc config ocr` setting and then to a built-in fallback — --host also resolves a `config ocr add-host` profile name to its address. Under --mode local, `config ocr` is never consulted at all: --model falls straight back to a built-in HuggingFace repo id when omitted, and --host is unused. --mode is unaffected by any of this: its own declared default still applies when omitted, and `config ocr set-backend`'s setting is never read — using Ollama still requires passing --mode ollama yourself (see that command's own abstract for why).",
+                "#218: --host and --model have no static default. Under --mode ollama, omitting either falls back first to the matching `macdoc config ocr` setting and then to a built-in fallback — --host also resolves a `config ocr add-host` profile name to its address. Under --mode local, `config ocr` is never consulted at all: --model falls straight back to a built-in HuggingFace repo id when omitted, and --host is unused. --mode has no static default either (pdf-to-latex-swift#11): omitted, it takes the backend chosen with `macdoc config ocr set-backend` (mlx means local), else local. Only a backend set through that command counts — the config file's legacy backend field holds \"ollama\" by default and is ignored. An unreadable config file or an unknown backend value falls back to local with a warning on stderr; an explicit --mode local never reads the config file.",
                 "--config points at an alternate settings file instead of ~/.config/macdoc/config.json, same flag as `macdoc config ocr`.",
+            ]
+        ),
+        CLISpecMetadata.CommandInfo(
+            path: "macdoc pdf migrate-figures",
+            status: .active,
+            notes: [
+                "#222: for projects transcribed before pdf-to-latex 0.4.0. Re-crops every figure from the page images using the bboxes saved under responses/, names the crops figures/p<page>-<id>.png, rewrites the references in tex/page-*.tex and rebuilds accumulated.tex. No AI call.",
+                "Idempotent: a second run reports every page as unchanged. If it stops with an error, accumulated.tex has not been overwritten; fix the cause and run it again.",
+                "Needs the rendered page images recorded in the manifest (`macdoc pdf render`); pages without one are listed and skipped.",
             ]
         ),
         CLISpecMetadata.CommandInfo(
@@ -111,7 +120,7 @@ public enum MacDocCLIMetadata {
             status: .active,
             notes: [
                 "Stores Ollama host profiles, the OCR model and the OCR backend in the macdoc config file.",
-                "#218: `macdoc pdf ocr`, when run with --mode ollama, reads the host profiles and the OCR model as fallbacks for its own --host/--model when those flags are omitted (priority: explicit flag > this setting > pdf ocr's built-in default). Under --mode local these settings are never read at all. The OCR backend setting is stored but still not read by any command — see `macdoc config ocr set-backend`'s own abstract for why.",
+                "#218: `macdoc pdf ocr`, when run with --mode ollama, reads the host profiles and the OCR model as fallbacks for its own --host/--model when those flags are omitted (priority: explicit flag > this setting > pdf ocr's built-in default). Under --mode local these settings are never read at all. The backend chosen with `set-backend` is `pdf ocr`'s --mode when that flag is omitted (pdf-to-latex-swift#11); `list` shows it as unset until `set-backend` has been run.",
             ]
         ),
         CLISpecMetadata.CommandInfo(
@@ -279,7 +288,7 @@ public enum MacDocCLIMetadata {
             CLISpecMetadata.OverlapPath(
                 command: "macdoc config ocr",
                 usage: "macdoc config ocr list",
-                note: "Edits OCR host and model settings that feed `pdf ocr`'s --host/--model when those flags are omitted under --mode ollama (#218; --mode local never reads them); the backend setting is still not read by any command."
+                note: "Edits OCR settings that feed `pdf ocr` when its flags are omitted: the backend feeds --mode, and the host and model feed --host/--model under --mode ollama (#218, pdf-to-latex-swift#11; an explicit --mode local reads none of them)."
             ),
         ]),
         CLISpecMetadata.Overlap(topic: "BibLaTeX to APA 7", paths: [

@@ -83,7 +83,7 @@ commands:
   - path: "macdoc pdf"
     abstract: "PDF → LaTeX pipeline 工具"
     default_subcommand: status
-    subcommands: [init, segment, render, ocr, blocks, transcribe, transcribe-pages, resume, chapters, assemble, normalize, fix-envs, compile-check, consolidate, compare, detect-source, status]
+    subcommands: [init, segment, render, ocr, migrate-figures, blocks, transcribe, transcribe-pages, resume, chapters, assemble, normalize, fix-envs, compile-check, consolidate, compare, detect-source, status]
   - path: "macdoc pdf init"
     abstract: "建立 PDF 轉 LaTeX 專案資料夾與 manifest。"
     options:
@@ -142,8 +142,7 @@ commands:
       - names: ["--mode"]
         value_name: mode
         required: false
-        default: local
-        help: "執行模式 (local|ollama)。"
+        help: "執行模式 (local|ollama)；沒給時看 config ocr set-backend 設定的值（mlx 即 local），都沒設時用 local。"
       - names: ["--host"]
         value_name: host
         required: false
@@ -180,8 +179,30 @@ commands:
         - "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown."
         - "--mode local runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release)."
         - "--mode ollama sends page images to the Ollama server at --host."
-        - "#218: --host and --model have no static default. Under --mode ollama, omitting either falls back first to the matching `macdoc config ocr` setting and then to a built-in fallback — --host also resolves a `config ocr add-host` profile name to its address. Under --mode local, `config ocr` is never consulted at all: --model falls straight back to a built-in HuggingFace repo id when omitted, and --host is unused. --mode is unaffected by any of this: its own declared default still applies when omitted, and `config ocr set-backend`'s setting is never read — using Ollama still requires passing --mode ollama yourself (see that command's own abstract for why)."
+        - "#218: --host and --model have no static default. Under --mode ollama, omitting either falls back first to the matching `macdoc config ocr` setting and then to a built-in fallback — --host also resolves a `config ocr add-host` profile name to its address. Under --mode local, `config ocr` is never consulted at all: --model falls straight back to a built-in HuggingFace repo id when omitted, and --host is unused. --mode has no static default either (pdf-to-latex-swift#11): omitted, it takes the backend chosen with `macdoc config ocr set-backend` (mlx means local), else local. Only a backend set through that command counts — the config file's legacy backend field holds \"ollama\" by default and is ignored. An unreadable config file or an unknown backend value falls back to local with a warning on stderr; an explicit --mode local never reads the config file."
         - "--config points at an alternate settings file instead of ~/.config/macdoc/config.json, same flag as `macdoc config ocr`."
+  - path: "macdoc pdf migrate-figures"
+    abstract: "把 0.4.0 之前轉寫的專案重新裁切成帶頁碼的圖檔名，並改寫 LaTeX 引用（不呼叫 AI）。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+    project:
+      status: active
+      notes:
+        - "#222: for projects transcribed before pdf-to-latex 0.4.0. Re-crops every figure from the page images using the bboxes saved under responses/, names the crops figures/p<page>-<id>.png, rewrites the references in tex/page-*.tex and rebuilds accumulated.tex. No AI call."
+        - "Idempotent: a second run reports every page as unchanged. If it stops with an error, accumulated.tex has not been overwritten; fix the cause and run it again."
+        - "Needs the rendered page images recorded in the manifest (`macdoc pdf render`); pages without one are listed and skipped."
   - path: "macdoc pdf blocks"
     abstract: "（已棄用）以 Vision OCR 偵測頁面文字區塊。請改用 `macdoc pdf ocr`。"
     options:
@@ -719,7 +740,7 @@ commands:
       status: active
       notes:
         - "Stores Ollama host profiles, the OCR model and the OCR backend in the macdoc config file."
-        - "#218: `macdoc pdf ocr`, when run with --mode ollama, reads the host profiles and the OCR model as fallbacks for its own --host/--model when those flags are omitted (priority: explicit flag > this setting > pdf ocr's built-in default). Under --mode local these settings are never read at all. The OCR backend setting is stored but still not read by any command — see `macdoc config ocr set-backend`'s own abstract for why."
+        - "#218: `macdoc pdf ocr`, when run with --mode ollama, reads the host profiles and the OCR model as fallbacks for its own --host/--model when those flags are omitted (priority: explicit flag > this setting > pdf ocr's built-in default). Under --mode local these settings are never read at all. The backend chosen with `set-backend` is `pdf ocr`'s --mode when that flag is omitted (pdf-to-latex-swift#11); `list` shows it as unset until `set-backend` has been run."
   - path: "macdoc config ocr list"
     abstract: "顯示目前的 OCR 設定。"
     options:
@@ -775,7 +796,7 @@ commands:
         required: false
         help: "設定檔路徑（預設 ~/.config/macdoc/config.json）"
   - path: "macdoc config ocr set-backend"
-    abstract: "設定預設 OCR 後端（ollama 或 mlx）。目前 pdf ocr 的 --mode 不會讀這個設定：--mode 本身仍照舊維持自己的內建預設 local，只有想用 Ollama 時才需要自己傳 --mode ollama（見 #218）。"
+    abstract: "設定預設 OCR 後端（ollama 或 mlx）。pdf ocr 沒給 --mode 時採用這個設定（mlx 即 --mode local）；都沒設時用 local。"
     arguments:
       - name: backend
         required: true
@@ -1138,7 +1159,7 @@ overlaps:
         note: "Removed shim (#145): exits with status 2 and points to bestocr, which owns general-purpose OCR."
       - command: "macdoc config ocr"
         usage: "macdoc config ocr list"
-        note: "Edits OCR host and model settings that feed `pdf ocr`'s --host/--model when those flags are omitted under --mode ollama (#218; --mode local never reads them); the backend setting is still not read by any command."
+        note: "Edits OCR settings that feed `pdf ocr` when its flags are omitted: the backend feeds --mode, and the host and model feed --host/--model under --mode ollama (#218, pdf-to-latex-swift#11; an explicit --mode local reads none of them)."
   - topic: "BibLaTeX to APA 7"
     paths:
       - command: "macdoc convert"
