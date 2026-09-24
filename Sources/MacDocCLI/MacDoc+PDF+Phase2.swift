@@ -84,9 +84,58 @@ extension MacDoc.PDF {
             if let preambleURL = report.preambleURL, report.preambleFileChanged {
                 print("  preamble: \(preambleURL.lastPathComponent) (modified)")
             }
+            Self.pageAndFigureSummary(report).forEach { print($0) }
             if !report.mainFileChanged && !report.preambleFileChanged {
                 print("  (no changes needed)")
             }
+        }
+
+        /// 頁碼還原（#9）與圖片寬度還原（#10）的摘要。例行結果只計數；原始碼因故保持原樣的
+        /// 項目逐筆列出，因為那些是使用者要自己回頭處理的。沒有任何紀錄時回傳空陣列。
+        static func pageAndFigureSummary(_ report: NormalizeProjectReport) -> [String] {
+            var lines: [String] = []
+            var inserted = 0, moved = 0
+            var pageProblems: [String] = []
+            for note in report.pageCounterNotes {
+                switch note.kind {
+                case .counterInserted: inserted += 1
+                case .legacyCounterMoved: moved += 1
+                case .conflictingCounterBeforeChapter(let existing, let expected):
+                    pageProblems.append("  ⚠ page counter line \(note.line): 既有 \\setcounter{page}{\(existing)} 與 marker 推得的 \(expected) 不同，該章未插入")
+                case .chapterTitleNotFound:
+                    pageProblems.append("  ⚠ page counter line \(note.line): 找不到 \\chapter 章名的結尾大括號，頁碼未還原")
+                }
+            }
+            if !report.pageCounterNotes.isEmpty {
+                lines.append("  page counters: \(inserted) inserted, \(moved) legacy moved")
+                lines += pageProblems
+            }
+
+            var applied = 0, sized = 0, noContext = 0
+            var figureProblems: [String] = []
+            for figure in report.figureWidthResolutions {
+                let reason: String
+                switch figure.outcome {
+                case .widthApplied: applied += 1; continue
+                case .explicitSizePreserved: sized += 1; continue
+                case .noPageContext: noContext += 1; continue
+                case .noMatchingFigure: reason = "responses 沒有這張圖"
+                case .ambiguousFigure: reason = "同一頁有多筆互相矛盾的 bbox"
+                case .invalidBoundingBox(let box): reason = "bbox 不合法 \(box)"
+                case .widthNotRepresentable(let width): reason = "寬度太小無法表示（\(width)）"
+                case .missingPageRecord: reason = "manifest.json 沒有該頁或頁寬無效"
+                case .missingImageFile: reason = "圖檔不存在"
+                case .metadataUnavailable(let why): reason = "metadata 無法讀取：\(why)"
+                }
+                let page = figure.page.map { "page \($0)" } ?? "no page"
+                figureProblems.append("  ⚠ figure \(figure.path) (\(page), line \(figure.line)): \(reason)，未改寫")
+            }
+            if !report.figureWidthResolutions.isEmpty {
+                lines.append("  figure widths: \(applied) applied, \(sized) already sized, \(noContext) without page context")
+                lines += figureProblems
+            }
+            lines += report.unreadableResponseFiles.map { "  ⚠ unreadable: \($0)" }
+            return lines
         }
     }
 
