@@ -4,6 +4,13 @@ All notable changes to the che-pptx-mcp plugin shell will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-09-24
+
+### Changed
+
+- `binary_version` 0.1.0 → **0.2.0**；shell 0.1.3 → 0.2.0。binary 0.2.0（Developer ID 簽章、Apple 公證，universal）新增三個**以公分為單位**的幾何工具（PsychQuant/macdoc#90 第一片，工具數 37 → 40）：`set_placeholder_geometry`、`place_picture_at`、`fit_picture_to_native_aspect`。這三個工具先完成所有驗證再修改文件；參數依 JSON 型別嚴格驗證，NaN／Infinity／極大值回傳錯誤而不 crash。依賴 pptx-swift 0.2.0。
+- skill 補上三個工具與其誠實邊界：群組拒絕、超出投影片時照常套用並回報警告、裁切與 EXIF 方向尚未建模（PsychQuant/pptx-swift#2），以及**插入圖片後存檔，PowerPoint 可能要求修復**（PsychQuant/pptx-swift#1，既有問題）。
+
 ## [0.1.3] - 2026-08-24
 
 ### Added
