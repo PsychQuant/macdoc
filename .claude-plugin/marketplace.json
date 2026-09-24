@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "che-word-mcp",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "description": "Word (.docx) MCP server — Swift-native OOXML 讀寫，245 tools（段落/表格/樣式/註腳/追蹤修訂/方程式/內容控制/欄位/腳本管線 export_script·get_script_coverage·execute_script 等），無需安裝 Word。Built on ooxml-swift（版本以 binary repo 的 Package.swift 為準）。release history 見 CHANGELOG。",
       "author": {
         "name": "Che Cheng"
@@ -20,7 +20,7 @@
     },
     {
       "name": "macdoc",
-      "version": "1.6.1",
+      "version": "1.6.2",
       "description": "macOS 原生文件處理 CLI — 格式轉換、VLM OCR（含 host profile 設定）、SRT 處理。v1.2.0: session-start hook 自動安裝 signed CLI binary（arm64）。",
       "author": {
         "name": "Che Cheng"

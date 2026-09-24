@@ -9,7 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
-## [1.6.1] - 2026-09-24
+## [1.6.2] - 2026-09-24
+
+### Added
+
+- **CLI 端到端 slot 測試**（PsychQuant/macdoc#193）：`Tests/MacDocCLITests/WordReverseSlotE2ETests.swift`
+  新增 4 個測試，實際跑 `macdoc word render` 二進位（不只檢查生成腳本的參數名稱），改掉 slot 的
+  call-site 值後讀回重建的 docx，斷言指定段落文字真的變了、鄰居段落沒被動到。涵蓋三種 slot 形式：
+  DSL-spellable 段落、op-level（`// @slot`，格式化多 run 段落）、raw-channel（`// @slot-raw`，整個
+  `word/document.xml` 落 raw）；raw-channel 另有一個以 REC-O-01 官方表單為對象、gated on
+  `MACDOC_TEMPLATE_DIR`（env 缺席時乾淨 `XCTSkip`）的變體。
+
+### Changed
+
+- **`swiftify` skill 補上 MCP 端 paragraphs-only 的已知落差**（PsychQuant/macdoc#193）：`--paragraphs-only`
+  目前是 CLI-only，che-word-mcp 沒有對應的參數或工具、回應也不會具名 `paragraph-no-paraId`；純走 MCP 的
+  呼叫端目前只能改走 CLI 完成這條備援路徑。
+- `binary_version` 不變（0.9.0）——本次未改 CLI 原始碼行為，只加測試與文件。
+
+
 
 ### Changed
 

@@ -19,7 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
-## [4.1.0] - 2026-09-24
+## [4.1.1] - 2026-09-24
+
+### Changed
+
+- **`SKILL.md` 修正「任一表格必落 raw」的錯誤概括**（PsychQuant/macdoc#200、#193）：改成與 macdoc plugin 的
+  `swiftify` skill 一致的措辭——canonical minimal table 可用 typed `appendTable` 升級；只有 part 內任何一處
+  （含不支援的 rich／foreign-form 表格、或缺 `w14:paraId` 的段落）無法以 typed 形式試重建 byte-equal，整個
+  part 才會落到 raw。REC-O-01 的 `0.0% DSL` 實測數字補上但書：那是該份文件的量測結果，不是通則。
+- **`SKILL.md` 誠實記錄一個已知缺口**：`get_script_coverage` 的回應目前沒有具名 part 落 raw 的根因（`table`／
+  `paragraph-no-paraId`／…），`export_script` 的回應也沒有對應的提示欄位；che-word-mcp 目前也**沒有** CLI
+  `--paragraphs-only` 的對應工具或參數。純走 MCP 的呼叫端無法單從回應本身判斷「這份文件缺 paraId，可以改走
+  paragraphs-only」——這是本次確認過現況後如實記錄，**沒有**新增任何工具參數或欄位（暫緩，先記錄需求）。
+- `binary_version` 不變（4.1.0）——本次是 shell-only 文件修正，未改 binary。
+
+
 
 ### Changed
 
