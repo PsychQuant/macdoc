@@ -143,7 +143,7 @@ swift run macdoc convert --to md file.bib            # Bib → Markdown
 swift run macdoc convert --to json file.bib          # Bib → JSON
 
 # 執行 CLI — PDF pipeline（OCR + Phase 2 consolidation）
-swift run macdoc pdf ocr --project /path/to/project              # 整頁 GLM-OCR（預設 local MLX）
+swift run macdoc pdf ocr --project /path/to/project              # 整頁 GLM-OCR（未設定 set-backend 時預設 local MLX）
 swift run macdoc pdf ocr --project /path/to/project --mode ollama # 透過 Ollama HTTP API
 swift run macdoc pdf migrate-figures --project /path/to/project   # 0.4.0 前的舊專案：重新裁切成帶頁碼的圖檔名（不呼叫 AI，#222）
 swift run macdoc pdf normalize --project /path/to/project

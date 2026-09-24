@@ -83,7 +83,9 @@ final class PDFMigrateFiguresTests: XCTestCase {
             .write(to: dir.appendingPathComponent("pages-all.json"))
     }
 
-    func testMigratesAnOldProject() throws {
+    /// 三頁的專案，只有第 3 頁有渲染圖、responses 與舊格式的引用。
+    @discardableResult
+    private func writeMigratableProject() throws -> URL {
         let image = try writeRedPageImage(page: 3)
         try writeManifest(pages: [
             PageRecord(number: 1, width: 612, height: 792, rotation: 0, renderedImagePath: nil, renderedDPI: nil),
@@ -94,6 +96,11 @@ final class PDFMigrateFiguresTests: XCTestCase {
         let tex = projectDir.appendingPathComponent("tex/page-0003.tex")
         try FileManager.default.createDirectory(at: tex.deletingLastPathComponent(), withIntermediateDirectories: true)
         try "Intro.\n\\includegraphics{figures/fig1.png}\n".write(to: tex, atomically: true, encoding: .utf8)
+        return tex
+    }
+
+    func testMigratesAnOldProject() throws {
+        let tex = try writeMigratableProject()
 
         let result = try CLITestHelper.run([
             "pdf", "migrate-figures", "--project", projectDir.path, "--first-page", "3", "--last-page", "3",
@@ -117,6 +124,40 @@ final class PDFMigrateFiguresTests: XCTestCase {
         let result = try CLITestHelper.run(["pdf", "migrate-figures", "--project", projectDir.path])
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertTrue(result.stdout.contains("第 1 頁"), result.stdout)
+        XCTAssertEqual(try String(contentsOf: accumulated, encoding: .utf8), sentinel)
+    }
+
+    /// 有頁面寫回失敗時必須 exit 非零，並列出失敗的頁。以唯讀的 `tex/` 讓頁面檔寫不回去；
+    /// root 不受權限限制，所以 root 執行時跳過。
+    func testWriteFailureExitsNonZero() throws {
+        try XCTSkipIf(getuid() == 0, "root ignores directory permissions")
+        try writeMigratableProject()
+        let texDir = projectDir.appendingPathComponent("tex")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: texDir.path)
+        addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: texDir.path) }
+
+        let result = try CLITestHelper.run([
+            "pdf", "migrate-figures", "--project", projectDir.path, "--first-page", "3", "--last-page", "3",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0, "a page that could not be written must fail the command\n\(result.stdout)")
+        XCTAssertTrue(result.stdout.contains("第 3 頁：寫入失敗"), result.stdout)
+    }
+
+    /// 上游丟錯（這裡是重建 accumulated.tex 時讀到無效 UTF-8 的頁面檔）：exit 非零、訊息說明
+    /// accumulated.tex 沒被覆寫，而且真的沒被覆寫。
+    func testUpstreamErrorExitsNonZeroAndLeavesAccumulatedTexAlone() throws {
+        try writeMigratableProject()
+        try Data([0x66, 0xFF, 0xFE, 0x0A]).write(to: projectDir.appendingPathComponent("tex/page-0001.tex"))
+        let accumulated = projectDir.appendingPathComponent("accumulated.tex")
+        let sentinel = "\\documentclass{book}\n% user content\n"
+        try sentinel.write(to: accumulated, atomically: true, encoding: .utf8)
+
+        let result = try CLITestHelper.run([
+            "pdf", "migrate-figures", "--project", projectDir.path, "--first-page", "3", "--last-page", "3",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0, result.stdout)
+        XCTAssertTrue(result.stderr.contains("遷移中止"), result.stderr)
+        XCTAssertTrue(result.stderr.contains("accumulated.tex 沒有被覆寫"), result.stderr)
         XCTAssertEqual(try String(contentsOf: accumulated, encoding: .utf8), sentinel)
     }
 }

@@ -61,7 +61,8 @@ public enum MacDocCLIMetadata {
             status: .active,
             notes: [
                 "#222: for projects transcribed before pdf-to-latex 0.4.0. Re-crops every figure from the page images using the bboxes saved under responses/, names the crops figures/p<page>-<id>.png, rewrites the references in tex/page-*.tex and rebuilds accumulated.tex. No AI call.",
-                "Idempotent: a second run reports every page as unchanged. If it stops with an error, accumulated.tex has not been overwritten; fix the cause and run it again.",
+                "Safe to re-run: pages already migrated are reported as unchanged; pages still missing their page image, tex file or figure data are reported the same way again.",
+                "Two failure exits: a page that could not be written is listed and makes the command exit non-zero (accumulated.tex is still rebuilt from the page files on disk); if the migration stops with an error instead, accumulated.tex has not been touched. Fix the cause and run it again.",
                 "Needs the rendered page images recorded in the manifest (`macdoc pdf render`); pages without one are listed and skipped.",
             ]
         ),

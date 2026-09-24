@@ -19,6 +19,7 @@ final class ConfigAIDetectTests: XCTestCase {
             ["config", "ocr", "add-host", "kyle", "10.0.0.5:11435", "--config", configPath],
             ["config", "ocr", "set-default", "kyle", "--config", configPath],
             ["config", "ocr", "set-model", "my-ollama-tag", "--config", configPath],
+            ["config", "ocr", "set-backend", "mlx", "--config", configPath],
         ] {
             let result = try CLITestHelper.run(args)
             XCTAssertEqual(result.exitCode, 0, "\(args)\nstderr: \(result.stderr)")
@@ -31,6 +32,7 @@ final class ConfigAIDetectTests: XCTestCase {
         XCTAssertEqual(saved.ocrHosts["kyle"], "10.0.0.5:11435", "detect must not drop OCR host profiles")
         XCTAssertEqual(saved.ocrDefaultHost, "kyle", "detect must not reset the default OCR host")
         XCTAssertEqual(saved.ocrDefaultModel, "my-ollama-tag", "detect must not reset the default OCR model")
+        XCTAssertEqual(saved.ocrDefaultBackendOverride, "mlx", "detect must not forget the backend chosen with set-backend")
     }
 
     /// detect 負責的三個欄位仍然由偵測結果決定（這是命令本身的用途）。
@@ -40,13 +42,18 @@ final class ConfigAIDetectTests: XCTestCase {
 
         var stale = AIConfig()
         stale.available = ["no-such-tool"]
+        stale.transcription = "no-such-tool"
+        stale.agent = "no-such-tool"
         try stale.save(to: URL(fileURLWithPath: configPath))
 
         let detect = try CLITestHelper.run(["config", "ai", "detect", "--config", configPath])
         XCTAssertEqual(detect.exitCode, 0, "stderr: \(detect.stderr)")
 
         let saved = try JSONDecoder().decode(AIConfig.self, from: Data(contentsOf: URL(fileURLWithPath: configPath)))
-        XCTAssertEqual(saved.available, AIConfig.detect().available)
+        let detected = AIConfig.detect()
+        XCTAssertEqual(saved.available, detected.available)
+        XCTAssertEqual(saved.transcription, detected.transcription)
+        XCTAssertEqual(saved.agent, detected.agent)
         XCTAssertFalse(saved.available.contains("no-such-tool"))
     }
 
