@@ -151,6 +151,19 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
   → --paragraphs-only 產生 Paragraph(id: "p1")，可再指定 --slot body=p1
 ```
 
+**以 release artifact 重測（2026-09-24，PsychQuant/macdoc#193）**：對象用下載回來的官方 release binary，
+以 sha256 辨識，不靠 `--version` 字串。三個版本對 REC-O-01 的 coverage 完全相同（上面那組數字，
+腳本 24 行、213,335 bytes）；差別在 raw slot 填入**空白段落**（只有段落標記、沒有 run 的待填欄位）時：
+
+| CLI（sha256 前 8 碼） | `reverse --slot` | render 填值後的輸出 |
+|---|---|---|
+| 0.7.0（`9fe09f26`） | 報錯，找不到段落 | 印「已寫入」，但**值沒有填進去** |
+| 0.8.0（`efae979c`） | 可用 | 值有填進去，但 run 沒有 rPr，字型落到 docDefaults（#199） |
+| 0.9.0（`6fa5ed9c`） | 可用 | 值有填進去，run 沿用段落標記的字型 |
+
+要自己核對手上是哪一版：`shasum -a 256 "$(command -v macdoc)"`，再和 GitHub release 的
+`macdoc.sha256` 比對。
+
 歷史樣本的百分比只描述該份檔案，不能套用到同一工具產生的其他 docx。處理方式取決於實際根因：
 
 - `--paragraphs-only` 遇到**任何表格都會省略**，所以不能作為含表格文件的完整替代方案。
