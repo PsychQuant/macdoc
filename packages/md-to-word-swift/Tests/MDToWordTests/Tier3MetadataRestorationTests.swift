@@ -155,9 +155,13 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         // `ParagraphMeta.spacing` is non-nil it is a *complete* snapshot of
         // the original paragraph's spacing, not a sparse patch to overlay
         // onto whatever the target already has. A pre-existing `lineRule`
-        // (which SpacingMeta cannot even express) must NOT survive — that
-        // would silently turn this into field-level merge, the behavior
-        // Tier3MetadataRestorer's doc-comment explicitly says this is not.
+        // that this SpacingMeta instance does NOT carry (nil) must NOT
+        // survive — that would silently turn this into field-level merge,
+        // the behavior Tier3MetadataRestorer's doc-comment explicitly says
+        // this is not. (`lineRule` itself is expressible since
+        // PsychQuant/macdoc#220 item 1 — see
+        // `testLineRuleIsRestoredWhenPresentInSidecar` below for the
+        // positive case; this test is about the *absent* case.)
         // Uses `@testable import` to call the restorer directly, since the
         // public `convertMarkdown(_:metadata:)` entry point has no way to
         // inject a pre-existing composite value to overwrite.
@@ -167,9 +171,9 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         document.body.children = [.paragraph(paragraph)]
 
         // Sidecar snapshot only carries `before` — mirrors a source
-        // paragraph whose Spacing had no explicit after/line.
+        // paragraph whose Spacing had no explicit after/line/lineRule.
         var paragraphMeta = ParagraphMeta(index: 0)
-        paragraphMeta.spacing = SpacingMeta(before: 50, after: nil, line: nil)
+        paragraphMeta.spacing = SpacingMeta(before: 50, after: nil, line: nil, lineRule: nil)
         let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
 
         Tier3MetadataRestorer.restore(metadata, onto: &document)
@@ -180,7 +184,40 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         XCTAssertEqual(restored.properties.spacing?.before, 50, "The captured sub-field must apply")
         XCTAssertNil(restored.properties.spacing?.after, "Un-captured sub-fields must be cleared, not inherited from the pre-existing value")
         XCTAssertNil(restored.properties.spacing?.line, "Un-captured sub-fields must be cleared, not inherited from the pre-existing value")
-        XCTAssertNil(restored.properties.spacing?.lineRule, "lineRule cannot be expressed by SpacingMeta at all, so it must not survive the snapshot replace")
+        XCTAssertNil(restored.properties.spacing?.lineRule, "A SpacingMeta entry with lineRule == nil must clear a pre-existing lineRule, not inherit it")
+    }
+
+    // MARK: - lineRule (PsychQuant/macdoc#220 item 1)
+
+    func testLineRuleIsRestoredWhenPresentInSidecar() throws {
+        let markdown = "A paragraph with an explicit line rule."
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.spacing = SpacingMeta(before: 240, after: 120, line: 360, lineRule: "exact")
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        XCTAssertEqual(paragraph.properties.spacing?.lineRule, .exact)
+    }
+
+    func testInvalidLineRuleRawValueIsIgnoredWithoutCrashing() throws {
+        let markdown = "A paragraph with a bogus line rule value."
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.spacing = SpacingMeta(line: 360, lineRule: "wobbly") // not a real LineRule case
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        XCTAssertEqual(paragraph.properties.spacing?.line, 360, "The recognized sibling field must still apply")
+        XCTAssertNil(paragraph.properties.spacing?.lineRule, "Unrecognized lineRule rawValue must not be force-applied")
     }
 
     func testSpacingIsPreservedWhenMetadataHasNoSpacingEntryAtAll() {
@@ -237,19 +274,51 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         XCTAssertEqual(paragraph.properties.shading?.pattern?.rawValue, "clear")
     }
 
-    // MARK: - commentIds / bookmarkNames / runs are documented non-goals
+    // MARK: - commentIds / bookmarkNames are permanent non-goals (evaluated
+    // and declined for #220 items 2/3 — see Tier3MetadataRestorer's doc
+    // comment for the concrete blockers)
 
-    func testCommentIdsBookmarkNamesAndRunsAreNotRestored() throws {
-        // Per Tier3MetadataRestorer's doc-comment: these three fields are
-        // deliberately out of scope (referential-integrity / offset-drift
-        // risk). This test pins that as observable behavior so a future
-        // change that silently starts (or silently fails to) restore them
-        // is caught either way.
+    func testCommentIdsAndBookmarkNamesAreNeverRestored() throws {
+        // Per Tier3MetadataRestorer's doc-comment: these two fields are
+        // deliberately out of scope (referential-integrity / position-model
+        // risk — see PsychQuant/macdoc#220 items 2/3). Unlike `runs` (below),
+        // there is no fingerprint-gated path that ever restores them: this
+        // test pins that as observable behavior regardless of whether a
+        // matching textFingerprint is present, so a future change that
+        // silently starts (or silently fails to) restore them is caught
+        // either way.
         let markdown = "A paragraph that used to carry a comment and bookmark."
 
         var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
         paragraphMeta.commentIds = [1]
         paragraphMeta.bookmarkNames = ["_Ref12345"]
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        XCTAssertTrue(paragraph.commentIds.isEmpty)
+        XCTAssertTrue(paragraph.bookmarks.isEmpty)
+    }
+
+    // MARK: - runs are restored, but ONLY when a matching textFingerprint
+    // gates them (PsychQuant/macdoc#220 items 4/5)
+
+    func testRunFormattingIsNotAppliedWithoutATextFingerprint() throws {
+        // Old-sidecar backward compat: a `ParagraphMeta` with `runs`
+        // populated but no `textFingerprint` (as every sidecar written
+        // before word-to-md-swift ≥ 1.1.0 looks) must NOT have its `runs`
+        // applied — there is no way to verify the freshly-converted
+        // paragraph's runs still line up with the offsets `RunMeta.range`
+        // was captured against, so this restorer stays conservative and
+        // leaves `runs` untouched, exactly as it did before #220.
+        let markdown = "A paragraph that used to carry per-run formatting."
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        // textFingerprint deliberately left nil.
         var runMeta = RunMeta(range: [0, 1])
         runMeta.fontName = "Arial"
         paragraphMeta.runs = [runMeta]
@@ -260,12 +329,201 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         guard case .paragraph(let paragraph) = document.body.children[0] else {
             return XCTFail("Expected a paragraph at index 0")
         }
-        XCTAssertTrue(paragraph.commentIds.isEmpty)
-        XCTAssertTrue(paragraph.bookmarks.isEmpty)
-        // Pin the "runs are not modified" half of the claim too — without
-        // this, a future regression that starts (mis)applying `runMeta`
-        // could slip past this test undetected.
         XCTAssertNil(paragraph.runs.first?.properties.fontName)
+    }
+
+    func testRunFormattingIsAppliedWhenFingerprintMatches() throws {
+        let markdown = "Bold middle word plain."
+        // Runs text on the reverse side is exactly the markdown source here
+        // (no escaping needed), so the fingerprint over the original run
+        // text and over this string are the same computation.
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
+        // "middle" is characters [11, 17) in "Bold middle word plain."
+        var runMeta = RunMeta(range: [11, 17])
+        runMeta.fontName = "Georgia"
+        runMeta.color = "FF0000"
+        paragraphMeta.runs = [runMeta]
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        let fullText = paragraph.runs.map(\.text).joined()
+        XCTAssertEqual(fullText, markdown, "Splitting runs must not change the paragraph's overall visible text")
+
+        // Every run whose text falls inside [11, 17) ("middle") must carry
+        // the new formatting; every run outside it must not.
+        var cursor = 0
+        for run in paragraph.runs {
+            let range = cursor..<(cursor + run.text.count)
+            cursor = range.upperBound
+            if range.lowerBound >= 11 && range.upperBound <= 17 {
+                XCTAssertEqual(run.properties.fontName, "Georgia", "Run '\(run.text)' at \(range) should be formatted")
+                XCTAssertEqual(run.properties.color, "FF0000")
+            } else {
+                XCTAssertNotEqual(run.properties.fontName, "Georgia", "Run '\(run.text)' at \(range) should NOT be formatted")
+            }
+        }
+    }
+
+    func testEntireEntryIsSkippedWhenFingerprintMismatches() throws {
+        // The central scenario #220 exists to fix: a stale sidecar entry
+        // (captured against different text than what is now at this index)
+        // must not silently apply ANY of its fields — not just `runs`, but
+        // also the paragraph-level fields #206 already restores
+        // unconditionally for fingerprint-less (old) sidecars. A present
+        // but WRONG fingerprint is positive evidence of misalignment, so
+        // the whole entry is skipped.
+        let markdown = "This paragraph's real text -- with a dash... and \"quotes\"."
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.compute("Completely different captured text.")
+        paragraphMeta.alignment = "center"
+        var runMeta = RunMeta(range: [0, 4])
+        runMeta.fontName = "Arial"
+        paragraphMeta.runs = [runMeta]
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        XCTAssertNil(paragraph.properties.alignment, "Paragraph-level fields must NOT apply when the fingerprint mismatches")
+        XCTAssertNil(paragraph.runs.first?.properties.fontName, "Run-level fields must NOT apply when the fingerprint mismatches")
+    }
+
+    func testParagraphLevelFieldsStillApplyWhenFingerprintMatches() throws {
+        // Complement of the mismatch case: a CORRECT fingerprint must not
+        // regress the #206 behavior of restoring paragraph-level fields.
+        let markdown = "This paragraph's real text -- with a dash... and \"quotes\"."
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
+        paragraphMeta.alignment = "center"
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        XCTAssertEqual(paragraph.properties.alignment, .center)
+    }
+
+    // MARK: - Tier3RestorationReport (PsychQuant/macdoc#220 item 5 — "回報型別用封閉列舉")
+
+    func testReportRecordsAppliedCount() {
+        var document = WordDocument()
+        document.body.children = [.paragraph(Paragraph(text: "Text.")), .paragraph(Paragraph(text: "More text."))]
+
+        var metaA = ParagraphMeta(index: 0)
+        metaA.alignment = "center"
+        var metaB = ParagraphMeta(index: 1)
+        metaB.alignment = "right"
+        let metadata = DocumentMetadata(paragraphs: [metaA, metaB])
+
+        let report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+        XCTAssertEqual(report.appliedCount, 2)
+        XCTAssertTrue(report.skipped.isEmpty)
+    }
+
+    func testReportRecordsIndexOutOfRange() {
+        var document = WordDocument()
+        document.body.children = [.paragraph(Paragraph(text: "Only paragraph."))]
+
+        var meta = ParagraphMeta(index: 5)
+        meta.alignment = "center"
+        let metadata = DocumentMetadata(paragraphs: [meta])
+
+        let report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+        XCTAssertEqual(report.appliedCount, 0)
+        XCTAssertEqual(report.skipped, [Tier3RestorationReport.SkippedEntry(index: 5, reason: .indexOutOfRange)])
+    }
+
+    func testReportRecordsIndexNotAParagraph() {
+        var document = WordDocument()
+        document.body.children = [.table(Table(rows: []))]
+
+        var meta = ParagraphMeta(index: 0)
+        meta.alignment = "center"
+        let metadata = DocumentMetadata(paragraphs: [meta])
+
+        let report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+        XCTAssertEqual(report.appliedCount, 0)
+        XCTAssertEqual(report.skipped, [Tier3RestorationReport.SkippedEntry(index: 0, reason: .indexNotAParagraph)])
+    }
+
+    func testReportRecordsFingerprintMismatch() {
+        var document = WordDocument()
+        document.body.children = [.paragraph(Paragraph(text: "Actual text."))]
+
+        var meta = ParagraphMeta(index: 0)
+        meta.textFingerprint = ParagraphFingerprint.compute("Different captured text.")
+        meta.alignment = "center"
+        let metadata = DocumentMetadata(paragraphs: [meta])
+
+        let report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+        XCTAssertEqual(report.appliedCount, 0)
+        XCTAssertEqual(report.skipped, [Tier3RestorationReport.SkippedEntry(index: 0, reason: .fingerprintMismatch)])
+    }
+
+    func testReportMixesAppliedAndSkippedEntriesIndependently() {
+        var document = WordDocument()
+        document.body.children = [
+            .paragraph(Paragraph(text: "First.")),
+            .paragraph(Paragraph(text: "Second.")),
+            .table(Table(rows: [])),
+        ]
+
+        var ok = ParagraphMeta(index: 0)
+        ok.alignment = "center"
+        var mismatched = ParagraphMeta(index: 1)
+        mismatched.textFingerprint = ParagraphFingerprint.compute("Wrong text entirely.")
+        mismatched.alignment = "right"
+        var onTable = ParagraphMeta(index: 2)
+        onTable.alignment = "center"
+        var outOfRange = ParagraphMeta(index: 99)
+        outOfRange.alignment = "center"
+
+        let metadata = DocumentMetadata(paragraphs: [ok, mismatched, onTable, outOfRange])
+        let report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+
+        XCTAssertEqual(report.appliedCount, 1)
+        XCTAssertEqual(Set(report.skipped), Set([
+            Tier3RestorationReport.SkippedEntry(index: 1, reason: .fingerprintMismatch),
+            Tier3RestorationReport.SkippedEntry(index: 2, reason: .indexNotAParagraph),
+            Tier3RestorationReport.SkippedEntry(index: 99, reason: .indexOutOfRange),
+        ]))
+    }
+
+    // MARK: - convertMarkdownReportingTier3Restoration (public report-returning overload)
+
+    func testConvertMarkdownReportingTier3RestorationReturnsSameDocumentAsBaseOverload() throws {
+        let markdown = "Some paragraph."
+        var meta = ParagraphMeta(index: 0)
+        meta.alignment = "center"
+        let metadata = DocumentMetadata(paragraphs: [meta])
+
+        let plain = try converter.convertMarkdown(markdown, metadata: metadata)
+        let (reported, report) = try converter.convertMarkdownReportingTier3Restoration(markdown, metadata: metadata)
+
+        XCTAssertEqual(report.appliedCount, 1)
+        guard case .paragraph(let plainPara) = plain.body.children[0],
+              case .paragraph(let reportedPara) = reported.body.children[0] else {
+            return XCTFail("Expected paragraphs")
+        }
+        XCTAssertEqual(plainPara.properties.alignment, reportedPara.properties.alignment)
+    }
+
+    func testConvertMarkdownReportingTier3RestorationWithNilMetadataReturnsEmptyReport() throws {
+        let (_, report) = try converter.convertMarkdownReportingTier3Restoration("Plain text.", metadata: nil)
+        XCTAssertEqual(report.appliedCount, 0)
+        XCTAssertTrue(report.skipped.isEmpty)
     }
 
     // MARK: - metadata.paragraphs == [] is a no-op
@@ -438,3 +696,4 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         return result
     }
 }
+

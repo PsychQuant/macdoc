@@ -245,6 +245,70 @@ final class MetadataReaderTests: XCTestCase {
         XCTAssertEqual(para3.runs[0].color, "FF0000")  // "#" 已被移除
     }
 
+    // MARK: - lineRule / textFingerprint (PsychQuant/macdoc#220)
+
+    func testParagraphSpacingLineRuleIsParsed() throws {
+        let yaml = """
+        version: "1.0"
+        source:
+          format: "docx"
+
+        paragraphs:
+          - index: 0
+            spacing: { before: 240, line: 360, lineRule: exact }
+        """
+
+        let meta = try MetadataReader.parse(yaml)
+        XCTAssertEqual(meta.paragraphs[0].spacing?.lineRule, "exact")
+    }
+
+    func testParagraphSpacingWithoutLineRuleParsesToNil() throws {
+        let yaml = """
+        version: "1.0"
+        source:
+          format: "docx"
+
+        paragraphs:
+          - index: 0
+            spacing: { before: 240 }
+        """
+
+        let meta = try MetadataReader.parse(yaml)
+        XCTAssertNil(meta.paragraphs[0].spacing?.lineRule)
+    }
+
+    func testParagraphTextFingerprintIsParsed() throws {
+        let yaml = """
+        version: "1.0"
+        source:
+          format: "docx"
+
+        paragraphs:
+          - index: 0
+            textFingerprint: "38d1334144987bf4"
+            alignment: center
+        """
+
+        let meta = try MetadataReader.parse(yaml)
+        XCTAssertEqual(meta.paragraphs[0].textFingerprint, "38d1334144987bf4")
+    }
+
+    func testParagraphWithoutTextFingerprintParsesToNil() throws {
+        // Old-format sidecar (pre-#220), written before textFingerprint existed.
+        let yaml = """
+        version: "1.0"
+        source:
+          format: "docx"
+
+        paragraphs:
+          - index: 0
+            alignment: center
+        """
+
+        let meta = try MetadataReader.parse(yaml)
+        XCTAssertNil(meta.paragraphs[0].textFingerprint)
+    }
+
     // MARK: - Paragraph Advanced Properties
 
     func testParagraphKeepNext() throws {

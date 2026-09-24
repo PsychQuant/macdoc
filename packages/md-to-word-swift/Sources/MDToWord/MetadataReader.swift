@@ -183,6 +183,15 @@ public struct MarginsMeta {
 
 public struct ParagraphMeta {
     public var index: Int
+    /// PsychQuant/macdoc#220 item 5: content-addressed fingerprint of this
+    /// paragraph's run text, written by word-to-md-swift ≥ 1.1.0's
+    /// `MetadataCollector`. `nil` for sidecars written by an older
+    /// word-to-md-swift (or hand-constructed `DocumentMetadata` values, as
+    /// most of this file's own tests do) — `Tier3MetadataRestorer` treats
+    /// that as "no fingerprint to verify against" and falls back to its
+    /// pre-#220 positional-index behavior for this entry's paragraph-level
+    /// fields (never for `runs`; see that type's doc comment).
+    public var textFingerprint: String?
     public var alignment: String?
     public var spacing: SpacingMeta?
     public var indentation: IndentationMeta?
@@ -195,7 +204,9 @@ public struct ParagraphMeta {
     public var shading: ShadingMeta?
     public var runs: [RunMeta]
 
-    public init(index: Int, alignment: String? = nil,
+    public init(index: Int,
+                textFingerprint: String? = nil,
+                alignment: String? = nil,
                 spacing: SpacingMeta? = nil,
                 indentation: IndentationMeta? = nil,
                 commentIds: [Int]? = nil,
@@ -207,6 +218,7 @@ public struct ParagraphMeta {
                 shading: ShadingMeta? = nil,
                 runs: [RunMeta] = []) {
         self.index = index
+        self.textFingerprint = textFingerprint
         self.alignment = alignment
         self.spacing = spacing
         self.indentation = indentation
@@ -262,11 +274,15 @@ public struct SpacingMeta {
     public var before: Int?
     public var after: Int?
     public var line: Int?
+    /// PsychQuant/macdoc#220 item 1: `LineRule.rawValue` ("auto" / "exact" /
+    /// "atLeast"), mirroring word-to-md-swift's `SpacingMeta.lineRule`.
+    public var lineRule: String?
 
-    public init(before: Int? = nil, after: Int? = nil, line: Int? = nil) {
+    public init(before: Int? = nil, after: Int? = nil, line: Int? = nil, lineRule: String? = nil) {
         self.before = before
         self.after = after
         self.line = line
+        self.lineRule = lineRule
     }
 }
 
@@ -551,7 +567,8 @@ public struct MetadataReader {
             spacing = SpacingMeta(
                 before: sDict["before"] as? Int,
                 after: sDict["after"] as? Int,
-                line: sDict["line"] as? Int
+                line: sDict["line"] as? Int,
+                lineRule: sDict["lineRule"] as? String
             )
         }
 
@@ -592,6 +609,7 @@ public struct MetadataReader {
 
         return ParagraphMeta(
             index: index,
+            textFingerprint: dict["textFingerprint"] as? String,
             alignment: dict["alignment"] as? String,
             spacing: spacing,
             indentation: indentation,
