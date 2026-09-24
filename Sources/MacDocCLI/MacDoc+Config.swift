@@ -253,7 +253,7 @@ extension MacDoc {
             struct SetBackend: AsyncParsableCommand {
                 static let configuration = CommandConfiguration(
                     commandName: "set-backend",
-                    abstract: "設定預設 OCR 後端（ollama 或 mlx）。目前 pdf ocr 的 --mode 不會讀這個設定，仍須每次明確指定（見 #218）。"
+                    abstract: "設定預設 OCR 後端（ollama 或 mlx）。目前 pdf ocr 的 --mode 不會讀這個設定：--mode 本身仍照舊維持自己的內建預設 local，只有想用 Ollama 時才需要自己傳 --mode ollama（見 #218）。"
                 )
 
                 @Argument(help: "後端名稱（ollama 或 mlx）。")
