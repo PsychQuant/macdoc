@@ -182,6 +182,15 @@ cd mcp/che-word-mcp && swift build -c release
 cd mcp/che-pdf-mcp && swift build -c release
 ```
 
+### CLI 規格（`cli-spec.yaml`，#72）
+
+`cli-spec.yaml`（repo 根目錄）是 macdoc CLI 的機器可讀規格，**由程式碼產生、不可手改**（code-first）：命令路徑、positional／option／flag、必填、預設值、允許值與 help 文字取自 ArgumentParser 宣告（`macdoc --experimental-dump-help`）；輸入輸出格式、命令狀態（deprecated／removed）、重疊路徑與外部依賴取自 overlay `Sources/CLISpec/MacDocCLIMetadata.swift`。改了任何命令宣告、help 文字、版本號或 overlay 之後都要重新產生並提交；新增 `convert` 路由時 `MacDoc+Convert.swift`、overlay、`CONVERSIONS.md` 三處一起改。
+
+```bash
+make cli-spec                 # swift build + 以 record mode 重寫 cli-spec.yaml
+swift test --filter CLISpec   # 漂移測試（committed ≠ 即時產生就失敗）＋契約、route probe、CONVERSIONS.md 一致性
+```
+
 ### Testing
 
 ```bash
@@ -417,6 +426,7 @@ swift build
 ## Key Files
 
 ### macdoc
+- `cli-spec.yaml` - 產生的 CLI 規格（schema_version 1，`make cli-spec`；契約見 Spectra change `cli-spec-yaml` 的 `cli-spec` capability）。產生器在 `Sources/CLISpec/`（dump-help decoder、builder、決定性 YAML emitter，只被測試 target 連結，不進 macdoc binary），metadata overlay 在 `Sources/CLISpec/MacDocCLIMetadata.swift`
 - `Sources/MacDocCLI/MacDoc.swift` - CLI 入口點（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
 - `Sources/MacDocCLI/MacDoc+Docx.swift` - `macdoc docx ...` 子命令（apply / plan / verify / diff —— manifest-driven .docx edit workflows，per openspec change `macdoc-docx-workflow-cli`，library 在 `packages/docx-workflow-swift`）
 - `Sources/MacDocCLI/MacDoc+Word+Render.swift` - `macdoc word render <script.mdocx.swift|.mdocx> --to-docx <out> [--verify-against <ref.docx>] [--force]`（腳本 → docx；`word reverse` 的反向半邊，補實 `mdocx-grammar` 早已具名卻從未實作的命令）。與 che-word-mcp 的 `execute_script` **呼叫同一個** shared entry point（ooxml-swift `Transcode/ScriptPipelineExecute.swift` 的 `scriptPipelineExecute`，v2.1.0 起），兩面因此由結構保證一致而非靠慣例。**`--verify-against` 是 opt-in**：不給就不驗、也不印任何驗證結論——沉默永遠不等於通過；給了則不符時 exit 非零並列出不符的 part。ordering contract：參考檔在**任何寫入之前**先讀進記憶體，因此 `--to-docx` 與 `--verify-against` 指向同一路徑時比對的是寫入前的位元組，不會自我比對出假通過。

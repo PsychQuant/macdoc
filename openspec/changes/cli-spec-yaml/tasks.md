@@ -24,5 +24,5 @@
 
 ## 5. Documentation and final verification
 
-- [ ] 5.1 Point CLAUDE.md at the generated specification per design "Code-first authority with a generated cli-spec.yaml": a Development Commands entry for `make cli-spec` and the drift test, and a Key Files entry for `cli-spec.yaml` and `Sources/CLISpec/MacDocCLIMetadata.swift`. **Verify**: content review — both entries present and name the regeneration command.
+- [x] 5.1 Point CLAUDE.md at the generated specification per design "Code-first authority with a generated cli-spec.yaml": a Development Commands entry for `make cli-spec` and the drift test, and a Key Files entry for `cli-spec.yaml` and `Sources/CLISpec/MacDocCLIMetadata.swift`. **Verify**: content review — both entries present and name the regeneration command.
 - [ ] 5.2 Run the full suite and Spectra validation. **Verify**: `swift test` reports zero failures with the baseline counts (111 XCTest with 4 skipped, 43 Swift Testing) plus the new CLISpec tests; `spectra validate cli-spec-yaml` reports valid; `git diff --exit-code Package.resolved` is clean.
