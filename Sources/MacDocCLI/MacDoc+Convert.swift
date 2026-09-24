@@ -62,8 +62,12 @@ extension MacDoc {
         @Flag(name: .long, help: "Force output to stdout")
         var stdout: Bool = false
 
+        // 沒有全域預設值（#216）：bib／srt／note 三條路由接受的樣式互斥
+        // （bib 是 minimal/web，srt 與 note 是 dark/light），任何單一預設值
+        // 都會讓另一邊在沒帶 --css 時失敗。留 nil，各路由自己決定沒帶
+        // --css 時要用什麼樣式。
         @Option(name: .long, help: "CSS style: minimal|web (bib), dark|light (srt)")
-        var css: CSSStyle = .web
+        var css: CSSStyle?
 
         @Flag(name: .long, help: "Treat soft breaks as hard line breaks")
         var hardBreaks: Bool = false
@@ -356,14 +360,16 @@ extension MacDoc {
         // MARK: - SRT → HTML
 
         private func convertSRTToHTML(inputURL: URL) throws {
-            if css != .dark && css != .light {
+            // 沒帶 --css 時用這條路由自己的預設值 dark（#216）。
+            let effectiveCSS = css ?? .dark
+            if effectiveCSS != .dark && effectiveCSS != .light {
                 throw ValidationError("SRT → HTML 的 --css 只支援 dark 或 light")
             }
 
             let converter = SRTConverter()
 
             if full {
-                let cssString = css == .light ? SRTCSS.light : SRTCSS.dark
+                let cssString = effectiveCSS == .light ? SRTCSS.light : SRTCSS.dark
                 let html = try converter.convertFull(input: inputURL, css: cssString)
                 try writeStringOutput(html, to: resolveOutputPath())
             } else {
@@ -379,12 +385,14 @@ extension MacDoc {
         // MARK: - Bib → HTML
 
         private func convertBibToHTML(inputURL: URL) throws {
-            if css != .minimal && css != .web {
+            // 沒帶 --css 時用這條路由自己的預設值 web（#216；與改動前的全域預設值相同，行為不變）。
+            let effectiveCSS = css ?? .web
+            if effectiveCSS != .minimal && effectiveCSS != .web {
                 throw ValidationError("Bib → HTML 的 --css 只支援 minimal 或 web")
             }
 
             let entries = try loadBibEntries(from: inputURL)
-            let cssString = css == .minimal ? APACSS.minimal : APACSS.web
+            let cssString = effectiveCSS == .minimal ? APACSS.minimal : APACSS.web
 
             let html: String
             if full {
@@ -482,12 +490,14 @@ extension MacDoc {
         }
 
         private func convertNoteToHTML(inputURL: URL) throws {
-            if css != .dark && css != .light {
+            // 沒帶 --css 時用這條路由自己的預設值 dark（#216）。
+            let effectiveCSS = css ?? .dark
+            if effectiveCSS != .dark && effectiveCSS != .light {
                 throw ValidationError("Note → HTML 的 --css 只支援 dark 或 light")
             }
 
             let converter = NoteConverter()
-            let theme: NoteConverter.Theme = css == .dark ? .dark : .light
+            let theme: NoteConverter.Theme = effectiveCSS == .dark ? .dark : .light
 
             if stdout {
                 // --stdout: 完全內嵌（base64），單一 HTML 輸出到 stdout
@@ -530,7 +540,9 @@ extension MacDoc {
 
         private func validateTokenRouteOptions() throws {
             var unsupported: [String] = []
-            if css != .web { unsupported.append("--css") }
+            // css 已無全域預設值（#216），所以「有沒有給 --css」直接看是否為 nil，
+            // 不再需要跟舊的全域預設值 .web 比較。
+            if css != nil { unsupported.append("--css") }
             if hardBreaks { unsupported.append("--hard-breaks") }
             if full { unsupported.append("--full") }
             if frontmatter { unsupported.append("--frontmatter") }
