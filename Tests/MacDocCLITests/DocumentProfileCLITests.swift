@@ -333,4 +333,52 @@ final class DocumentProfileCLITests: XCTestCase {
         // 字型——這是 official profile 的既定語意，不是「猜」使用者想要哪個中文字型。
         XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "eastAsia"), "DFKai-SB")
     }
+
+    // MARK: - config document gc（issue #194：不可變快照的清理策略）
+
+    /// 預設只列出、不刪除；`--force` 才刪。被 officialSnapshot 引用的快照與
+    /// profiles/ 內其他檔案永遠不碰。刪除是不可逆動作，所以「沒給旗標」必須是安全的那一側。
+    func testDocumentGcIsDryRunByDefaultAndForceDeletesOnlyUnreferencedSnapshots() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("config.json")
+        let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", template(in: dir).path])
+        XCTAssertEqual(imported.exitCode, 0, imported.stderr)
+        let referenced = try XCTUnwrap(DocumentProfileStore(configURL: config).settings().officialSnapshot)
+        let profiles = dir.appendingPathComponent("profiles")
+        let stale = profiles.appendingPathComponent("official-stale.json")
+        let unrelated = profiles.appendingPathComponent("notes.txt")
+        try Data("{}".utf8).write(to: stale)
+        try Data("keep".utf8).write(to: unrelated)
+
+        let preview = try CLITestHelper.run(["config", "document", "gc", "--config", config.path])
+        XCTAssertEqual(preview.exitCode, 0, preview.stderr)
+        XCTAssertTrue(preview.stdout.contains("profiles/official-stale.json"), preview.stdout)
+        XCTAssertFalse(preview.stdout.contains(referenced), preview.stdout)
+        XCTAssertTrue(preview.stdout.contains("--force"), "dry-run 要告訴使用者怎麼真的刪：\(preview.stdout)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stale.path), "dry-run 不得刪檔")
+
+        let forced = try CLITestHelper.run(["config", "document", "gc", "--force", "--config", config.path])
+        XCTAssertEqual(forced.exitCode, 0, forced.stderr)
+        XCTAssertTrue(forced.stdout.contains("profiles/official-stale.json"), forced.stdout)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(referenced).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
+
+        let again = try CLITestHelper.run(["config", "document", "gc", "--force", "--config", config.path])
+        XCTAssertEqual(again.exitCode, 0, again.stderr)
+        XCTAssertFalse(again.stdout.contains("official-"), "已無可清理的快照：\(again.stdout)")
+    }
+
+    /// 設定檔損毀時無法判斷哪個快照仍被引用，必須在刪除任何東西之前失敗。
+    func testDocumentGcRefusesCorruptConfigWithoutDeleting() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("config.json")
+        let profiles = dir.appendingPathComponent("profiles")
+        try FileManager.default.createDirectory(at: profiles, withIntermediateDirectories: true)
+        let snapshot = profiles.appendingPathComponent("official-a.json")
+        try Data("{}".utf8).write(to: snapshot)
+        try Data(#"{"document":{"officialSnapshot":"../escape.json"}}"#.utf8).write(to: config)
+
+        let result = try CLITestHelper.run(["config", "document", "gc", "--force", "--config", config.path])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: snapshot.path))
+    }
 }

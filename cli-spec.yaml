@@ -739,7 +739,7 @@ commands:
         help: "後端名稱（ollama 或 mlx）。"
   - path: "macdoc config document"
     abstract: "文件格式設定與範本快照"
-    subcommands: [show, set-default, import-official]
+    subcommands: [show, set-default, import-official, gc]
   - path: "macdoc config document show"
     abstract: "顯示文件格式設定"
     options:
@@ -775,6 +775,17 @@ commands:
       dependencies: [microsoft-word]
       notes:
         - "Without --template it reads Normal.dotm from Microsoft Word's Office group container for the current account."
+  - path: "macdoc config document gc"
+    abstract: "清理未被引用的 official 格式快照；預設只列出，加 --force 才刪除"
+    options:
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "文件設定檔路徑（預設 ~/.config/macdoc/config.json）"
+    flags:
+      - names: ["--force"]
+        required: false
+        help: "實際刪除列出的快照（預設只預覽）"
   - path: "macdoc ocr"
     abstract: "（已移除）文字辨識改用 bestocr — PsychQuant/bestOCR"
     arguments:

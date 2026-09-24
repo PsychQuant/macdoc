@@ -152,7 +152,7 @@ struct CLISpecContractTests {
 
     @Test("config document subtree")
     func configDocument() throws {
-        #expect(try command("macdoc config document").subcommands == ["show", "set-default", "import-official"])
+        #expect(try command("macdoc config document").subcommands == ["show", "set-default", "import-official", "gc"])
         let setDefault = try command("macdoc config document set-default")
         #expect(setDefault.arguments.map(\.name) == ["profile"])
         #expect(setDefault.arguments.first?.required == true)
@@ -161,6 +161,12 @@ struct CLISpecContractTests {
         let importOfficial = try command("macdoc config document import-official")
         #expect(importOfficial.options.map(\.names) == [["--template"], ["--config"]])
         #expect(importOfficial.project?.dependencies == ["microsoft-word"])
+        // #194：刪除是不可逆動作，--force 必須是選填的 flag，沒給就只預覽。
+        let gc = try command("macdoc config document gc")
+        #expect(gc.arguments.isEmpty)
+        #expect(gc.options.map(\.names) == [["--config"]])
+        #expect(gc.flags.map(\.names) == [["--force"]])
+        #expect(gc.flags.first?.required == false)
     }
 
     // MARK: - Removed top-level ocr shim
