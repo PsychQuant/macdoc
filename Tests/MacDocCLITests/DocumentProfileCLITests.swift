@@ -2,6 +2,9 @@ import XCTest
 import OOXMLSwift
 
 final class DocumentProfileCLITests: XCTestCase {
+    /// Word ML 固定命名空間；rFonts／docDefaults／sectPr 等節點皆掛在此命名空間下。
+    private static let wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("profile-cli-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -24,6 +27,73 @@ final class DocumentProfileCLITests: XCTestCase {
         let url = dir.appendingPathComponent("Normal.dotm")
         try ZipHelper.zipToData(source).write(to: url)
         return url
+    }
+
+    /// §196 編碼／缺欄位矩陣專用：word/styles.xml 的位元組由呼叫端指定，document.xml
+    /// 沿用 `template(in:)` 相同的最小 sectPr。獨立於 `template(in:)`，不牽動既有通過案例。
+    private func officialTemplate(in dir: URL, stylesBytes: Data, suffix: String) throws -> URL {
+        let w = Self.wordNamespace
+        let source = dir.appendingPathComponent("template-parts-\(suffix)")
+        let documentXML = "<w:document xmlns:w=\"\(w)\"><w:body><w:p><w:r><w:t>PRIVATE TEMPLATE TEXT</w:t></w:r></w:p><w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1800\" w:bottom=\"1440\" w:left=\"1800\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>"
+        let parts: [(path: String, data: Data)] = [
+            ("word/styles.xml", stylesBytes),
+            ("word/document.xml", Data(documentXML.utf8)),
+        ]
+        for (path, data) in parts {
+            let file = source.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: file)
+        }
+        let url = dir.appendingPathComponent("Normal-\(suffix).dotm")
+        try ZipHelper.zipToData(source).write(to: url)
+        return url
+    }
+
+    // MARK: - Namespace-aware XML 斷言 helpers（issue #196：取代 String.contains 的字型比對）
+
+    /// 解析 part bytes 為 OOXMLSwift 公開的 lossless tree，回傳文件節點。
+    private func parseXml(_ data: Data) throws -> XmlNode {
+        try XmlTreeReader.parse(data).root
+    }
+
+    /// 依 local name 逐層下鑽（限定 w: 命名空間），對應不到就回傳 nil——
+    /// 呼叫端用 XCTUnwrap 斷言「該節點必須存在」。
+    private func descendant(_ root: XmlNode, _ path: String...) -> XmlNode? {
+        var current = root
+        for name in path {
+            guard let next = current.children.first(where: {
+                $0.kind == .element && $0.namespaceURI == Self.wordNamespace && $0.localName == name
+            }) else { return nil }
+            current = next
+        }
+        return current
+    }
+
+    /// 收集整棵樹裡所有符合 local name 的 w: 命名空間元素（不限層級）。
+    private func allElements(_ root: XmlNode, localName: String) -> [XmlNode] {
+        var found: [XmlNode] = []
+        func walk(_ node: XmlNode) {
+            if node.kind == .element, node.namespaceURI == Self.wordNamespace, node.localName == localName {
+                found.append(node)
+            }
+            for child in node.children { walk(child) }
+        }
+        walk(root)
+        return found
+    }
+
+    /// 整棵樹裡所有 `w:rFonts` 元素的 ascii／hAnsi／eastAsia／cs 四軸屬性值集合——
+    /// 用來斷言「特定字型名稱完全沒被寫進任何 rFonts 軸」，取代 String.contains 對整份
+    /// 檔案文字的粗略掃描（後者連 "Calibri Light" 這類子字串命中都分不清）。
+    private func rFontsAxisValues(_ data: Data) throws -> Set<String> {
+        let root = try parseXml(data)
+        var values = Set<String>()
+        for node in allElements(root, localName: "rFonts") {
+            for axis in ["ascii", "hAnsi", "eastAsia", "cs"] {
+                if let value = node.attributeValue(prefix: "w", localName: axis) { values.insert(value) }
+            }
+        }
+        return values
     }
 
     func testConfigCommandsPreserveSecretsWithoutDisplayingThem() throws {
@@ -61,18 +131,37 @@ final class DocumentProfileCLITests: XCTestCase {
             let official = dir.appendingPathComponent("official-\(index).docx")
             let result = try CLITestHelper.run(["convert", "--to", "docx", input, "--output", official.path, "--document-config", config.path])
             XCTAssertEqual(result.exitCode, 0, result.stderr)
-            let parts = try RawPartChannel.readAllParts(from: official).mapValues { String(decoding: $0, as: UTF8.self) }
-            XCTAssertTrue(parts["word/styles.xml"]!.contains("DFKai-SB"), input)
-            XCTAssertTrue(parts["word/styles.xml"]!.contains("w:val=\"24\""), input)
-            XCTAssertTrue(parts["word/document.xml"]!.contains("w:w=\"11906\""), input)
-            XCTAssertFalse(parts["word/document.xml"]!.contains("PRIVATE TEMPLATE TEXT"))
+            let parts = try RawPartChannel.readAllParts(from: official)
+            let stylesRoot = try parseXml(try XCTUnwrap(parts["word/styles.xml"], input))
+            // namespace-aware：只認 docDefaults/rPrDefault/rPr/rFonts 的 eastAsia 軸，
+            // 不對整份檔案文字做 String.contains("DFKai-SB")（issue #196）。
+            let docDefaultsRFonts = try XCTUnwrap(
+                descendant(stylesRoot, "docDefaults", "rPrDefault", "rPr", "rFonts"), input)
+            XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "eastAsia"), "DFKai-SB", input)
+            // official profile 只明示設定 eastAsia 這一軸；範本沒宣告的 ascii／hAnsi 不該被
+            // 官方注入行為憑空生成——區分「呼叫端刻意設定」與「未設定」，不是靠字型值猜意圖。
+            XCTAssertNil(docDefaultsRFonts.attributeValue(prefix: "w", localName: "ascii"), input)
+            XCTAssertNil(docDefaultsRFonts.attributeValue(prefix: "w", localName: "hAnsi"), input)
+            let docDefaultsSz = try XCTUnwrap(
+                descendant(stylesRoot, "docDefaults", "rPrDefault", "rPr", "sz"), input)
+            XCTAssertEqual(docDefaultsSz.attributeValue(prefix: "w", localName: "val"), "24", input)
+            let documentData = try XCTUnwrap(parts["word/document.xml"], input)
+            let documentRoot = try parseXml(documentData)
+            let pgSz = try XCTUnwrap(descendant(documentRoot, "body", "sectPr", "pgSz"), input)
+            XCTAssertEqual(pgSz.attributeValue(prefix: "w", localName: "w"), "11906", input)
+            XCTAssertFalse(String(decoding: documentData, as: UTF8.self).contains("PRIVATE TEMPLATE TEXT"))
+
             let inherit = dir.appendingPathComponent("inherit-\(index).docx")
             let override = try CLITestHelper.run(["convert", "--to", "docx", input, "--output", inherit.path, "--document-config", config.path, "--profile", "inherit"])
             XCTAssertEqual(override.exitCode, 0, override.stderr)
-            let inherited = try RawPartChannel.readAllParts(from: inherit).mapValues { String(decoding: $0, as: UTF8.self) }
-            XCTAssertFalse(inherited["word/styles.xml"]!.contains("Calibri"), input)
-            XCTAssertFalse(inherited["word/styles.xml"]!.contains("Times New Roman"), input)
-            if input.hasSuffix(".md") { XCTAssertTrue(inherited["word/document.xml"]!.contains("Menlo")) }
+            let inheritedParts = try RawPartChannel.readAllParts(from: inherit)
+            let inheritedStylesFonts = try rFontsAxisValues(try XCTUnwrap(inheritedParts["word/styles.xml"], input))
+            XCTAssertFalse(inheritedStylesFonts.contains("Calibri"), input)
+            XCTAssertFalse(inheritedStylesFonts.contains("Times New Roman"), input)
+            if input.hasSuffix(".md") {
+                let inheritedDocumentFonts = try rFontsAxisValues(try XCTUnwrap(inheritedParts["word/document.xml"], input))
+                XCTAssertTrue(inheritedDocumentFonts.contains("Menlo"), input)
+            }
         }
     }
 
@@ -102,10 +191,11 @@ final class DocumentProfileCLITests: XCTestCase {
             XCTAssertEqual(result.exitCode, 0, result.stderr)
             var readback = try DocxReader.read(from: output)
             defer { readback.close() }
-            let styles = String(decoding: try XCTUnwrap(RawPartChannel.readAllParts(from: output)["word/styles.xml"]), as: UTF8.self)
-            XCTAssertFalse(styles.contains("Calibri"), input)
-            XCTAssertFalse(styles.contains("Times New Roman"), input)
-            XCTAssertFalse(styles.contains("DFKai-SB"), input)
+            let stylesData = try XCTUnwrap(RawPartChannel.readAllParts(from: output)["word/styles.xml"])
+            let styleFonts = try rFontsAxisValues(stylesData)
+            XCTAssertFalse(styleFonts.contains("Calibri"), input)
+            XCTAssertFalse(styleFonts.contains("Times New Roman"), input)
+            XCTAssertFalse(styleFonts.contains("DFKai-SB"), input)
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: config.path))
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: dir.path).contains { $0.contains("staging") })
@@ -172,5 +262,75 @@ final class DocumentProfileCLITests: XCTestCase {
         try Data("broken config".utf8).write(to: config)
         let ignored = try CLITestHelper.run(arguments)
         XCTAssertEqual(ignored.exitCode, 0, ignored.stderr)
+    }
+
+    // MARK: - §196 字型／編碼合成矩陣（CLI 層，不牽動 ooxml-swift 生產程式碼）
+
+    /// 範本完全缺 `docDefaults` 應在 `import-official` 這關就被拒絕——不留到套用 profile
+    /// 時才出錯，也不讓半成品快照留在設定檔內。
+    func testImportOfficialRejectsTemplateMissingDocDefaults() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("config.json")
+        let w = Self.wordNamespace
+        let stylesXML = "<w:styles xmlns:w=\"\(w)\"><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style></w:styles>"
+        let source = try officialTemplate(in: dir, stylesBytes: Data(stylesXML.utf8), suffix: "no-docdefaults")
+        let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", source.path])
+        XCTAssertNotEqual(imported.exitCode, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: config.path))
+    }
+
+    /// 範本有 `docDefaults` 但缺 `pPrDefault` 同樣應被拒絕——兩個必要欄位分開驗證，
+    /// 避免「只測了其中一種缺漏就當作整個矩陣過了」。
+    func testImportOfficialRejectsTemplateMissingPPrDefault() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("config.json")
+        let w = Self.wordNamespace
+        let stylesXML = "<w:styles xmlns:w=\"\(w)\"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val=\"24\"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style></w:styles>"
+        let source = try officialTemplate(in: dir, stylesBytes: Data(stylesXML.utf8), suffix: "no-pprdefault")
+        let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", source.path])
+        XCTAssertNotEqual(imported.exitCode, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: config.path))
+    }
+
+    /// UTF-8 BOM 前綴的 styles.xml（部分工具，如 LibreOffice，會寫出這種位元組序）應被
+    /// 接受，且套用 official profile 後 eastAsia 軸仍正確落在 DFKai-SB——驗證編碼接受邊界，
+    /// 不是拒絕矩陣的另一半。
+    func testImportOfficialAcceptsUtf8BomPrefixedStylesXml() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("config.json")
+        let w = Self.wordNamespace
+        let bom = Data([0xEF, 0xBB, 0xBF])
+        let stylesXML = "<w:styles xmlns:w=\"\(w)\"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val=\"24\"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr/></w:pPrDefault></w:docDefaults><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style></w:styles>"
+        let source = try officialTemplate(in: dir, stylesBytes: bom + Data(stylesXML.utf8), suffix: "bom")
+        let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", source.path])
+        XCTAssertEqual(imported.exitCode, 0, imported.stderr)
+        let official = dir.appendingPathComponent("official-bom.docx")
+        let result = try CLITestHelper.run(["convert", "--to", "docx", FixtureManager.markdownFile(), "--output", official.path, "--document-config", config.path, "--profile", "official"])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        let stylesData = try XCTUnwrap(RawPartChannel.readAllParts(from: official)["word/styles.xml"])
+        let stylesRoot = try parseXml(stylesData)
+        let docDefaultsRFonts = try XCTUnwrap(descendant(stylesRoot, "docDefaults", "rPrDefault", "rPr", "rFonts"))
+        XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "eastAsia"), "DFKai-SB")
+    }
+
+    /// 範本 docDefaults 明示設定 ascii／hAnsi／cs（呼叫端刻意選擇的字型）時，official 注入
+    /// 只覆寫 eastAsia 這一軸，其餘三軸原樣保留——區分「factory 預設」與「呼叫端明示 setter」，
+    /// 不是靠字型值是否相同去猜呼叫端的意圖。
+    func testOfficialProfilePreservesExplicitCallerFontAxesAndOnlyOverridesEastAsia() throws {
+        let dir = try directory(), config = dir.appendingPathComponent("config.json")
+        let w = Self.wordNamespace
+        let stylesXML = "<w:styles xmlns:w=\"\(w)\"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii=\"PMingLiU\" w:hAnsi=\"PMingLiU\" w:eastAsia=\"MingLiU\" w:cs=\"PMingLiU\"/><w:sz w:val=\"24\"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr/></w:pPrDefault></w:docDefaults><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style></w:styles>"
+        let source = try officialTemplate(in: dir, stylesBytes: Data(stylesXML.utf8), suffix: "explicit-axes")
+        let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", source.path])
+        XCTAssertEqual(imported.exitCode, 0, imported.stderr)
+        let official = dir.appendingPathComponent("official-explicit-axes.docx")
+        let result = try CLITestHelper.run(["convert", "--to", "docx", FixtureManager.markdownFile(), "--output", official.path, "--document-config", config.path, "--profile", "official"])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        let stylesData = try XCTUnwrap(RawPartChannel.readAllParts(from: official)["word/styles.xml"])
+        let stylesRoot = try parseXml(stylesData)
+        let docDefaultsRFonts = try XCTUnwrap(descendant(stylesRoot, "docDefaults", "rPrDefault", "rPr", "rFonts"))
+        XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "ascii"), "PMingLiU")
+        XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "hAnsi"), "PMingLiU")
+        XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "cs"), "PMingLiU")
+        // eastAsia 這一軸永遠被 officialEastAsianFont 覆蓋，即使範本本來就設定了別的中文
+        // 字型——這是 official profile 的既定語意，不是「猜」使用者想要哪個中文字型。
+        XCTAssertEqual(docDefaultsRFonts.attributeValue(prefix: "w", localName: "eastAsia"), "DFKai-SB")
     }
 }
