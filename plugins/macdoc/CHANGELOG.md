@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.8.0] - 2026-09-24
+
+### Changed
+
+- CLI binary **0.10.0 → 0.11.0**：
+  - `convert --to html` 的 `.srt`／`.note` 不帶 `--css` 時預設 `dark`，不再以 exit 64 失敗（PsychQuant/macdoc#216）。
+  - `pdf ocr --mode ollama` 沒給 `--host`／`--model` 時改讀 `config ocr` 的預設值，並修正 model 被寫死成 `glm-ocr` 的既有 bug（#218）。
+  - 依 `cli-spec.yaml` 更正文件與規格不一致處（#217）；測試 helper 的 pipe 讀取不再在大量輸出或平行測試下死結（#219）。
+  - 依賴 ooxml-swift 3.11.0（格式 profile 依 relationship 解析 part、匯入只收 UTF-8、缺欄位錯誤指名欄位；#212–#214）與 pdf-to-latex-swift 0.4.0（page label 頁碼、偶數頁章節加 `openany`、圖寬改為原書絕對尺寸、裁切檔名帶頁碼、去重不動 verbatim；#207–#211、#215）。`pdf scan`／`pdf render` 會把 page label 寫進 manifest，`pdf normalize` 的摘要涵蓋這些新紀錄。
+- skill：`--css` 的預設、`config ocr` 由誰讀取、1.8.0 版本紀錄；swiftify 補上 che-word-mcp 4.3.0 的 `raw_reason` 與 `paragraphs_only`。
+
 ## [1.7.0] - 2026-09-24
 
 ### Added
