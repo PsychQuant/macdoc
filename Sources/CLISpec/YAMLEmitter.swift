@@ -34,10 +34,11 @@ public struct YAMLEntry: Equatable, Sendable {
 public enum YAMLEmitter {
 
     /// Prints `root` as YAML: two-space indentation, LF line endings, no
-    /// trailing whitespace, exactly one newline at the end. Each header
-    /// comment becomes a `# ` line (an empty comment becomes `#`).
+    /// trailing whitespace, exactly one newline at the end. Header comments
+    /// are split at line breaks; each physical line becomes its own `# ` line
+    /// (`#` when empty) — see `commentLines(_:)`.
     public static func emit(_ root: YAMLNode, headerComments: [String] = []) -> String {
-        var lines: [String] = headerComments.map { $0.isEmpty ? "#" : "# " + $0 }
+        var lines: [String] = headerComments.flatMap(commentLines)
         switch root {
         case .mapping(let entries) where !entries.isEmpty:
             appendMapping(entries, indent: 0, into: &lines)
@@ -55,6 +56,41 @@ public enum YAMLEmitter {
     /// every other string is double-quoted with escapes.
     public static func scalar(_ value: String) -> String {
         isPlainSafe(value) ? value : doubleQuoted(value)
+    }
+
+    /// One comment text → YAML comment lines. Line breaks (LF, CR, CRLF,
+    /// U+0085, U+2028, U+2029) start a new `# ` line; trailing spaces and tabs
+    /// are removed; a character YAML does not allow in a comment (C0 controls
+    /// other than tab, DEL, C1 controls, U+FFFE, U+FFFF) is written as the
+    /// visible text `\uXXXX`, so a comment can never break out of itself.
+    static func commentLines(_ text: String) -> [String] {
+        var physical: [String] = []
+        var current = ""
+        var previousWasCR = false
+        for scalar in text.unicodeScalars {
+            let value = scalar.value
+            if value == 0x0A && previousWasCR {
+                previousWasCR = false
+                continue   // CRLF: the CR already ended the line
+            }
+            previousWasCR = value == 0x0D
+            if value == 0x0A || value == 0x0D || value == 0x85 || value == 0x2028 || value == 0x2029 {
+                physical.append(current)
+                current = ""
+            } else if value != 0x09 && needsUnicodeEscape(scalar) {
+                current += "\\u" + hex4(value)
+            } else {
+                current.unicodeScalars.append(scalar)
+            }
+        }
+        physical.append(current)
+        return physical.map { line in
+            var trimmed = Substring(line)
+            while let last = trimmed.last, last == " " || last == "\t" {
+                trimmed = trimmed.dropLast()
+            }
+            return trimmed.isEmpty ? "#" : "# " + trimmed
+        }
     }
 
     // MARK: - Block layout

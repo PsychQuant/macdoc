@@ -121,6 +121,35 @@ struct CLISpecEmitterTests {
         #expect(YAMLEmitter.emit(document, headerComments: ["first line", ""]) == expected)
     }
 
+    @Test("header comments: one # line per physical line, control characters escaped")
+    func headerCommentLines() {
+        let document = YAMLNode.mapping([YAMLEntry("k", .string("v"))])
+        let emitted = YAMLEmitter.emit(document, headerComments: [
+            "first\nsecond\r\nthird\rfourth\u{2028}fifth\u{85}sixth\u{2029}seventh",
+            "",
+            "ctl\u{1}x\u{7F}y\u{9B}z\u{FFFE}",
+            "tab\tkept, trailing spaces trimmed   ",
+            "a\n\nb",
+        ])
+        #expect(emitted == """
+        # first
+        # second
+        # third
+        # fourth
+        # fifth
+        # sixth
+        # seventh
+        #
+        # ctl\\u0001x\\u007Fy\\u009Bz\\uFFFE
+        # tab\tkept, trailing spaces trimmed
+        # a
+        #
+        # b
+        k: v
+
+        """)
+    }
+
     @Test("empty collections are written in flow form")
     func emptyCollections() {
         let document = YAMLNode.mapping([
