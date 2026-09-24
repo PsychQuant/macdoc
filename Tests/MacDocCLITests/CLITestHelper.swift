@@ -206,9 +206,21 @@ enum CLITestHelper {
     /// can exercise *this specific function*, the one the catch block
     /// actually calls, rather than only a hand-rolled reproduction of the
     /// same idea with a different `Pipe`.
-    static func closeWriteEndsForSpawnFailureCleanup(_ pipes: Pipe...) {
+    ///
+    /// - Parameter onEachClosed: **Test-only.** Called once per pipe, right
+    ///   after that pipe's `close()` call — *inside* this function's own
+    ///   loop, not as a separate statement at the caller's call site. Codex
+    ///   round-2 finding #3: an earlier version had `runProcess`'s `catch`
+    ///   block call this function and then separately invoke its own
+    ///   `onSpawnFailureCleanup` hook as two independent statements, so
+    ///   deleting *only* the call to this function left the hook — and the
+    ///   test observing it — passing regardless. Threading the observer
+    ///   through this parameter instead means the only way to make it fire
+    ///   is to actually reach this loop.
+    static func closeWriteEndsForSpawnFailureCleanup(_ pipes: Pipe..., onEachClosed: (() -> Void)? = nil) {
         for pipe in pipes {
             try? pipe.fileHandleForWriting.close()
+            onEachClosed?()
         }
     }
 
@@ -327,8 +339,7 @@ enum CLITestHelper {
             // readers return normally, so this doesn't need to touch the
             // read ends (which a background thread may still be inside a
             // syscall on) at all.
-            closeWriteEndsForSpawnFailureCleanup(stdoutPipe, stderrPipe)
-            onSpawnFailureCleanup?()
+            closeWriteEndsForSpawnFailureCleanup(stdoutPipe, stderrPipe, onEachClosed: onSpawnFailureCleanup)
             drainGroup.wait()
             throw error
         }
@@ -353,11 +364,13 @@ enum CLITestHelper {
         // Each background read reaches EOF (and `drainGroup.leave()`) once
         // every process holding the pipe's write end open has exited.
         // `waitUntilExit()` above only guarantees *this* process (the one
-        // we spawned) has exited — not any grandchildren. Unrelated,
-        // concurrently-spawned processes can no longer hold onto this
-        // pipe's write end (macdoc#224's `FD_CLOEXEC` fix above), so this
-        // now depends only on this process's own descendants closing their
-        // copies, same as any ordinary use of `Pipe` + `Process`.
+        // we spawned) has exited — not any grandchildren. A *cooperating*
+        // concurrently-spawned `runProcess` call can no longer pick up this
+        // pipe's write end (macdoc#224's `FD_CLOEXEC` fix above covers that
+        // specific class of interference), so this now depends only on
+        // this process's own descendants closing their copies, same as any
+        // ordinary use of `Pipe` + `Process` — it is not a guarantee against
+        // every conceivable spawn anywhere in the process.
         drainGroup.wait()
 
         return CLIResult(

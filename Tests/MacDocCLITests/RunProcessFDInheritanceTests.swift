@@ -37,40 +37,71 @@ import Testing
 /// Foundation/OS version — or via some other spawn path — that did not
 /// isolate by default the way this one does).
 ///
-/// Codex round-1 findings addressed here (beyond the mechanics above):
-/// - The original version of these tests only exercised
-///   `makeCloseOnExecPipe()` and a hand-rolled `Pipe` reproduction in
-///   isolation — proving the *factory* and the *unblocking mechanism* are
-///   each correct, but not that `runProcess` actually wires its own pipes
-///   through that factory, or that its `catch` block actually calls the
-///   exact cleanup function it relies on. `runProcessOwnPipesDoNotLeak`
-///   and `closingWriteEndUnblocksBlockedReader` (below) now go through
-///   `runProcess` itself (via the test-only `pipesForTesting` hook) and
-///   `CLITestHelper.closeWriteEndsForSpawnFailureCleanup` (the literal
-///   function the `catch` block calls) respectively — the same
-///   factory-vs-call-site gap macdoc#225 fixed for `PageOCRRunner`.
-/// - `probesAsLeaked` now fails loudly on any output other than exactly
-///   `"LEAKED"` or `"CLEAN"`, instead of treating anything-not-"LEAKED"
-///   (including empty output from a broken probe) as a negative result.
-// `.serialized`: the fd-inheritance tests below identify a pipe by its raw
-// integer fd number and check, from a *separately spawned process*, whether
-// that exact number is open. Each tested pipe stays open (not reused) for
-// the whole synchronous probe, so a *sibling test's* own pipe cannot
-// directly steal that exact number mid-probe — but low fd numbers are
-// reused eagerly, and the probe's own raw-spawned child does its own
-// allocation (the `outPipe` used to capture the probe's stdout, the shell's
-// own bookkeeping) that can land on the number `FD_CLOEXEC` just freed
-// inside *that* child during its own `exec()`, independent of any other
-// test. Whichever of those is the precise mechanism, serializing removed
-// the flake directly: without `.serialized`,
-// `closeOnExecPipeDoesNotLeakIntoRawSpawnedChild` failed roughly 2 times
-// out of 3 running alongside its siblings in this file; 5 repeated runs
-// were clean with it. `.serialized` only protects this one `@Suite` — it
-// does not, and cannot, protect against unrelated pipe/process churn in
-// *other* concurrently-running suites in the same `swift test` invocation;
-// `probesAsLeaked`'s strict output validation (reject anything but exactly
-// "LEAKED"/"CLEAN") is the actual defense against a probe silently reading
-// the wrong fd's state as a false negative.
+/// Codex findings addressed across two review rounds:
+/// - round 1: tests only covered `makeCloseOnExecPipe()` and the reader-
+///   unblocking mechanism in isolation, not `runProcess`'s actual call
+///   sites; a hand-rolled `Pipe` reproduction stood in for the real
+///   `closeWriteEndsForSpawnFailureCleanup`; `probesAsLeaked` silently
+///   treated broken-probe output as "not leaked"; and a couple of test-only
+///   comments overstated `spawnLock`'s protection scope. All addressed via
+///   test-only hooks on `runProcess`/`closeWriteEndsForSpawnFailureCleanup`
+///   (`pipesForTesting`, `onEachClosed`), strict probe-output validation,
+///   and narrower comment wording.
+/// - round 2 (this revision):
+///   - **Integration test race**: the first version of `runProcessOwnPipesDoNotLeak`
+///     captured a pipe's fd via `pipesForTesting`, then probed it *after*
+///     `process.run()` had already been allowed to proceed on another
+///     thread. `Foundation.Process`, on a successful spawn, closes its
+///     caller-provided pipe's write end in the *parent* shortly after (it
+///     has to, for the pipe's own EOF semantics to work at all when nobody
+///     else explicitly closes it) — so a probe that runs after that point
+///     can observe "fd already closed" and report a false `CLEAN`,
+///     regardless of whether `FD_CLOEXEC` was ever set. Fixed: the probe
+///     now runs *synchronously inside* the `pipesForTesting` callback,
+///     strictly before `process.run()` is called — the only place where
+///     the fd's parent-side lifetime is guaranteed. That also removes the
+///     separate `Thread` and cross-thread `Captured`/`RunOutcome` reads
+///     entirely, which incidentally resolves the round-2 data-race finding
+///     on this specific test (see next point) by construction — there is
+///     no longer a second thread involved.
+///   - **Unsynchronized post-timeout reads**: `XCTAssertTrue`/`#expect`
+///     alone are not control-flow guards — execution continues to the next
+///     line even when the expectation fails, so a value written by another
+///     thread could still be read racily right after a *failed* (timed
+///     out) wait. `FileHandleOutputFlushTests.testFlushOnAPipeDoesNotThrow`
+///     (in `common-converter-swift`) now `guard`s on the wait's result
+///     before reading `box.data`.
+///   - **`onSpawnFailureCleanup` didn't prove causality**: it fired as a
+///     separate statement after `closeWriteEndsForSpawnFailureCleanup(...)`
+///     at the `runProcess` call site, so deleting *only* the cleanup call
+///     would have left the hook — and the test observing it — passing
+///     regardless. Fixed: the hook is now a parameter threaded *into*
+///     `closeWriteEndsForSpawnFailureCleanup` itself (`onEachClosed:`,
+///     invoked once per pipe from inside its own loop, right after that
+///     pipe's `close()`), so there is exactly one call site and no way to
+///     observe cleanup without the function itself running.
+///   - **Shell fd bookkeeping could produce a false "LEAKED"**: the
+///     `/bin/sh` probe's own redirect handling (`{ : <&N; } 2>/dev/null`)
+///     performs its own internal fd save/restore around the redirect,
+///     which can itself reallocate a just-freed fd number to something
+///     unrelated to the pipe under test, independent of anything
+///     `runProcess` does. Fixed: the probe is now `/usr/bin/python3 -c
+///     '...'` (macOS's system Python, always present, never itself does
+///     shell-style redirect fd juggling) calling `os.fstat(fd)` directly on
+///     the raw integer, and additionally compares the probed fd's
+///     `st_dev`/`st_ino` against the *expected* pipe's own — an fd that
+///     happens to be open but points at something else (e.g. a descriptor
+///     python's own startup opened at that same number) no longer counts
+///     as a leak of *this* pipe.
+// `.serialized`: even with the round-2 fixes above, the fd-inheritance
+// tests still identify pipes by raw integer fd number, which is process-
+// wide state. Serializing removes any chance of *this suite's own* tests
+// interleaving their pipe lifecycles; it cannot, and does not, protect
+// against unrelated pipe/process churn in *other* concurrently-running
+// suites in the same `swift test` invocation — the dev/ino identity check
+// in `probesAsLeaked` is the actual defense against that, since a fd
+// reused by something unrelated to this suite would also fail the identity
+// comparison rather than being mistaken for this suite's own pipe.
 @Suite("runProcess FD inheritance and reader-unblocking (macdoc#224)", .serialized)
 struct RunProcessFDInheritanceTests {
 
@@ -82,19 +113,36 @@ struct RunProcessFDInheritanceTests {
     private struct UnexpectedProbeOutput: Error, CustomStringConvertible {
         let output: String
         var description: String {
-            "probe produced neither \"LEAKED\" nor \"CLEAN\" (got: \(output.isEmpty ? "<empty>" : output)) — probe itself is broken, not a valid CLEAN result"
+            "probe produced unparseable output (got: \(output.isEmpty ? "<empty>" : output))"
         }
     }
 
-    /// Spawns `/bin/sh -c <command>` via raw `posix_spawn` (attrp `nil` —
-    /// no `POSIX_SPAWN_CLOEXEC_DEFAULT`, no other special attributes) and
-    /// returns its captured stdout. This is deliberately *not* built on
-    /// `Process`/`runProcess` — see the suite doc comment above for why.
+    private struct FstatFailed: Error, CustomStringConvertible {
+        let fd: Int32
+        var description: String { "fstat failed for fd \(fd)" }
+    }
+
+    /// This process's own `st_dev`/`st_ino` for an open fd — used to give
+    /// the raw-spawned probe an identity to compare against, not just a
+    /// number (Codex round-2 finding: a bare fd-number check can produce a
+    /// false "LEAKED" if something *else* ends up open at the same number
+    /// in the probe process).
+    private func identity(ofOpenFD fd: Int32) throws -> (dev: Int32, ino: UInt64) {
+        var status = stat()
+        guard fstat(fd, &status) == 0 else { throw FstatFailed(fd: fd) }
+        return (dev: status.st_dev, ino: UInt64(status.st_ino))
+    }
+
+    /// Spawns `/usr/bin/python3 -c <script>` via raw `posix_spawn` (attrp
+    /// `nil` — no `POSIX_SPAWN_CLOEXEC_DEFAULT`, no other special
+    /// attributes) and returns its captured stdout. Deliberately *not*
+    /// built on `Process`/`runProcess` — see the suite doc comment above
+    /// for why. Deliberately python3, not `/bin/sh` — see the doc comment's
+    /// round-2 "shell fd bookkeeping" point.
     ///
-    /// Codex round-1 finding #6 (robustness): checks every `posix_spawn*`
-    /// return code (previously ignored) and retries `waitpid` on `EINTR`
-    /// instead of silently accepting whatever `waitpid` happened to return.
-    private func rawSpawnAndCaptureStdout(command: String) throws -> String {
+    /// Checks every `posix_spawn*` return code and retries `waitpid` on
+    /// `EINTR` instead of silently accepting whatever it returns.
+    private func rawSpawnPythonAndCaptureStdout(script: String) throws -> String {
         let outPipe = Pipe()
         var fileActions: posix_spawn_file_actions_t?
         var rc = posix_spawn_file_actions_init(&fileActions)
@@ -105,11 +153,11 @@ struct RunProcessFDInheritanceTests {
         guard rc == 0 else { throw RawSpawnError(code: rc) }
 
         var pid: pid_t = 0
-        let argv: [String?] = ["/bin/sh", "-c", command, nil]
+        let argv: [String?] = ["/usr/bin/python3", "-c", script, nil]
         let cArgs = argv.map { $0.flatMap { strdup($0) } }
         defer { for case let arg? in cArgs { free(arg) } }
 
-        rc = posix_spawn(&pid, "/bin/sh", &fileActions, nil, cArgs, environ)
+        rc = posix_spawn(&pid, "/usr/bin/python3", &fileActions, nil, cArgs, environ)
         try outPipe.fileHandleForWriting.close()
         guard rc == 0 else { throw RawSpawnError(code: rc) }
 
@@ -123,28 +171,37 @@ struct RunProcessFDInheritanceTests {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
-    /// `{ : <&N; }` in the probed shell only succeeds if fd `N` is already
-    /// open in *that* shell — this checks real kernel-level fd inheritance
-    /// through a raw fork+exec, not anything about `Process`'s internals.
-    /// Uses `:` (the shell's no-op builtin) with a redirect scoped to just
-    /// that one command, not `exec 3<&N` — `exec` permanently dup's fd `N`
-    /// onto a *new* fd (3) for the rest of the script, which is an
-    /// additional fd allocation the probe doesn't need and that could
-    /// itself interact with whatever fd churn is under investigation.
-    ///
-    /// Codex round-1 finding #4: rejects any output other than exactly
-    /// "LEAKED" or "CLEAN" — previously, anything-not-"LEAKED" (including
-    /// empty output from a broken probe: a failed `sh` invocation, a
-    /// truncated read, …) silently counted as a negative ("not leaked")
-    /// result, which could mask a broken probe as a passing test.
-    private func probesAsLeaked(fd: Int32) throws -> Bool {
-        let output = try rawSpawnAndCaptureStdout(
-            command: "{ : <&\(fd); } 2>/dev/null && echo LEAKED || echo CLEAN")
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch trimmed {
-        case "LEAKED": return true
-        case "CLEAN": return false
-        default: throw UnexpectedProbeOutput(output: output)
+    /// Probes whether fd `fd` is open in a raw-spawned child and, if so,
+    /// whether it identifies the *same* underlying file as `expected`
+    /// (this pipe's own `st_dev`/`st_ino`, captured in this process before
+    /// spawning the probe). `os.fstat` is a direct syscall wrapper — no
+    /// shell redirect machinery sits between the child's `exec()` and the
+    /// check.
+    private func probesAsLeaked(fd: Int32, expected: (dev: Int32, ino: UInt64)) throws -> Bool {
+        let script = """
+        import os
+        try:
+            st = os.fstat(\(fd))
+            print("OPEN", st.st_dev, st.st_ino)
+        except OSError:
+            print("CLOSED")
+        """
+        let output = try rawSpawnPythonAndCaptureStdout(script: script)
+        let parts = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ")
+        guard let first = parts.first else { throw UnexpectedProbeOutput(output: output) }
+        switch first {
+        case "CLOSED":
+            return false
+        case "OPEN":
+            guard parts.count == 3, let dev = Int32(parts[1]), let ino = UInt64(parts[2]) else {
+                throw UnexpectedProbeOutput(output: output)
+            }
+            // Open, but at something other than this pipe (e.g. a fd
+            // python's own startup happened to allocate at the same
+            // number) — not a leak of *this* pipe.
+            return dev == expected.dev && ino == expected.ino
+        default:
+            throw UnexpectedProbeOutput(output: output)
         }
     }
 
@@ -156,11 +213,12 @@ struct RunProcessFDInheritanceTests {
     func plainPipeLeaksIntoRawSpawnedChild() throws {
         let pipe = Pipe()
         let writeFD = pipe.fileHandleForWriting.fileDescriptor
+        let expected = try identity(ofOpenFD: writeFD)
         defer {
             try? pipe.fileHandleForWriting.close()
             try? pipe.fileHandleForReading.close()
         }
-        #expect(try probesAsLeaked(fd: writeFD), "a plain Pipe()'s write end (fd \(writeFD)) should leak into a raw fork+exec child")
+        #expect(try probesAsLeaked(fd: writeFD, expected: expected), "a plain Pipe()'s write end (fd \(writeFD)) should leak into a raw fork+exec child")
     }
 
     /// Point 1: the actual fix, exercised at the factory level. A pipe
@@ -169,74 +227,59 @@ struct RunProcessFDInheritanceTests {
     func closeOnExecPipeDoesNotLeakIntoRawSpawnedChild() throws {
         let pipe = CLITestHelper.makeCloseOnExecPipe()
         let writeFD = pipe.fileHandleForWriting.fileDescriptor
+        let expected = try identity(ofOpenFD: writeFD)
         defer {
             try? pipe.fileHandleForWriting.close()
             try? pipe.fileHandleForReading.close()
         }
-        #expect(try !probesAsLeaked(fd: writeFD), "makeCloseOnExecPipe's write end (fd \(writeFD)) must not leak into a raw fork+exec child")
+        #expect(try !probesAsLeaked(fd: writeFD, expected: expected), "makeCloseOnExecPipe's write end (fd \(writeFD)) must not leak into a raw fork+exec child")
     }
 
     /// Point 1, integration: the factory-level test above only proves
     /// `makeCloseOnExecPipe()` itself is correct — not that `runProcess`
-    /// actually uses it for its own pipes (Codex round-1 finding #2:
-    /// reverting `runProcess` back to plain `Pipe()` calls would leave that
-    /// test, and the one above, unaffected). This one goes through
-    /// `runProcess` itself: a slow child (`sleep 0.5`) keeps `runProcess`'s
-    /// own stdout pipe write end open long enough to probe it via the
-    /// test-only `pipesForTesting` hook, while `runProcess` is still
-    /// in-flight on another thread.
+    /// actually uses it for its own pipes (Codex round-1: reverting
+    /// `runProcess` back to plain `Pipe()` calls would leave that test, and
+    /// the one above, unaffected). This one goes through `runProcess`
+    /// itself via the test-only `pipesForTesting` hook.
+    ///
+    /// Codex round-2: the probe runs *synchronously inside* that callback,
+    /// strictly before `process.run()` — see this file's top-level doc
+    /// comment for why probing any later races against `Process.run()`'s
+    /// own parent-side pipe cleanup on a successful spawn.
     @Test("runProcess's own pipes — not just makeCloseOnExecPipe() in isolation — do not leak into a raw fork+exec child")
     func runProcessOwnPipesDoNotLeak() throws {
-        final class Captured: @unchecked Sendable {
-            var stdoutWriteFD: Int32?
-        }
-        final class RunOutcome: @unchecked Sendable {
-            var result: Swift.Result<CLIResult, Error>?
-        }
-        let captured = Captured()
-        let outcome = RunOutcome()
-        let pipeReady = DispatchSemaphore(value: 0)
-        let runFinished = DispatchSemaphore(value: 0)
-
-        // A real pthread, not a `Task` — same reasoning `runProcess`'s own
-        // reader threads document: a raw `DispatchSemaphore.wait()` inside
-        // an `async` test body would block a Swift concurrency
-        // cooperative-pool worker, which is the exact starvation class
-        // macdoc#219 exists to avoid (and, as of Swift 6, is a hard
-        // compiler error to write directly in an `async` context anyway).
-        let runner = Thread {
-            do {
-                let result = try CLITestHelper.runProcess(
-                    executableURL: URL(fileURLWithPath: "/bin/sh"),
-                    arguments: ["-c", "sleep 0.5"],
-                    currentDirectory: nil,
-                    timeout: 10,
-                    pipesForTesting: { stdout, _ in
-                        captured.stdoutWriteFD = stdout.fileHandleForWriting.fileDescriptor
-                        pipeReady.signal()
-                    })
-                outcome.result = .success(result)
-            } catch {
-                outcome.result = .failure(error)
-            }
-            runFinished.signal()
-        }
-        runner.start()
-
-        let observed = pipeReady.wait(timeout: .now() + 5) == .success
-        #expect(observed, "did not observe runProcess's pipe via pipesForTesting in time")
-        guard let writeFD = captured.stdoutWriteFD else {
-            _ = runFinished.wait(timeout: .now() + 10)
-            return
+        struct LeakDetected: Error, CustomStringConvertible {
+            let name: String
+            let fd: Int32
+            var description: String { "runProcess's own \(name) pipe write end (fd \(fd)) leaked into a raw fork+exec child" }
         }
 
-        // runProcess's child is still sleeping (0.5s), so its stdout pipe's
-        // write end is still open in this process at this point — probe it
-        // for real, the same way the factory-level test above does.
-        #expect(try !probesAsLeaked(fd: writeFD), "runProcess's own stdout pipe write end (fd \(writeFD)) must not leak into a raw fork+exec child")
+        final class ProbeOutcome: @unchecked Sendable {
+            var error: Error?
+        }
+        let outcome = ProbeOutcome()
 
-        _ = runFinished.wait(timeout: .now() + 10)
-        if case .failure(let error) = outcome.result {
+        _ = try? CLITestHelper.runProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "true"],
+            currentDirectory: nil,
+            timeout: 10,
+            pipesForTesting: { stdout, stderr in
+                do {
+                    for (name, pipe) in [("stdout", stdout), ("stderr", stderr)] {
+                        let fd = pipe.fileHandleForWriting.fileDescriptor
+                        let expected = try identity(ofOpenFD: fd)
+                        if try probesAsLeaked(fd: fd, expected: expected) {
+                            outcome.error = LeakDetected(name: name, fd: fd)
+                            return
+                        }
+                    }
+                } catch {
+                    outcome.error = error
+                }
+            })
+
+        if let error = outcome.error {
             throw error
         }
     }
@@ -244,17 +287,17 @@ struct RunProcessFDInheritanceTests {
     /// Point 2, mechanism: this is the exact function `runProcess`'s
     /// `catch` block calls when `process.run()` throws
     /// (`CLITestHelper.closeWriteEndsForSpawnFailureCleanup`) — not a
-    /// hand-rolled reproduction of the same idea (Codex round-1 finding
-    /// #1). Establishes both halves of the causal claim: (a) without a
-    /// close, nothing else unblocks a reader stuck in
-    /// `readDataToEndOfFile()` — proven by a bounded wait that must time
-    /// out — and (b) calling this exact function is what unblocks it.
+    /// hand-rolled reproduction of the same idea. Establishes both halves
+    /// of the causal claim: (a) without a close, nothing else unblocks a
+    /// reader stuck in `readDataToEndOfFile()` — proven by a bounded wait
+    /// that must time out — and (b) calling this exact function is what
+    /// unblocks it.
     ///
-    /// Codex round-1 finding #3: the reader thread's completion is
-    /// observed *only* through `DispatchSemaphore.wait()`'s return value —
-    /// no auxiliary `Bool` flag read outside that synchronization, since a
-    /// flag read after a `.timedOut` wait would race with the reader
-    /// thread's eventual write to it.
+    /// The reader thread's completion is observed *only* through
+    /// `DispatchSemaphore.wait()`'s return value — no auxiliary `Bool` flag
+    /// read outside that synchronization, since a flag read after a
+    /// `.timedOut` wait would race with the reader thread's eventual write
+    /// to it.
     @Test("runProcess's spawn-failure cleanup — closeWriteEndsForSpawnFailureCleanup — unblocks a reader stuck in readDataToEndOfFile")
     func closingWriteEndUnblocksBlockedReader() throws {
         let pipe = CLITestHelper.makeCloseOnExecPipe()
@@ -283,8 +326,14 @@ struct RunProcessFDInheritanceTests {
     /// `runProcess`'s own `catch` block actually reaches that call when
     /// `process.run()` throws. This one goes through the real `runProcess`
     /// with a guaranteed-nonexistent executable and observes the
-    /// `onSpawnFailureCleanup` hook, which only fires from inside that
-    /// exact `catch` block, right after its cleanup call.
+    /// `onSpawnFailureCleanup` hook.
+    ///
+    /// Codex round-2: the hook is threaded into
+    /// `closeWriteEndsForSpawnFailureCleanup`'s own `onEachClosed:`
+    /// parameter (fired once per pipe, from inside its own close loop) —
+    /// not a separate statement at the `runProcess` call site — so there is
+    /// exactly one call site left, and no way to delete the cleanup call
+    /// while leaving the observation intact.
     @Test("runProcess's catch block actually reaches its spawn-failure cleanup call")
     func runProcessCatchBlockReachesCleanup() throws {
         let cleanupRan = DispatchSemaphore(value: 0)

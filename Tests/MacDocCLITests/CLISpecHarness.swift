@@ -69,10 +69,13 @@ enum CLISpecHarness {
     /// are now drained concurrently while the process runs). And a pipe's
     /// EOF used to also wait for any concurrently spawned test process that
     /// inherited its write end (observed as a ~30s stall while the route
-    /// probe ran in parallel) — fixed as of macdoc#224 (`runProcess` now
-    /// creates its pipes `FD_CLOEXEC` under a lock spanning pipe creation
-    /// through `process.run()`, so no concurrently spawned process can pick
-    /// them up). Both reasons this harness avoided `runProcess` are gone,
+    /// probe ran in parallel) — mitigated as of macdoc#224 (`runProcess`
+    /// now creates its pipes `FD_CLOEXEC` under a lock spanning pipe
+    /// creation through `process.run()`, so a *cooperating* concurrently
+    /// running `runProcess` call can no longer pick up an in-flight pipe's
+    /// write end during that narrow window; this does not, and cannot,
+    /// protect against a hypothetical spawn made outside `runProcess`).
+    /// Both reasons this harness avoided `runProcess` are gone,
     /// so it now shares the one drain/timeout/FD-safety implementation
     /// instead of carrying a second, narrower one.
     private static func runCapturingFiles(_ binary: URL, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
