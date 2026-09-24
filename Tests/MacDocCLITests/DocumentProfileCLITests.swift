@@ -5,6 +5,10 @@ final class DocumentProfileCLITests: XCTestCase {
     /// Word ML 固定命名空間；rFonts／docDefaults／sectPr 等節點皆掛在此命名空間下。
     private static let wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
+    /// ooxml-swift 3.11.0 起 importOfficial 依 relationship 找 styles（PsychQuant/macdoc#213），
+    /// 合成範本必須帶 document.xml.rels；真實的 Word 範本本來就有。
+    private static let documentRels = "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>"
+
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("profile-cli-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -17,7 +21,8 @@ final class DocumentProfileCLITests: XCTestCase {
         let w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
         let parts = [
             "word/styles.xml": "<w:styles xmlns:w=\"\(w)\"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val=\"24\"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr/></w:pPrDefault></w:docDefaults><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style></w:styles>",
-            "word/document.xml": "<w:document xmlns:w=\"\(w)\"><w:body><w:p><w:r><w:t>PRIVATE TEMPLATE TEXT</w:t></w:r></w:p><w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1800\" w:bottom=\"1440\" w:left=\"1800\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>"
+            "word/document.xml": "<w:document xmlns:w=\"\(w)\"><w:body><w:p><w:r><w:t>PRIVATE TEMPLATE TEXT</w:t></w:r></w:p><w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1800\" w:bottom=\"1440\" w:left=\"1800\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>",
+            "word/_rels/document.xml.rels": Self.documentRels
         ]
         for (path, xml) in parts {
             let file = source.appendingPathComponent(path)
@@ -38,6 +43,7 @@ final class DocumentProfileCLITests: XCTestCase {
         let parts: [(path: String, data: Data)] = [
             ("word/styles.xml", stylesBytes),
             ("word/document.xml", Data(documentXML.utf8)),
+            ("word/_rels/document.xml.rels", Data(Self.documentRels.utf8)),
         ]
         for (path, data) in parts {
             let file = source.appendingPathComponent(path)
@@ -275,6 +281,8 @@ final class DocumentProfileCLITests: XCTestCase {
         let source = try officialTemplate(in: dir, stylesBytes: Data(stylesXML.utf8), suffix: "no-docdefaults")
         let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", source.path])
         XCTAssertNotEqual(imported.exitCode, 0)
+        // 拒絕的理由必須是缺字級欄位，不是缺 relationship（#212：錯誤指名缺的欄位）。
+        XCTAssertTrue(imported.stderr.contains("docDefaults/rPrDefault/rPr/sz"), imported.stderr)
         XCTAssertFalse(FileManager.default.fileExists(atPath: config.path))
     }
 
@@ -287,6 +295,7 @@ final class DocumentProfileCLITests: XCTestCase {
         let source = try officialTemplate(in: dir, stylesBytes: Data(stylesXML.utf8), suffix: "no-pprdefault")
         let imported = try CLITestHelper.run(["config", "document", "import-official", "--config", config.path, "--template", source.path])
         XCTAssertNotEqual(imported.exitCode, 0)
+        XCTAssertTrue(imported.stderr.contains("docDefaults/pPrDefault"), imported.stderr)
         XCTAssertFalse(FileManager.default.fileExists(atPath: config.path))
     }
 
