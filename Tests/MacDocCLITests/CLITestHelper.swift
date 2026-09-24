@@ -163,8 +163,14 @@ enum CLITestHelper {
     /// that gap for our own pipes, but only if nothing else can spawn a
     /// process in the moment between a pipe's creation and this call's own
     /// `process.run()` — this lock serializes exactly that narrow window
-    /// across every caller (not the slow read/wait afterward, which stays
-    /// concurrent).
+    /// across every `runProcess` caller (not the slow read/wait afterward,
+    /// which stays concurrent). Scope, honestly: it only coordinates
+    /// `runProcess` callers with each other. It does not, and cannot,
+    /// protect against a raw `Process`/`posix_spawn`/`fork()` call made
+    /// outside `runProcess` (this test target has none in production code;
+    /// `RunProcessFDInheritanceTests`'s own raw-`posix_spawn` probes are
+    /// deliberately outside this lock, since they exist to observe real fd
+    /// state, not to spawn something that needs coordinating with).
     private static let spawnLock = NSLock()
 
     /// Creates a `Pipe` and immediately marks both of its file descriptors
@@ -193,15 +199,55 @@ enum CLITestHelper {
         return pipe
     }
 
+    /// The exact recovery `runProcess`'s `catch` block performs when
+    /// `process.run()` throws: closing both pipes' write ends is what
+    /// unblocks the two background readers stuck in `readDataToEndOfFile()`
+    /// — extracted to its own function (Codex round-1 finding #1) so a test
+    /// can exercise *this specific function*, the one the catch block
+    /// actually calls, rather than only a hand-rolled reproduction of the
+    /// same idea with a different `Pipe`.
+    static func closeWriteEndsForSpawnFailureCleanup(_ pipes: Pipe...) {
+        for pipe in pipes {
+            try? pipe.fileHandleForWriting.close()
+        }
+    }
+
     /// Runs an arbitrary executable with a timeout, returning its captured
     /// output. Extracted from `run` so the timeout path is testable against a
     /// deterministically-slow command (macdoc#133).
+    ///
+    /// - Parameter pipesForTesting: **Test-only.** Called with this call's
+    ///   own `stdoutPipe`/`stderrPipe` right after they're created and
+    ///   assigned to `process`, before `process.run()`. macdoc#224 (Codex
+    ///   round-1 finding #2): without this, a test can only exercise
+    ///   `makeCloseOnExecPipe()` in isolation — proving the factory itself
+    ///   is correct, not that `runProcess` actually uses it for its own
+    ///   pipes (the same factory-vs-call-site gap macdoc#225 fixed for
+    ///   `PageOCRRunner`). Always `nil` in production; adding it does not
+    ///   change behavior for any real caller.
+    /// - Parameter onSpawnFailureCleanup: **Test-only.** Called right after
+    ///   `closeWriteEndsForSpawnFailureCleanup` runs in the `catch` block
+    ///   below, i.e. only when `process.run()` actually throws. macdoc#224
+    ///   (Codex round-1 finding #1): closes the remaining gap between
+    ///   "`closeWriteEndsForSpawnFailureCleanup` does what it claims"
+    ///   (covered directly by `RunProcessFDInheritanceTests
+    ///   .closingWriteEndUnblocksBlockedReader`, which calls that function
+    ///   but not through `runProcess`) and "`runProcess`'s own `catch` block
+    ///   actually reaches that call" — this hook lets a test observe the
+    ///   latter directly instead of only inferring it from `runProcess`
+    ///   returning promptly (which, per the honest limitation on
+    ///   `CLITestHelperTimeoutTests.testInvalidExecutableReturnsPromptly`,
+    ///   this platform's `Process`/Foundation may already guarantee for
+    ///   reasons independent of this code path). Always `nil` in
+    ///   production.
     static func runProcess(
         executableURL: URL,
         arguments: [String],
         currentDirectory: URL?,
         timeout: TimeInterval,
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        pipesForTesting: ((_ stdout: Pipe, _ stderr: Pipe) -> Void)? = nil,
+        onSpawnFailureCleanup: (() -> Void)? = nil
     ) throws -> CLIResult {
         let process = Process()
         process.executableURL = executableURL
@@ -225,6 +271,7 @@ enum CLITestHelper {
         let stderrPipe = makeCloseOnExecPipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        pipesForTesting?(stdoutPipe, stderrPipe)
 
         // macdoc#219: a pipe's kernel buffer (~64 KB on macOS) is far
         // smaller than plenty of real command output (e.g. `macdoc
@@ -280,8 +327,8 @@ enum CLITestHelper {
             // readers return normally, so this doesn't need to touch the
             // read ends (which a background thread may still be inside a
             // syscall on) at all.
-            try? stdoutPipe.fileHandleForWriting.close()
-            try? stderrPipe.fileHandleForWriting.close()
+            closeWriteEndsForSpawnFailureCleanup(stdoutPipe, stderrPipe)
+            onSpawnFailureCleanup?()
             drainGroup.wait()
             throw error
         }

@@ -98,14 +98,22 @@ final class CLITestHelperTimeoutTests: XCTestCase {
     /// legitimate smoke-test property in its own right — not specifically
     /// that the write-end-closing code is what makes that true.
     ///
-    /// macdoc#224 closed this gap without changing `runProcess`'s shape:
+    /// macdoc#224 closed this gap in two steps, without changing
+    /// `runProcess`'s public shape for production callers:
     /// `RunProcessFDInheritanceTests.closingWriteEndUnblocksBlockedReader`
-    /// exercises the exact mechanism this fix relies on directly — a reader
-    /// stuck in `readDataToEndOfFile()` on a still-open pipe stays blocked
-    /// (proven with a bounded negative-control wait), and closing the write
-    /// end is what unblocks it — independent of whatever `process.run()`'s
-    /// particular failure-mode timing does on any given platform. That test
-    /// is the real regression guard; this one stays as the smoke test it
+    /// exercises the exact mechanism this fix relies on directly (calling
+    /// `CLITestHelper.closeWriteEndsForSpawnFailureCleanup` — the literal
+    /// function the `catch` block below calls) — a reader stuck in
+    /// `readDataToEndOfFile()` on a still-open pipe stays blocked (proven
+    /// with a bounded negative-control wait), and calling that function is
+    /// what unblocks it. `RunProcessFDInheritanceTests
+    /// .runProcessCatchBlockReachesCleanup` then closes the remaining gap
+    /// (Codex round-1 finding #1 on the first version of this fix): using a
+    /// test-only `onSpawnFailureCleanup` hook, it proves `runProcess`'s own
+    /// `catch` block actually reaches that call for a real nonexistent
+    /// executable, independent of whatever `process.run()`'s particular
+    /// failure-mode timing does on any given platform. Together those two
+    /// are the real regression guard; this one stays as the smoke test it
     /// always was.
     func testInvalidExecutableReturnsPromptly() {
         let returned = expectation(description: "runProcess returns despite process.run() throwing")
