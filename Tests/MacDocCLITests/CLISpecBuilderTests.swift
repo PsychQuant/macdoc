@@ -192,6 +192,87 @@ struct CLISpecBuilderTests {
         #expect(nameKindError?.isMalformedDump == true)
     }
 
+    // MARK: - Required fields per argument kind
+
+    struct MissingFieldCase: Sendable, CustomTestStringConvertible {
+        let description: String
+        let find: String
+        let replace: String
+        let expected: CLISpecError
+        var testDescription: String { description }
+    }
+
+    static let missingFieldCases: [MissingFieldCase] = [
+        MissingFieldCase(
+            description: "option names renamed to spellings",
+            find: #"{"kind":"option","names":[{"kind":"short","name":"o"}"#,
+            replace: #"{"kind":"option","spellings":[{"kind":"short","name":"o"}"#,
+            expected: .missingRequiredField(command: "tool alpha", element: "option argument #2", field: "names")),
+        MissingFieldCase(
+            description: "option names empty",
+            find: #"{"kind":"option","names":[{"kind":"short","name":"o"},{"kind":"long","name":"output"}]"#,
+            replace: #"{"kind":"option","names":[]"#,
+            expected: .missingRequiredField(command: "tool alpha", element: "option argument #2", field: "names")),
+        MissingFieldCase(
+            description: "option valueName missing",
+            find: #""preferredName":{"kind":"long","name":"output"},"valueName":"output","#,
+            replace: #""preferredName":{"kind":"long","name":"output"},"#,
+            expected: .missingRequiredField(command: "tool alpha", element: "option argument #2", field: "valueName")),
+        MissingFieldCase(
+            description: "positional valueName missing",
+            find: #"{"kind":"positional","valueName":"input","#,
+            replace: #"{"kind":"positional","#,
+            expected: .missingRequiredField(command: "tool alpha", element: "positional argument #1", field: "valueName")),
+        MissingFieldCase(
+            description: "positional valueName empty",
+            find: #"{"kind":"positional","valueName":"input","#,
+            replace: #"{"kind":"positional","valueName":"","#,
+            expected: .missingRequiredField(command: "tool alpha", element: "positional argument #1", field: "valueName")),
+        MissingFieldCase(
+            description: "flag name empty",
+            find: #"{"kind":"long","name":"full"}"#,
+            replace: #"{"kind":"long","name":""}"#,
+            expected: .missingRequiredField(command: "tool alpha", element: "flag argument #5", field: "names")),
+        MissingFieldCase(
+            description: "flag names missing",
+            find: #"{"kind":"flag","names":[{"kind":"long","name":"full"}],"#,
+            replace: #"{"kind":"flag","#,
+            expected: .missingRequiredField(command: "tool alpha", element: "flag argument #5", field: "names")),
+        MissingFieldCase(
+            description: "subcommand name empty",
+            find: #"{"commandName":"leaf","#,
+            replace: #"{"commandName":"","#,
+            expected: .missingRequiredField(command: "tool group", element: "subcommand #1", field: "commandName")),
+    ]
+
+    @Test("required fields are validated per argument kind", arguments: missingFieldCases)
+    func requiredFields(testCase: MissingFieldCase) {
+        let json = Self.dumpJSON().replacingOccurrences(of: testCase.find, with: testCase.replace)
+        #expect(json != Self.dumpJSON(), "fixture replacement did not apply")
+        #expect(throws: testCase.expected) {
+            try generate(json)
+        }
+    }
+
+    @Test("a missing-field error names the command, the element and the field")
+    func missingFieldDescription() {
+        let text = CLISpecError.missingRequiredField(
+            command: "tool alpha", element: "option argument #2", field: "names").description
+        #expect(text.contains("missingRequiredField"))
+        #expect(text.contains("tool alpha") && text.contains("option argument #2") && text.contains("names"))
+    }
+
+    @Test("a missing structural boolean is a malformed dump")
+    func missingStructuralField() {
+        let json = Self.dumpJSON().replacingOccurrences(
+            of: #""valueName":"full","isOptional":true,"#, with: #""valueName":"full","#)
+        #expect(json != Self.dumpJSON())
+        let error = #expect(throws: CLISpecError.self) {
+            try generate(json)
+        }
+        #expect(error?.isMalformedDump == true)
+    }
+
     @Test("version output is trimmed; an empty one is rejected")
     func versionOutput() throws {
         #expect(try generate(version: "1.2.3\n").contains("\n  version: \"1.2.3\"\n"))

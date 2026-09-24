@@ -16,8 +16,11 @@ public enum CLISpecBuilder {
         let version = versionOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !version.isEmpty else { throw CLISpecError.emptyVersionOutput }
 
+        guard !root.commandName.isEmpty else {
+            throw CLISpecError.missingRequiredField(command: "(root)", element: "command", field: "commandName")
+        }
         var commands: [CLISpecDocument.Command] = []
-        appendCommands(root, parentPath: nil, into: &commands)
+        try appendCommands(root, parentPath: nil, into: &commands)
 
         let merged = try OverlayMerger(commands: commands, metadata: metadata).merge()
 
@@ -48,9 +51,10 @@ public enum CLISpecBuilder {
         _ command: DumpCommand,
         parentPath: String?,
         into commands: inout [CLISpecDocument.Command]
-    ) {
+    ) throws {
         let isRoot = parentPath == nil
         let path = parentPath.map { $0 + " " + command.commandName } ?? command.commandName
+        try validateRequiredFields(of: command, path: path)
         let children = (command.subcommands ?? []).filter { child in
             !(isRoot && child.commandName == builtinHelpSubcommand)
         }
@@ -70,7 +74,44 @@ public enum CLISpecBuilder {
             project: nil
         ))
         for child in children {
-            appendCommands(child, parentPath: path, into: &commands)
+            try appendCommands(child, parentPath: path, into: &commands)
+        }
+    }
+
+    /// Fields the schema needs, per argument kind (requirement "Dump-help
+    /// input is isolated behind a versioned decoder"): every subcommand has a
+    /// non-empty `commandName`; a positional has a non-empty `valueName`; an
+    /// option has non-empty `names` (every name non-empty) and a non-empty
+    /// `valueName`; a flag has non-empty `names` (every name non-empty).
+    /// Checked before builtin flags are dropped, so a builtin-looking flag
+    /// without names cannot slip through as "not a builtin".
+    private static func validateRequiredFields(of command: DumpCommand, path: String) throws {
+        for (offset, child) in (command.subcommands ?? []).enumerated() where child.commandName.isEmpty {
+            throw CLISpecError.missingRequiredField(
+                command: path, element: "subcommand #\(offset + 1)", field: "commandName")
+        }
+        for (offset, argument) in (command.arguments ?? []).enumerated() {
+            let element = "\(argument.kind.rawValue) argument #\(offset + 1)"
+            let hasValueName = !(argument.valueName ?? "").isEmpty
+            let names = argument.names ?? []
+            let hasNames = !names.isEmpty && names.allSatisfy { !$0.name.isEmpty }
+            switch argument.kind {
+            case .positional:
+                if !hasValueName {
+                    throw CLISpecError.missingRequiredField(command: path, element: element, field: "valueName")
+                }
+            case .option:
+                if !hasNames {
+                    throw CLISpecError.missingRequiredField(command: path, element: element, field: "names")
+                }
+                if !hasValueName {
+                    throw CLISpecError.missingRequiredField(command: path, element: element, field: "valueName")
+                }
+            case .flag:
+                if !hasNames {
+                    throw CLISpecError.missingRequiredField(command: path, element: element, field: "names")
+                }
+            }
         }
     }
 
