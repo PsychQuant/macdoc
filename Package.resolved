@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/common-converter-swift.git",
       "state" : {
-        "revision" : "53400b2032389962dc5a10d135644b21d3cf1e06",
-        "version" : "0.4.0"
+        "revision" : "15a72f5498a43466b9180ca2e064d2bd23799770",
+        "version" : "0.5.0"
       }
     },
     {
@@ -247,8 +247,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/word-to-md-swift.git",
       "state" : {
-        "revision" : "53a451f2f0ed0f769ead03afc7ec9354ef8b6909",
-        "version" : "1.0.0"
+        "revision" : "f22e5467ff7c4df60a6bc77ab278b499a3419b3d",
+        "version" : "1.1.0"
       }
     },
     {

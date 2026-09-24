@@ -13,7 +13,7 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", "2.0.0"..<"4.0.0"),
         .package(url: "https://github.com/PsychQuant/latex-math-swift.git", from: "0.2.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
-        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.0.0"),
+        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.1.0"),
     ],
     targets: [
         .target(
