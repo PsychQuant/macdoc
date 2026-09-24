@@ -113,9 +113,20 @@ final class NoteHTMLConvertTests: XCTestCase {
             result.exitCode, 0,
             "macdoc convert --to html without --css SHALL exit 0\nstderr: \(result.stderr)"
         )
+        let indexURL = outputDir.appendingPathComponent("index.html")
         XCTAssertTrue(
-            FileManager.default.fileExists(atPath: outputDir.appendingPathComponent("index.html").path),
+            FileManager.default.fileExists(atPath: indexURL.path),
             "output SHALL include index.html"
         )
+
+        // Confirm the dark fallback was actually rendered, not just that
+        // conversion exited 0 with some (unverified) output. PlayerTemplate
+        // puts the resolved theme directly on the root element as
+        // class="dark"/class="light", which is a precise, single-purpose
+        // marker — unlike a color hex code, it can't accidentally also
+        // appear in the light theme's CSS.
+        let content = try String(contentsOf: indexURL, encoding: .utf8)
+        XCTAssertTrue(content.contains(#"class="dark""#), "should render the dark theme fallback (#216)")
+        XCTAssertFalse(content.contains(#"class="light""#), "should not also carry the light theme's class")
     }
 }
