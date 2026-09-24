@@ -52,7 +52,7 @@ public enum MacDocCLIMetadata {
                 "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown.",
                 "--mode local runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release).",
                 "--mode ollama sends page images to the Ollama server at --host.",
-                "#218: --host and --model have no static default; when omitted, priority is the matching `macdoc config ocr` setting, then a built-in fallback. --host also resolves a `config ocr add-host` profile name to its address. --mode itself still has to be given explicitly every time — it is not read from `config ocr set-backend` (see that command's own abstract for why).",
+                "#218: --host and --model have no static default; when omitted, priority is the matching `macdoc config ocr` setting, then a built-in fallback. --host also resolves a `config ocr add-host` profile name to its address. --mode is unaffected by any of this: its own declared default still applies when omitted, and `config ocr set-backend`'s setting is never read — using Ollama still requires passing --mode ollama yourself (see that command's own abstract for why).",
                 "--config points at an alternate settings file instead of ~/.config/macdoc/config.json, same flag as `macdoc config ocr`.",
             ]
         ),

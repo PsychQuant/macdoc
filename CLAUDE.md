@@ -169,10 +169,12 @@ swift run macdoc config ocr list
 swift run macdoc config ocr add-host kyle localhost:11435  # 例：SSH tunnel 到遠端 Ollama
 swift run macdoc config ocr set-default kyle
 # pdf ocr 的 --host／--model 優先序：明確給的 flag > 這裡的設定 > 內建預設（#218）。
-# --mode（local／ollama）沒有讀這裡的 backend 設定，仍須每次明確指定——
-# ocrDefaultBackend 這個欄位在設定檔結構本身的預設值就是 "ollama"，沒辦法跟
-# 「使用者真的執行過 config ocr set-backend」區分，貿然接上會讓完全沒碰過
-# OCR 設定的人，pdf ocr 的預設模式從本機 local 被靜默換成需要外部服務的 ollama。
+# --mode（local／ollama）不受影響、不讀這裡的 backend 設定：--mode 仍照舊維持
+# 自己內建的預設值 local，要用 Ollama 得自己傳 --mode ollama，不會從
+# config ocr set-backend 推斷——ocrDefaultBackend 這個欄位在設定檔結構本身的
+# 預設值就是 "ollama"，沒辦法跟「使用者真的執行過 config ocr set-backend」
+# 區分，貿然接上會讓完全沒碰過 OCR 設定的人，pdf ocr 的預設模式從本機 local
+# 被靜默換成需要外部服務的 ollama。
 # 通用文字辨識入口 `macdoc ocr` 已移除（#145），改用 bestocr。
 
 # 建構個別套件
