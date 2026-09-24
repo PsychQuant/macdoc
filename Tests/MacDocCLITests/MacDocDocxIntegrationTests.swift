@@ -15,9 +15,17 @@ final class MacDocDocxIntegrationTests: XCTestCase {
     private var macdocBinary: URL? {
         // Locate the built `macdoc` binary in the standard SPM debug output.
         // Tests run from the repo root; the binary lives at .build/debug/macdoc.
+        //
+        // Resolution logic lives in `DocxIntegrationBinaryResolver`
+        // (PsychQuant/macdoc#192) so it has its own dedicated unit test
+        // coverage; see that type's doc comment for why it deliberately does
+        // NOT read `MACDOC_TEST_BINARY`.
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let candidate = cwd.appendingPathComponent(".build/debug/macdoc")
-        return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+        return DocxIntegrationBinaryResolver.resolve(
+            cwd: cwd,
+            environment: ProcessInfo.processInfo.environment,
+            fileExists: FileManager.default.fileExists(atPath:)
+        )
     }
 
     /// Optional baseline fixture under test-files/ (gitignored). Tests that

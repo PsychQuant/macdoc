@@ -15,6 +15,35 @@ enum BinarySelectionError: Error, Equatable {
     case unavailable(String)
 }
 
+extension BinarySelectionError: CustomStringConvertible {
+    /// Human-readable diagnostic, distinct from the `Equatable` conformance
+    /// above (tests keep comparing on the raw associated `String`, so this
+    /// description is free to be more explicit without breaking anything
+    /// that asserts equality). PsychQuant/macdoc#192 asked specifically for
+    /// a clearer message when the override points at a directory, since
+    /// that used to be indistinguishable from "path just doesn't exist"
+    /// until it crashed inside `Process.run()`.
+    var description: String {
+        switch self {
+        case .invalidOverride(let value):
+            let shown = value.isEmpty ? "(空字串)" : value
+            return "MACDOC_TEST_BINARY 必須是非空、以 / 開頭的絕對路徑，收到的值不符：\(shown)"
+        case .unavailable(let path):
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            if exists && isDirectory.boolValue {
+                return "找不到可執行的 macdoc binary：\(path) 是一個目錄，不是可執行檔。" +
+                    "請確認路徑指向實際的 binary 檔案（例如 .../.build/debug/macdoc），而非其所在目錄。"
+            } else if exists {
+                return "找不到可執行的 macdoc binary：\(path) 存在，但沒有可執行權限。"
+            } else {
+                return "找不到可執行的 macdoc binary：\(path) 不存在。" +
+                    "請先執行對應組態的 `swift build`，或確認 MACDOC_TEST_BINARY 指向正確路徑。"
+            }
+        }
+    }
+}
+
 /// CLI 測試輔助工具
 enum CLITestHelper {
 
@@ -54,9 +83,28 @@ enum CLITestHelper {
                 repoRoot: repoRoot,
                 configuration: configuration,
                 environment: ProcessInfo.processInfo.environment,
-                isExecutable: FileManager.default.isExecutableFile(atPath:)
+                isExecutable: Self.isExecutableFile(atPath:)
             ).path
         }
+    }
+
+    /// `FileManager.isExecutableFile(atPath:)` returns `true` for a
+    /// directory that has its execute bit set — true of almost every
+    /// directory, since that bit is what makes it `cd`-able. Left unguarded,
+    /// a `MACDOC_TEST_BINARY` override pointing at a directory would sail
+    /// past `resolveBinaryURL`'s `guard isExecutable(...)` check and only
+    /// fail later inside `Process.run()`, with a low-level error instead of
+    /// the clean `BinarySelectionError.unavailable` this helper is supposed
+    /// to produce (PsychQuant/macdoc#192). Reject directories up front.
+    private static func isExecutableFile(atPath path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
+            return false
+        }
+        if isDirectory.boolValue {
+            return false
+        }
+        return FileManager.default.isExecutableFile(atPath: path)
     }
 
     /// repo 根目錄（從 Tests/MacDocCLITests/ 往上兩層）
@@ -76,6 +124,29 @@ enum CLITestHelper {
         environment: [String: String]? = nil
     ) throws -> CLIResult {
         let path = try binaryPath
+        // Evaluated for PsychQuant/macdoc#192: switching this to the
+        // throwing `try? FileHandle.standardError.write(contentsOf:)` does
+        // NOT reliably avoid crashing the test process on a closed/broken
+        // stderr pipe. Spiked both APIs against a `Pipe` whose reading end
+        // was closed first:
+        //   - With SIGPIPE at its default disposition (the normal state of
+        //     an XCTest/Swift Testing process), the write(2) syscall itself
+        //     raises SIGPIPE and terminates the process immediately — this
+        //     happens before Foundation gets a chance to translate the
+        //     error, for EITHER API. `try?` cannot catch a signal.
+        //   - Only if SIGPIPE is explicitly ignored (`signal(SIGPIPE,
+        //     SIG_IGN)`) process-wide does the legacy `write(_:)` raise an
+        //     uncatchable `NSFileHandleOperationException` (ObjC exception,
+        //     not a Swift `Error` — `do/catch` cannot intercept it either)
+        //     while `write(contentsOf:)` throws a genuine, catchable Swift
+        //     `Error`.
+        // So `write(contentsOf:)` is only safer in a scenario (SIGPIPE
+        // already globally ignored) that does not hold for this shared test
+        // binary, and ignoring SIGPIPE process-wide to enable that path is
+        // out of scope here — it would change signal disposition for every
+        // other test sharing the process, not just this diagnostic write.
+        // Kept as the non-throwing `write(_:)` call; see also
+        // Tests/MacDocCLITests/README.md.
         FileHandle.standardError.write(Data("[macdoc-test] binary=\(path)\n".utf8))
         return try runProcess(
             executableURL: URL(fileURLWithPath: path),
