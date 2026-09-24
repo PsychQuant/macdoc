@@ -186,8 +186,10 @@ extension MacDoc {
             @Option(name: .long, help: "輸出資料夾。")
             var output: String?
 
-            @Option(name: .long, help: "執行模式 (local|ollama)。")
-            var mode: String = "local"
+            // 沒有靜態預設值（PsychQuant/pdf-to-latex-swift#11）：nil 代表「使用者沒給」，
+            // 才能落到 config ocr set-backend 明確設定的值；都沒有時用 local。
+            @Option(name: .long, help: "執行模式 (local|ollama)；沒給時看 config ocr set-backend 設定的值（mlx 即 local），都沒設時用 local。")
+            var mode: String?
 
             // 沒有靜態預設值（#218）：nil 代表「使用者沒給」，才能落到
             // config ocr 設定的 default host profile；若連 config 都沒設，
@@ -239,8 +241,28 @@ extension MacDoc {
                 return mode == "ollama" ? configDefaultModel : defaultLocalModel
             }
 
+            /// `config ocr set-backend` 的值對應到的 `--mode`（PsychQuant/pdf-to-latex-swift#11）。
+            /// 封閉列舉：只有這兩個值；其他值（例如手動改壞的設定檔）回 nil。
+            static func mode(forConfiguredBackend backend: String) -> String? {
+                switch backend {
+                case "ollama": return "ollama"
+                case "mlx": return "local"
+                default: return nil
+                }
+            }
+
             /// #218 (Codex round-1 finding #3): resolves the runner mode and
-            /// model, calling `loadConfig` only when `mode == "ollama"`.
+            /// model, calling `loadConfig` only when the mode needs it.
+            ///
+            /// `--mode` 的優先序（PsychQuant/pdf-to-latex-swift#11）：明確給的 flag >
+            /// `config ocr set-backend` 明確設定的值（`ocrDefaultBackendOverride`）> 內建
+            /// local。只讀 override，不讀舊的 `ocrDefaultBackend`：後者的 struct 預設值就是
+            /// "ollama"，分不出是不是使用者選的。
+            ///
+            /// - 明確 `--mode local`：完全不讀設定檔。
+            /// - 明確 `--mode ollama`：讀設定檔（host／model），讀不到就丟錯。
+            /// - 沒給 `--mode`：讀設定檔看 override；讀不到，或 override 是未知值時，
+            ///   退回 local 並透過 `warn` 告知——壞掉的設定檔不能讓預設模式失敗，也不能靜默。
             /// `--mode local` does not use `config ocr` at all (see the
             /// reasoning above `resolveModel` and inline in `run()`), so it
             /// must not fail just because the user's config file happens to
@@ -252,17 +274,39 @@ extension MacDoc {
             /// without touching a real file, and can simulate a load
             /// failure without corrupting one.
             static func resolveRunSettings(
-                mode: String,
+                mode: String?,
                 host: String?,
                 model: String?,
-                loadConfig: () throws -> AIConfig
-            ) rethrows -> (runnerMode: PageOCRRunner.Mode, model: String) {
-                guard mode == "ollama" else {
-                    return (.local, model ?? defaultLocalModel)
+                loadConfig: () throws -> AIConfig,
+                warn: (String) -> Void = { FileHandle.standardError.write(Data("⚠ \($0)\n".utf8)) }
+            ) throws -> (runnerMode: PageOCRRunner.Mode, model: String) {
+                let local: (runnerMode: PageOCRRunner.Mode, model: String) = (.local, model ?? defaultLocalModel)
+                let aiConfig: AIConfig
+                switch mode {
+                case "local"?:
+                    return local
+                case "ollama"?:
+                    aiConfig = try loadConfig()
+                case let other?:
+                    throw ValidationError("未知的 --mode: \(other)。可用: local, ollama")
+                case nil:
+                    let loaded: AIConfig
+                    do {
+                        loaded = try loadConfig()
+                    } catch {
+                        warn("無法讀取設定檔（\(error.localizedDescription)），--mode 使用預設的 local")
+                        return local
+                    }
+                    guard let backend = loaded.ocrDefaultBackendOverride else { return local }
+                    guard let configured = Self.mode(forConfiguredBackend: backend) else {
+                        warn("設定檔的 OCR backend「\(backend)」無法辨識（可用: ollama, mlx），--mode 使用預設的 local")
+                        return local
+                    }
+                    guard configured == "ollama" else { return local }
+                    aiConfig = loaded
                 }
-                let aiConfig = try loadConfig()
                 let resolvedHost = resolveHost(explicit: host, config: aiConfig)
-                let resolvedModel = resolveModel(explicit: model, mode: mode, configDefaultModel: aiConfig.ocrDefaultModel)
+                let resolvedModel = resolveModel(explicit: model, mode: "ollama", configDefaultModel: aiConfig.ocrDefaultModel)
                 return (.ollama(host: resolvedHost), resolvedModel)
             }
 
@@ -280,21 +324,9 @@ extension MacDoc {
                     firstPage: firstPage, lastPage: lastPage
                 )
 
-                // #218：優先序是「明確給的 flag > config ocr 設定 > 內建預設」
-                // for --host 和 --model。--mode 不會讀取 config 的
-                // ocrDefaultBackend 設定：那個欄位在 AIConfig 結構本身的預設值
-                // 就是 "ollama"（不是「使用者特意選的」），且無法跟「使用者真
-                // 的執行過 config ocr set-backend」區分——任何跑過
-                // `config ai detect` 之類無關指令的人都會在 config.json 裡留
-                // 下這個值。貿然接上會讓完全沒碰過 OCR 設定的人，pdf ocr 的預
-                // 設模式從本機 local 被靜默換成需要外部服務的 ollama。--mode
-                // 保留自己原本的內建預設 local；要用 Ollama 得自己傳
-                // --mode ollama，不會從 config 推斷。
-                //
-                // config 只在 --mode ollama 時載入，--mode local（預設值，多
-                // 數呼叫）完全不碰 ~/.config/macdoc/config.json——沿用改動前
-                // 的行為：local 模式不需要、也不應該因為使用者的 config 檔案
-                // 損毀或解析失敗而連帶失敗（見 resolveRunSettings 上的註解）。
+                // #218：--host 與 --model 的優先序是「明確給的 flag > config ocr
+                // 設定 > 內建預設」。--mode 的優先序（pdf-to-latex-swift#11）與設定
+                // 檔讀取時機見 resolveRunSettings 上的註解。
                 let (runnerMode, resolvedModel) = try Self.resolveRunSettings(
                     mode: mode, host: host, model: model, loadConfig: configOptions.load
                 )

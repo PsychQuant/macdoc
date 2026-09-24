@@ -136,7 +136,7 @@ extension MacDoc {
                 mutating func run() throws {
                     let config = try options.load()
                     print("=== OCR 設定 ===")
-                    print("backend: \(config.ocrDefaultBackend)")
+                    print("backend: \(config.ocrDefaultBackendOverride ?? "（未設定；pdf ocr 預設 local）")")
                     print("model:   \(config.ocrDefaultModel)")
                     if let def = config.ocrDefaultHost {
                         let resolved = config.ocrHosts[def] ?? "(profile 不存在!)"
@@ -265,7 +265,7 @@ extension MacDoc {
             struct SetBackend: AsyncParsableCommand {
                 static let configuration = CommandConfiguration(
                     commandName: "set-backend",
-                    abstract: "設定預設 OCR 後端（ollama 或 mlx）。目前 pdf ocr 的 --mode 不會讀這個設定：--mode 本身仍照舊維持自己的內建預設 local，只有想用 Ollama 時才需要自己傳 --mode ollama（見 #218）。"
+                    abstract: "設定預設 OCR 後端（ollama 或 mlx）。pdf ocr 沒給 --mode 時採用這個設定（mlx 即 --mode local）；都沒設時用 local。"
                 )
 
                 @Argument(help: "後端名稱（ollama 或 mlx）。")
@@ -278,7 +278,8 @@ extension MacDoc {
                         throw ValidationError("未知的後端: \(backend)。可用: ollama, mlx")
                     }
                     var config = try options.load()
-                    config.ocrDefaultBackend = backend
+                    // 經由 setter 才會記下「使用者明確選過」（pdf-to-latex-swift#11）。
+                    config.setOCRDefaultBackend(backend)
                     try options.save(config)
                     print("已設定 default backend: \(backend)")
                 }
