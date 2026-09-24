@@ -59,13 +59,21 @@ enum CLISpecHarness {
     }
 
     /// Runs the binary and returns its stdout bytes, failing on a non-zero
-    /// exit. stdout and stderr go to temporary files, not pipes:
-    /// `CLITestHelper.runProcess` waits for the child to exit before draining
-    /// its pipes, so a child writing more than one pipe buffer (the dump is
-    /// ~180 KB) blocks until the timeout kills it; and a pipe's EOF also
-    /// waits for any concurrently spawned test process that inherited its
-    /// write end (observed as a ~30 s stall while the route probe runs in
-    /// parallel). A file has neither problem: read it after the exit.
+    /// exit. stdout and stderr go to temporary files, not pipes.
+    ///
+    /// This used to be for two reasons; only the second still applies.
+    /// `CLITestHelper.runProcess` waited for the child to exit before
+    /// draining its pipes, so a child writing more than one pipe buffer (the
+    /// dump is ~180 KB) blocked until the timeout killed it — that deadlock
+    /// is fixed as of macdoc#219 (the pipes are now drained concurrently
+    /// while the process runs), so it is no longer a reason to avoid
+    /// `runProcess` here. But a pipe's EOF also waits for any concurrently
+    /// spawned test process that inherited its write end (observed as a
+    /// ~30 s stall while the route probe runs in parallel) — that is a
+    /// separate, still-unfixed FD-inheritance issue `runProcess` does not
+    /// address, so this harness keeps using files rather than switching
+    /// back to `runProcess`. A file has neither problem: read it after the
+    /// exit.
     private static func runCapturingFiles(_ binary: URL, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("macdoc-cli-spec-\(UUID().uuidString)", isDirectory: true)
