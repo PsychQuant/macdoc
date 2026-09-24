@@ -402,11 +402,16 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         // for where they do). The divergence shows up HERE, on the reverse
         // side: once reconstructed into a SINGLE run "e\u{0301}bc", the
         // base+combining-mark pair merges into ONE Swift `Character`
-        // ("é"), so a naive `Character`-based split would place "bc" at
-        // [1, 3) instead of [2, 4) — silently formatting "́b" (accent +
-        // "b") instead of "bc". Scalar-based splitting (this restorer's
-        // actual implementation) is immune: the merge never happens at the
-        // scalar level, so [2, 4) still lands on exactly "bc".
+        // ("é") — so `run.text.count` (old, Character-based) is 3
+        // ("é"/"b"/"c"), not 4. A naive `Character`-based split would clamp
+        // the stored [2, 4) to [2, 3) against that shorter length and format
+        // ONLY "c" — silently dropping "b" from the formatted range (an
+        // earlier version of this comment mis-described the clamped result
+        // as "[1,3)" formatting the accent mark plus "b"; corrected after
+        // Codex cross-model review round 3 caught the mismatch). Scalar-based
+        // splitting (this restorer's actual implementation) is immune: the
+        // merge never happens at the scalar level, so [2, 4) still lands on
+        // exactly "bc".
         let combined = "e\u{0301}bc" // 1 Character "é" + "b" + "c" = 3 Characters, but 4 scalars
         XCTAssertEqual(combined.count, 3, "Fixture assumption: base+combining-mark merges into ONE Character once combined")
         XCTAssertEqual(combined.unicodeScalars.count, 4, "Fixture assumption: still 4 scalars")
