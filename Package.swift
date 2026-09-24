@@ -10,8 +10,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
         .package(name: "TokenCounter", path: "packages/token-counter-swift"),
-        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
-        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.0.0"),
+        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.5.0"),
+        .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.1.0"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
         .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", from: "0.5.0"),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
