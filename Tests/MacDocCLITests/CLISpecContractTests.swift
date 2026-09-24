@@ -213,6 +213,27 @@ struct CLISpecContractTests {
         #expect(tex.usedBy == ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate"])
     }
 
+    @Test("routes whose styles exclude the --css default say so, and no overlay prose quotes a default value")
+    func cssDefaultNotes() throws {
+        let document = try CLISpecHarness.document()
+        let cssDefault = try #require(try option("--css", of: "macdoc convert").defaultValue)
+        for conversion in document.conversions where conversion.options.contains("--css") {
+            let rejectsDefault = !conversion.styles.contains(cssDefault)
+            let noted = conversion.notes.contains { $0.contains("rejects the option's default") }
+            #expect(rejectsDefault == noted,
+                    "\(conversion.label): --css default \(cssDefault) rejected=\(rejectsDefault) but note present=\(noted)")
+        }
+        // Defaults are derived from ArgumentParser; prose restating them would drift silently.
+        let prose = document.commands.compactMap(\.project).flatMap(\.notes)
+            + document.conversions.flatMap(\.notes)
+            + document.externalDependencies.map(\.dependency.purpose)
+            + document.overlaps.flatMap(\.paths).map(\.note)
+        for text in prose {
+            #expect(!text.contains("(default)") && !text.contains("defaults to") && !text.contains("default localhost"),
+                    "overlay prose restates a default: \(text)")
+        }
+    }
+
     @Test("selected conversions match the spec example table")
     func selectedConversions() throws {
         let conversions = try CLISpecHarness.document().conversions

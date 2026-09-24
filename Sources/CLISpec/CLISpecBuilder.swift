@@ -163,8 +163,11 @@ private struct OverlayMerger {
             guard labels.insert(conversion.label).inserted else {
                 throw CLISpecError.duplicateConversion(conversion.label)
             }
-            // (5) duplicateConversion — by (extension, target) on one command
-            for ext in conversion.from {
+            // (5) duplicateConversion — by (extension, target) shared by two
+            // conversions on one command (a repeat inside one conversion is not
+            // a second conversion, so it is not rejected).
+            var seenInThisConversion = Set<String>()
+            for ext in conversion.from where seenInThisConversion.insert(ext).inserted {
                 let pair = "\(ext) → \(conversion.to)"
                 guard pairs.insert(conversion.command + "\u{0}" + pair).inserted else {
                     throw CLISpecError.duplicateConversion(pair)

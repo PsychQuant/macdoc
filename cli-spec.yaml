@@ -79,7 +79,7 @@ commands:
       status: active
       notes:
         - "The input format is detected from the file extension; `conversions` lists every route with its route-specific options."
-        - "Text targets go to stdout unless --output is given; binary targets (docx, pdf) and directories never go to stdout."
+        - "Output handling is per route: see `output` on each entry of `conversions`."
       docs: [".claude/rules/cli-design/convert-entry-point.md", CONVERSIONS.md]
   - path: "macdoc pdf"
     abstract: "PDF → LaTeX pipeline 工具"
@@ -177,7 +177,7 @@ commands:
       dependencies: [huggingface, ollama]
       notes:
         - "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown."
-        - "--mode local (default) runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release)."
+        - "--mode local runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release)."
         - "--mode ollama sends page images to the Ollama server at --host."
   - path: "macdoc pdf blocks"
     abstract: "（已棄用）以 Vision OCR 偵測頁面文字區塊。請改用 `macdoc pdf ocr`。"
@@ -967,7 +967,7 @@ conversions:
     output: file
     options: ["--hard-breaks", "--math", "--profile", "--document-config"]
     notes:
-      - "--math omath turns $…$ formulas into native Word OMath; literal (default) keeps them as text."
+      - "--math omath turns $…$ formulas into native Word OMath; --math literal keeps them as text."
   - label: "SRT → HTML"
     command: "macdoc convert"
     from: [srt]
@@ -977,7 +977,7 @@ conversions:
     options: ["--full", "--css"]
     styles: [dark, light]
     notes:
-      - "--css defaults to web, which this route rejects: pass --css dark or --css light."
+      - "This route accepts only --css dark or --css light and rejects the option's default, so pass one explicitly."
       - "Speaker labels (`Speaker 1:` or `[Speaker 1]`) become speaker badges."
   - label: "BibLaTeX → APA HTML"
     command: "macdoc convert"
@@ -1043,7 +1043,7 @@ conversions:
     notes:
       - "Legacy plist-based .note only; modern FlatBuffers .ntb containers are recognized and rejected."
       - "Writes <input-stem>/ with index.html and media/ (or --output); --stdout prints one self-contained HTML, with --full for a complete document."
-      - "--css defaults to web, which this route rejects: pass --css dark or --css light."
+      - "This route accepts only --css dark or --css light and rejects the option's default, so pass one explicitly."
   - label: "舊版 Note → PDF"
     command: "macdoc convert"
     from: [note, ntb]
@@ -1115,7 +1115,7 @@ external_dependencies:
     used_by: ["macdoc pdf transcribe", "macdoc pdf transcribe-pages", "macdoc pdf resume", "macdoc pdf consolidate"]
   - id: ollama
     kind: network_service
-    purpose: "Serves the glm-ocr model over HTTP for `pdf ocr --mode ollama` (--host, default localhost:11434)."
+    purpose: "Serves the glm-ocr model over HTTP for `pdf ocr --mode ollama` at the address given by --host."
     install: "Install Ollama and pull the glm-ocr model."
     used_by: ["macdoc pdf ocr"]
   - id: huggingface
