@@ -533,6 +533,13 @@ private struct MarkdownWordBuilder {
 
     private mutating func appendHorizontalRule(quoteDepth: Int) {
         var paragraph = WordParagraph(text: "")
+        // WordConverter (forward, word-to-md-swift) detects a thematic break
+        // via `paragraph.hasPageBreak || paragraph.properties.pageBreakBefore`
+        // (WordConverter.swift), not via the border below (which is purely
+        // cosmetic — a visual rule when the document is opened in Word).
+        // Without this flag the forward converter emits an empty paragraph,
+        // silently dropping the `---` round-trip. See PsychQuant/macdoc#155.
+        paragraph.hasPageBreak = true
         paragraph.properties.spacing = Spacing(before: 120, after: 120)
         paragraph.properties.border = ParagraphBorder(
             bottom: ParagraphBorderStyle(type: .single, color: "C8C8C8", size: 8, space: 1)
@@ -590,8 +597,9 @@ private struct MarkdownWordBuilder {
         }
 
         var runs: [Run] = []
+        var hyperlinks: [Hyperlink] = []
         for child in children {
-            try appendInline(from: child, into: &runs, properties: RunProperties())
+            try appendInline(from: child, into: &runs, hyperlinks: &hyperlinks, properties: RunProperties())
         }
         runs = coalesceRuns(runs)
 
@@ -601,12 +609,13 @@ private struct MarkdownWordBuilder {
             .joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if textualContent.isEmpty && runs.isEmpty {
+        if textualContent.isEmpty && runs.isEmpty && hyperlinks.isEmpty {
             return nil
         }
 
         var paragraph = WordParagraph(runs: runs)
-        paragraph.properties.style = style
+        paragraph.hyperlinks = hyperlinks
+        paragraph.properties.style = style ?? (quoteDepth > 0 ? "Quote" : nil)
         paragraph.properties.numbering = numbering
         paragraph.properties.spacing = Spacing(after: numbering == nil ? 200 : 80, line: 276, lineRule: .auto)
         applyQuoteStyle(to: &paragraph.properties, quoteDepth: quoteDepth, extraIndentLevels: extraIndentLevels)
@@ -616,6 +625,7 @@ private struct MarkdownWordBuilder {
     private mutating func appendInline(
         from markup: Markup,
         into runs: inout [Run],
+        hyperlinks: inout [Hyperlink],
         properties: RunProperties
     ) throws {
         switch markup {
@@ -627,21 +637,21 @@ private struct MarkdownWordBuilder {
             var next = properties
             next.italic = true
             for child in emphasis.children {
-                try appendInline(from: child, into: &runs, properties: next)
+                try appendInline(from: child, into: &runs, hyperlinks: &hyperlinks, properties: next)
             }
 
         case let strong as Strong:
             var next = properties
             next.bold = true
             for child in strong.children {
-                try appendInline(from: child, into: &runs, properties: next)
+                try appendInline(from: child, into: &runs, hyperlinks: &hyperlinks, properties: next)
             }
 
         case let strikethrough as Strikethrough:
             var next = properties
             next.strikethrough = true
             for child in strikethrough.children {
-                try appendInline(from: child, into: &runs, properties: next)
+                try appendInline(from: child, into: &runs, hyperlinks: &hyperlinks, properties: next)
             }
 
         case let inlineCode as InlineCode:
@@ -681,6 +691,35 @@ private struct MarkdownWordBuilder {
                             )
                         )
                     )
+                    // The forward converter (WordConverter, word-to-md-swift)
+                    // reads `Paragraph.hyperlinks` (the typed model) to emit
+                    // markdown link syntax — it does not introspect
+                    // `Run.rawXML`. The raw `<w:hyperlink>` run above exists
+                    // so a real `.docx` write is byte-correct; this typed
+                    // entry exists so an in-memory round-trip back through
+                    // WordConverter doesn't silently drop the link (it would
+                    // render as empty text otherwise, since the raw run's
+                    // `.text` is ""). See PsychQuant/macdoc#155.
+                    //
+                    // Skipped when the label carries an inline-math
+                    // placeholder: `hyperlinkContentXML` (used by the raw
+                    // run above) substitutes the placeholder for real
+                    // `<m:oMath>` XML and marks the token consumed; a typed
+                    // `Hyperlink(text:)` has no such substitution path and
+                    // would leak the literal placeholder token into a real
+                    // `.docx` write instead of the formula (caught by
+                    // MarkdownOMathConversionTests
+                    // .testInlineMathInLinkLabelPreservesMathAndDestination).
+                    if !containsMathPlaceholder(text) {
+                        hyperlinks.append(
+                            Hyperlink(
+                                id: "link-\(relationshipId)",
+                                text: text,
+                                url: destination,
+                                relationshipId: relationshipId
+                            )
+                        )
+                    }
                 }
             } else {
                 runs.append(Run(text: text, properties: properties))
@@ -701,7 +740,7 @@ private struct MarkdownWordBuilder {
 
         default:
             for child in markup.children {
-                try appendInline(from: child, into: &runs, properties: properties)
+                try appendInline(from: child, into: &runs, hyperlinks: &hyperlinks, properties: properties)
             }
         }
     }
@@ -894,6 +933,16 @@ private struct MarkdownWordBuilder {
         )
     }
 
+    /// True when `text` contains an unresolved inline-math placeholder
+    /// token (see `mathTokensByPlaceholder`). Callers that would otherwise
+    /// copy `text` into a plain-text model (bypassing `appendText`'s /
+    /// `hyperlinkContentXML`'s placeholder substitution) should check this
+    /// first and fall back to the raw-XML path instead.
+    private func containsMathPlaceholder(_ text: String) -> Bool {
+        guard !mathTokensByPlaceholder.isEmpty else { return false }
+        return nextInlineMathMatch(in: text, from: text.startIndex) != nil
+    }
+
     private func displayToken(in children: [Markup]) -> RenderedMarkdownMathToken? {
         guard children.count == 1,
               let text = children[0] as? Text else {
@@ -944,6 +993,14 @@ private struct MarkdownWordBuilder {
         quoteDepth: Int,
         extraIndentLevels: Int
     ) {
+        // WordConverter (forward, word-to-md-swift) detects a code block by
+        // `paragraph.properties.style` matching one of
+        // ["code","source","listing","verbatim","preformatted"]
+        // (`isCodeStyle`, WordConverter.swift). Without this the border/
+        // shading below is purely cosmetic and the forward converter emits
+        // a plain paragraph, silently dropping the fenced-code round-trip.
+        // See PsychQuant/macdoc#155.
+        paragraph.properties.style = "Code"
         paragraph.properties.spacing = Spacing(before: 0, after: 0)
         paragraph.properties.shading = CellShading.solid("F7F7F7")
         paragraph.properties.border = ParagraphBorder(
