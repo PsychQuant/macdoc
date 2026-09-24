@@ -14,24 +14,33 @@
 5. 支援 `--full` 和 `--css`（如果輸出 HTML）
 6. Error messages 用中文（`找不到輸入檔案:`）
 
-## 已接線的路由（16 條）
+## 已接線的路由（17 種轉換，24 個副檔名／目標組合；另有不做格式轉換的 tokens 測量路由）
+
+`switch (ext, target)` 裡每個 case 算一種轉換；一個 case 常接受多個副檔名別名
+（如 `("html", "md"), ("htm", "md")`），每個別名各算一組副檔名／目標組合。
+17 種轉換 + tokens = `macdoc convert` 目前總共處理的 18 種輸出。與 `cli-spec.yaml`
+的 `conversions`（`macdoc convert` 底下那些）對得上就是對的，這裡只是給人看的摘要，
+改路由時兩邊要一起改（見上面「新增轉換路由的步驟」）。
 
 ```
-(docx, md)     → WordConverter
-(docx, html)   → WordToHTMLConverter
-(docx, marker) → MarkerWordConverter（目錄輸出，不支援 stdout）
-(html, md)     → HTMLConverter
-(html, pdf)    → playwright pdf CLI（二進位輸出，不支援 stdout，需要 playwright）
-(html, docx)   → HTMLToWordConverter（二進位輸出，不支援 stdout）
-(md, html)     → MarkdownConverter（支援 --full + --html-extensions）
-(md, docx)     → MarkdownToWordConverter（二進位輸出，不支援 stdout）
-(srt, html)    → SRTConverter（支援 --full + --css dark|light）
-(pdf, md)      → PDFToMarkdownConverter
-(pdf, docx)    → PDFToDocxConverter（二進位輸出，不支援 stdout）
-(tex, docx)    → TeXToDocxConverter（二進位輸出，不支援 stdout）
-(bib, html)    → BibToAPAHTMLFormatter（支援 --full + --css minimal|web）
-(bib, md)      → BibToAPAFormatter
-(bib, json)    → BibToAPAJSONFormatter
+(docx, md)                    → WordConverter
+(docx, html)                  → WordHTMLConverter
+(docx, marker)                 → MarkerWordConverter（目錄輸出，不支援 stdout）
+(html, md), (htm, md)          → HTMLConverter（支援 --html-extensions，保留 <u>/<sup>/<sub>/<mark> 為 raw HTML）
+(html, pdf), (htm, pdf)        → playwright pdf CLI（二進位輸出，不支援 stdout，需要 playwright）
+(html, docx), (htm, docx)      → HTMLToWordConverter（二進位輸出，不支援 stdout）
+(md, html), (markdown, html)   → MarkdownConverter（支援 --full）
+(md, docx), (markdown, docx)   → MarkdownToWordConverter（二進位輸出，不支援 stdout；支援 --math）
+(srt, html)                    → SRTConverter（支援 --full + --css dark|light；沒帶 --css 時這條路由自己預設 dark，見 #216）
+(bib, html)                    → BibToAPAHTMLFormatter（支援 --full + --css minimal|web；沒帶 --css 時預設 web）
+(bib, md)                      → BibToAPAFormatter
+(bib, json)                    → BibToAPAJSONFormatter
+(pdf, md)                      → PDFToMD.PDFConverter
+(pdf, docx)                    → PDFToDOCXConverter（二進位輸出，不支援 stdout）
+(tex, docx)                    → TeXToDOCXConverter（二進位輸出，不支援 stdout）
+(note, html), (ntb, html)      → NoteConverter（目錄或 stdout 輸出；支援 --full + --css dark|light，沒帶 --css 時預設 dark；只認舊版 plist .note，現代 FlatBuffers .ntb 會被拒絕）
+(note, pdf), (ntb, pdf)        → NoteToPDFConverter（二進位輸出，不支援 stdout；同上只認舊版 .note）
+(*, tokens)                    → TokenCountCommandRunner（不是格式轉換，是量測路由；--model gpt-4o 離線、claude-sonnet-4-6 需要 --allow-network）
 ```
 
 ## 輸出格式規則

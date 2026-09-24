@@ -45,7 +45,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 ├── Sources/
 │   └── MacDocCLI/             # CLI 入口點
 │       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
-│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（16 路由，textutil-compatible）
+│       ├── MacDoc+Convert.swift # Convert 統一轉換入口（17 種轉換，textutil-compatible）
 │       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
 │       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
 │       ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown/JSON）
@@ -123,22 +123,22 @@ macdoc --version
 ```
 
 ```bash
-# 執行 CLI — 統一轉換入口（textutil-compatible，16 路由）
+# 執行 CLI — 統一轉換入口（textutil-compatible，17 種轉換 + tokens 測量路由）
 swift run macdoc convert --to md file.docx          # Word → Markdown
 swift run macdoc convert --to md file.docx --frontmatter  # Word → Markdown（含 YAML frontmatter）
 swift run macdoc convert --to html file.docx         # Word → HTML
 swift run macdoc convert --to marker file.docx       # Word → Marker 目錄（.md + _meta.json + images/）
 swift run macdoc convert --to html file.md [--full]  # Markdown → HTML
-swift run macdoc convert --to html file.md --html-extensions  # Markdown → HTML（啟用擴充語法）
 swift run macdoc convert --to docx file.md           # Markdown → Word
 swift run macdoc convert --to md file.html           # HTML → Markdown
+swift run macdoc convert --to md file.html --html-extensions  # HTML → Markdown（保留 <u>/<sup>/<sub>/<mark> 為 raw HTML）
 swift run macdoc convert --to docx file.html         # HTML → Word
 swift run macdoc convert --to pdf file.html          # HTML → PDF（需要 playwright CLI）
-swift run macdoc convert --to html file.srt [--full] [--css dark|light]  # SRT → HTML（支援 speaker 偵測）
+swift run macdoc convert --to html file.srt [--full] [--css dark|light]  # SRT → HTML（支援 speaker 偵測；沒帶 --css 時預設 dark，#216）
 swift run macdoc convert --to md file.pdf            # PDF → Markdown
 swift run macdoc convert --to docx file.pdf          # PDF → Word
 swift run macdoc convert --to docx file.tex          # TeX → Word
-swift run macdoc convert --to html file.bib [--full] [--css minimal|web]  # Bib → HTML
+swift run macdoc convert --to html file.bib [--full] [--css minimal|web]  # Bib → HTML（沒帶 --css 時預設 web，#216）
 swift run macdoc convert --to md file.bib            # Bib → Markdown
 swift run macdoc convert --to json file.bib          # Bib → JSON
 
@@ -164,12 +164,16 @@ swift run macdoc config ai detect
 swift run macdoc config ai list
 swift run macdoc config ai set agent claude
 
-# OCR 設定管理（v1.1+：具名 host profile；供 pdf-to-latex 內部頁級 OCR 使用）
+# OCR 設定管理（v1.1+：具名 host profile；pdf ocr 讀取，見下，#218）
 swift run macdoc config ocr list
 swift run macdoc config ocr add-host kyle localhost:11435  # 例：SSH tunnel 到遠端 Ollama
 swift run macdoc config ocr set-default kyle
-# 注意：通用文字辨識入口 `macdoc ocr` 已移除（#145），改用 bestocr——
-# 此處設定只影響 pdf-to-latex 管線內部的頁級 OCR
+# pdf ocr 的 --host／--model 優先序：明確給的 flag > 這裡的設定 > 內建預設（#218）。
+# --mode（local／ollama）沒有讀這裡的 backend 設定，仍須每次明確指定——
+# ocrDefaultBackend 這個欄位在設定檔結構本身的預設值就是 "ollama"，沒辦法跟
+# 「使用者真的執行過 config ocr set-backend」區分，貿然接上會讓完全沒碰過
+# OCR 設定的人，pdf ocr 的預設模式從本機 local 被靜默換成需要外部服務的 ollama。
+# 通用文字辨識入口 `macdoc ocr` 已移除（#145），改用 bestocr。
 
 # 建構個別套件
 cd packages/ooxml-swift && swift build
@@ -263,7 +267,7 @@ swift package clean && swift build
 
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
-- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，16 路由
+- **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，17 種轉換
 - **PDF**：簡化 pipeline（init → render → ocr → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）。舊的 block-level transcribe 已 deprecated，改用整頁 GLM-OCR。
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list，支援 --key 過濾）
 - **Config**：AI 後端設定管理
@@ -431,7 +435,7 @@ swift build
 - `Sources/MacDocCLI/MacDoc+Docx.swift` - `macdoc docx ...` 子命令（apply / plan / verify / diff —— manifest-driven .docx edit workflows，per openspec change `macdoc-docx-workflow-cli`，library 在 `packages/docx-workflow-swift`）
 - `Sources/MacDocCLI/MacDoc+Word+Render.swift` - `macdoc word render <script.mdocx.swift|.mdocx> --to-docx <out> [--verify-against <ref.docx>] [--force]`（腳本 → docx；`word reverse` 的反向半邊，補實 `mdocx-grammar` 早已具名卻從未實作的命令）。與 che-word-mcp 的 `execute_script` **呼叫同一個** shared entry point（ooxml-swift `Transcode/ScriptPipelineExecute.swift` 的 `scriptPipelineExecute`，v2.1.0 起），兩面因此由結構保證一致而非靠慣例。**`--verify-against` 是 opt-in**：不給就不驗、也不印任何驗證結論——沉默永遠不等於通過；給了則不符時 exit 非零並列出不符的 part。ordering contract：參考檔在**任何寫入之前**先讀進記憶體，因此 `--to-docx` 與 `--verify-against` 指向同一路徑時比對的是寫入前的位元組，不會自我比對出假通過。
 - `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force] [--coverage] [--paragraphs-only] [--slot name=paraId]…`（docx → `.mdocx.swift` 腳本反向轉換；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）。**預設 full-fidelity**（format-alignment-engine Phase C #130）：全 parts 騎在腳本上（raw channel byte-equal floor）+ typed DSL 升級（`ReverseExtractor` 的 trial-rebuild byte-equal gate 通過才升級，涵蓋 run rPr / paragraph pPr / sections / canonical tables 五層）；執行腳本重建出 Stage B byte-equal 的 docx。**真實 Word 文件的 document.xml 現在會升級**（word-canonical-forms #131，ooxml-swift v1.4.0）：新增 Word-canonical 詞彙（root namespace 雲、rsid 家族、`xml:space`、inline passthrough markers（bookmark/proofErr）、pPr/rPr 長尾、docGrid/section-type/pgSz、CRLF prolog）後，`90_template_ja.docx`（JPA 日文學術 template）的 document.xml 由 0% 升到 **per-part 100%**（aggregate 53.5%，餘量為尚無 typed 表示的 sibling parts）。`--paragraphs-only` 退回舊的段落 text+styleId 反向（無 byte-equal 保證）；有 oplog sidecar 時仍優先匯出現況 log。`--coverage` 印出 dual-track 覆蓋率報告：每個 part 的 DSL/raw split + aggregate %（DSL 份額 = byte-equal 證明過的 typed 重建；raw = 逐字搬運；基線數字見 [docs/format-alignment-baselines.md](docs/format-alignment-baselines.md)）。`--slot name=paraId`（可重複，Phase D + #131）：指定段落的文字成為腳本的 Swift 函式參數；**DSL-spellable 段落**走 script-text 參數，**raw-form 格式化段落**（真實 template 常見）走 op-level 替換（`// @slot` directive + 替換 `setRuns` run text；**多 run 段落**自 ooxml-swift v3.8.0 起也可指定（#131 / ooxml-swift PR #92）：新文字放進第一個非空白的 carrier run、其餘 run 文字清空但保留格式，呼叫端無法指定 carrier），**raw-channel 文件**（整個 document.xml 落 raw，如含表格的官方表單）走 carried XML 內 paraId 定位的 run 級手術（`// @slot-raw` directive；#171，ooxml-swift v3.5.0——結構感知定位、identity-shortcut default、fail-loud import＋術後 well-formedness 驗證；fail-loud 涵蓋格式錯誤的 `// @slot-raw`、找不到／重複／不在段落上的 paraId、缺 call-site 值——但 directive 被刪掉、或寫成 importer 不認得的 `// @` 關鍵字時，對應參數沒被綁定，render 仍沉默輸出預設值，見 PsychQuant/ooxml-swift#95；CLI 需 0.8.0+，0.7.0 會把 `// @slot-raw` 當註解，見 #198），三者都 strict mode 明確指定、不推斷；無 slot 時腳本逐字重建 byte-equal。**能拼寫 ≠ 理解渲染效果**（render-effect-semantics 第三層）：typed 欄位對排版的實際效果由 [docs/render-effect-registry.md](docs/render-effect-registry.md) 台帳記錄——每條 entry 須經 gated perturbation probe（`RUN_WORD_INTEGRATION=1 swift test --filter RenderEffectProbeTests`，真實 Word 渲染 + PDFKit 幾何量測）驗證方標 `verified`（no probe, no claim）；slot 換內容另有渲染驗收（RealTemplateUpgradeTests scenario (d)：頁數/頁框/被替換頁行距結構不變、未動頁 pixel-equal）
-- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（16 路由，textutil-compatible）
+- `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（17 種轉換，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
 - `Sources/MacDocCLI/MacDoc+OCR.swift` - deprecation shim（#145）：`macdoc ocr` 已移除，印遷移訊息指向 bestocr 並以 exit 2 結束。通用文字辨識歸 PsychQuant/bestOCR 單點；pdf-to-latex 內部頁級 OCR（PageOCRRunner）不受影響，其委派屬第二期（bestOCR#55 介面定案後）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
