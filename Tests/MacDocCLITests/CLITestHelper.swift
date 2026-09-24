@@ -156,6 +156,43 @@ enum CLITestHelper {
             environment: environment)
     }
 
+    /// Global across every `runProcess` call in the test process. macdoc#224:
+    /// `fork()`/`posix_spawn()` duplicate every open fd that isn't
+    /// `FD_CLOEXEC` into the new child, including a *different*, concurrently
+    /// in-flight `runProcess` call's pipes. `makeCloseOnExecPipe()` closes
+    /// that gap for our own pipes, but only if nothing else can spawn a
+    /// process in the moment between a pipe's creation and this call's own
+    /// `process.run()` — this lock serializes exactly that narrow window
+    /// across every caller (not the slow read/wait afterward, which stays
+    /// concurrent).
+    private static let spawnLock = NSLock()
+
+    /// Creates a `Pipe` and immediately marks both of its file descriptors
+    /// `FD_CLOEXEC`. macdoc#224: without this, a subprocess spawned by a
+    /// *different*, concurrently-running `runProcess` call (e.g. another
+    /// Swift Testing task on another thread) can inherit this pipe's write
+    /// end across its own `exec()` — `fork`/`posix_spawn` duplicate every
+    /// open fd unless it's marked close-on-exec, and fd tables are shared
+    /// across all threads of one process. That extra, unrelated reference
+    /// then keeps this pipe's read end from ever seeing EOF until the other
+    /// process *also* exits (observed as an ~30s stall: `CLISpecHarness`'s
+    /// dump-help call stuck behind a slow route-probe test running in
+    /// parallel — see that file's comment on why it used to avoid this
+    /// function entirely). `dup2`-created descriptors (what `Process` uses
+    /// to wire a pipe end to a child's stdin/stdout/stderr) never inherit
+    /// `FD_CLOEXEC` from their source regardless of this flag, so this does
+    /// not affect our own child's ability to read/write the pipe.
+    static func makeCloseOnExecPipe() -> Pipe {
+        let pipe = Pipe()
+        for handle in [pipe.fileHandleForReading, pipe.fileHandleForWriting] {
+            let fd = handle.fileDescriptor
+            let flags = fcntl(fd, F_GETFD)
+            guard flags != -1 else { continue }
+            _ = fcntl(fd, F_SETFD, flags | FD_CLOEXEC)
+        }
+        return pipe
+    }
+
     /// Runs an arbitrary executable with a timeout, returning its captured
     /// output. Extracted from `run` so the timeout path is testable against a
     /// deterministically-slow command (macdoc#133).
@@ -177,8 +214,15 @@ enum CLITestHelper {
             )
         }
 
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
+        // macdoc#224: pipe creation, marking them FD_CLOEXEC, and spawning
+        // this function's own child are one atomic unit with respect to
+        // every other `runProcess` call — see `spawnLock`'s doc comment.
+        // Everything after `process.run()` returns (the timeout loop,
+        // `waitUntilExit`, draining) stays outside the lock and fully
+        // concurrent, same as before.
+        spawnLock.lock()
+        let stdoutPipe = makeCloseOnExecPipe()
+        let stderrPipe = makeCloseOnExecPipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
@@ -225,6 +269,7 @@ enum CLITestHelper {
         do {
             try process.run()
         } catch {
+            spawnLock.unlock()
             // The readers above are already blocked waiting for EOF, but if
             // the process never started (bad executable path, no exec
             // permission, …) nothing will ever close the pipes' write ends
@@ -240,6 +285,7 @@ enum CLITestHelper {
             drainGroup.wait()
             throw error
         }
+        spawnLock.unlock()
 
         // Timeout 保護
         let deadline = Date().addingTimeInterval(timeout)
@@ -260,12 +306,11 @@ enum CLITestHelper {
         // Each background read reaches EOF (and `drainGroup.leave()`) once
         // every process holding the pipe's write end open has exited.
         // `waitUntilExit()` above only guarantees *this* process (the one
-        // we spawned) has exited — not any grandchildren, or an unrelated
-        // concurrently-spawned process that happened to inherit the same
-        // fd (see `CLISpecHarness.swift`'s comment on why it avoids
-        // `runProcess` for exactly this reason). So this usually returns
-        // promptly, but is not a hard guarantee independent of the
-        // `timeout` parameter above.
+        // we spawned) has exited — not any grandchildren. Unrelated,
+        // concurrently-spawned processes can no longer hold onto this
+        // pipe's write end (macdoc#224's `FD_CLOEXEC` fix above), so this
+        // now depends only on this process's own descendants closing their
+        // copies, same as any ordinary use of `Pipe` + `Process`.
         drainGroup.wait()
 
         return CLIResult(
