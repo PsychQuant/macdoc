@@ -237,6 +237,33 @@ extension MacDoc {
                 return mode == "ollama" ? configDefaultModel : defaultLocalModel
             }
 
+            /// #218 (Codex round-1 finding #3): resolves the runner mode and
+            /// model, calling `loadConfig` only when `mode == "ollama"`.
+            /// `--mode local` does not use `config ocr` at all (see the
+            /// reasoning above `resolveModel` and inline in `run()`), so it
+            /// must not fail just because the user's config file happens to
+            /// be unreadable or malformed — this used to load it
+            /// unconditionally before the mode check, which meant a broken
+            /// config file broke the *default* mode too. `loadConfig` is a
+            /// parameter (not a direct `configOptions.load()` call) so a
+            /// test can prove the "never called for local mode" property
+            /// without touching a real file, and can simulate a load
+            /// failure without corrupting one.
+            static func resolveRunSettings(
+                mode: String,
+                host: String?,
+                model: String?,
+                loadConfig: () throws -> AIConfig
+            ) rethrows -> (runnerMode: PageOCRRunner.Mode, model: String) {
+                guard mode == "ollama" else {
+                    return (.local, model ?? defaultLocalModel)
+                }
+                let aiConfig = try loadConfig()
+                let resolvedHost = resolveHost(explicit: host, config: aiConfig)
+                let resolvedModel = resolveModel(explicit: model, mode: mode, configDefaultModel: aiConfig.ocrDefaultModel)
+                return (.ollama(host: resolvedHost), resolvedModel)
+            }
+
             mutating func run() async throws {
                 let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 let resolver = ProjectResolver()
@@ -252,27 +279,23 @@ extension MacDoc {
                 )
 
                 // #218：優先序是「明確給的 flag > config ocr 設定 > 內建預設」
-                // for --host 和 --model（見 resolveHost / resolveModel 上的註解）。
+                // for --host 和 --model。--mode 不會讀取 config 的
+                // ocrDefaultBackend 設定：那個欄位在 AIConfig 結構本身的預設值
+                // 就是 "ollama"（不是「使用者特意選的」），且無法跟「使用者真
+                // 的執行過 config ocr set-backend」區分——任何跑過
+                // `config ai detect` 之類無關指令的人都會在 config.json 裡留
+                // 下這個值。貿然接上會讓完全沒碰過 OCR 設定的人，pdf ocr 的預
+                // 設模式從本機 local 被靜默換成需要外部服務的 ollama。--mode
+                // 保留自己原本的內建預設 local；要用 Ollama 得自己傳
+                // --mode ollama，不會從 config 推斷。
                 //
-                // --mode／backend 刻意不接 config 的 ocrDefaultBackend：那個
-                // 欄位在 AIConfig 結構本身的預設值就是 "ollama"（不是「使用者
-                // 特意選的」），且無法跟「使用者真的執行過 config ocr
-                // set-backend」區分——任何跑過 `config ai detect` 之類無關指令
-                // 的人都會在 config.json 裡留下這個值。貿然接上會讓完全沒碰過
-                // OCR 設定的人，pdf ocr 的預設模式從本機 local 被靜默換成需要
-                // 外部服務的 ollama。--mode 因此仍必須每次明確指定。
-                let aiConfig = try configOptions.load()
-                let resolvedHost = Self.resolveHost(explicit: host, config: aiConfig)
-                let resolvedModel = Self.resolveModel(
-                    explicit: model, mode: mode, configDefaultModel: aiConfig.ocrDefaultModel
+                // config 只在 --mode ollama 時載入，--mode local（預設值，多
+                // 數呼叫）完全不碰 ~/.config/macdoc/config.json——沿用改動前
+                // 的行為：local 模式不需要、也不應該因為使用者的 config 檔案
+                // 損毀或解析失敗而連帶失敗（見 resolveRunSettings 上的註解）。
+                let (runnerMode, resolvedModel) = try Self.resolveRunSettings(
+                    mode: mode, host: host, model: model, loadConfig: configOptions.load
                 )
-
-                let runnerMode: PageOCRRunner.Mode
-                if mode == "ollama" {
-                    runnerMode = .ollama(host: resolvedHost)
-                } else {
-                    runnerMode = .local
-                }
 
                 let runner = PageOCRRunner(
                     mode: runnerMode,

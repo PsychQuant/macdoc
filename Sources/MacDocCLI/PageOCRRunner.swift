@@ -25,6 +25,18 @@ struct PageOCRRunner {
         self.model = model
     }
 
+    /// #218 (Codex round-1 finding #5a): pulled out of `run()`'s backend
+    /// switch so a test can confirm the resolved `model` actually reaches
+    /// `OllamaBackend`, without needing a running Ollama server or a real
+    /// OCR pipeline — `OllamaBackend`'s initializer is a plain struct init
+    /// (no I/O), so this is safe to call directly. Exists specifically so a
+    /// regression like reverting to a hardcoded `"glm-ocr"` (the bug this
+    /// file used to have) fails a fast unit test instead of only being
+    /// visible at OCR runtime against a real server.
+    static func makeOllamaBackend(host: String, model: String) -> OllamaBackend {
+        OllamaBackend(host: host, model: model)
+    }
+
     /// Run OCR on specified pages, writing results to the manifest.
     func run(
         project: inout ResolvedProject,
@@ -62,7 +74,7 @@ struct PageOCRRunner {
             // silently discarding both an explicit `--model` and (once wired)
             // `config ocr`'s default model. Use the resolved model the caller
             // already picked.
-            backend = OllamaBackend(host: host, model: model)
+            backend = Self.makeOllamaBackend(host: host, model: model)
         }
 
         // Detect if vector PDF (for PDFKit cross-validation)
