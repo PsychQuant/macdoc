@@ -86,9 +86,11 @@ import Testing
 ///     which can itself reallocate a just-freed fd number to something
 ///     unrelated to the pipe under test, independent of anything
 ///     `runProcess` does. Fixed: the probe is now `/usr/bin/python3 -c
-///     '...'` (macOS's system Python, always present, never itself does
-///     shell-style redirect fd juggling) calling `os.fstat(fd)` directly on
-///     the raw integer, and additionally compares the probed fd's
+///     '...'` — Codex round-3: "always present" overstated it; the actual
+///     prerequisite is Xcode Command Line Tools being installed, which this
+///     suite already requires to build and run at all (it never does
+///     shell-style redirect fd juggling regardless) — calling `os.fstat(fd)`
+///     directly on the raw integer, and additionally compares the probed fd's
 ///     `st_dev`/`st_ino` against the *expected* pipe's own — an fd that
 ///     happens to be open but points at something else (e.g. a descriptor
 ///     python's own startup opened at that same number) no longer counts
@@ -140,8 +142,19 @@ struct RunProcessFDInheritanceTests {
     /// for why. Deliberately python3, not `/bin/sh` — see the doc comment's
     /// round-2 "shell fd bookkeeping" point.
     ///
-    /// Checks every `posix_spawn*` return code and retries `waitpid` on
-    /// `EINTR` instead of silently accepting whatever it returns.
+    /// Checks every `posix_spawn*` return code, retries `waitpid` on
+    /// `EINTR`, and (Codex round-3 finding) verifies the child actually
+    /// terminated normally with exit status 0 rather than silently
+    /// accepting any `waitpid` result — a probe that printed a
+    /// recognizable-looking line and then exited abnormally would
+    /// otherwise be indistinguishable from a genuine, trustworthy result.
+    /// `readDataToEndOfFile()` has no explicit deadline of its own; this is
+    /// accepted here because the script is always a short, fixed,
+    /// guaranteed-terminating `os.fstat` + `print` (never anything that
+    /// could block on I/O or user input), not because blocking reads are
+    /// safe in general — `runProcess`'s own concurrent-drain design exists
+    /// precisely because that assumption doesn't hold for arbitrary
+    /// commands.
     private func rawSpawnPythonAndCaptureStdout(script: String) throws -> String {
         let outPipe = Pipe()
         var fileActions: posix_spawn_file_actions_t?
@@ -165,9 +178,14 @@ struct RunProcessFDInheritanceTests {
         var status: Int32 = 0
         while true {
             let waited = waitpid(pid, &status, 0)
-            if waited == -1 && errno == EINTR { continue }
+            if waited == -1 {
+                if errno == EINTR { continue }
+                throw RawSpawnError(code: errno)
+            }
+            guard waited == pid else { throw RawSpawnError(code: -1) }
             break
         }
+        guard status == 0 else { throw RawSpawnError(code: status) }
         return String(data: data, encoding: .utf8) ?? ""
     }
 
@@ -333,16 +351,34 @@ struct RunProcessFDInheritanceTests {
     /// parameter (fired once per pipe, from inside its own close loop) —
     /// not a separate statement at the `runProcess` call site — so there is
     /// exactly one call site left, and no way to delete the cleanup call
-    /// while leaving the observation intact.
+    /// while leaving the observation intact. Verified by hand: removing
+    /// that call from `runProcess`'s `catch` block doesn't just fail this
+    /// test — `drainGroup.wait()` right after it blocks forever with no
+    /// cleanup ever reached, a hang rather than a clean failure.
+    ///
+    /// Codex round-3: that hang is exactly why `runProcess` itself must not
+    /// run on this test's own thread — `runProcess(timeout:)` only bounds
+    /// its *successfully spawned child's* runtime, not the synchronous
+    /// `drainGroup.wait()` on the failure path, so a regression there would
+    /// hang indefinitely with no timeout anywhere to catch it (as just
+    /// confirmed). Running it on a background `Thread` means this test's
+    /// own bounded `cleanupRan.wait(timeout:)` below is what actually
+    /// bounds the test, even if `runProcess` itself never returns; the
+    /// worst case on a regression is a leaked thread (same accepted
+    /// trade-off as `CLITestHelperTimeoutTests
+    /// .testInvalidExecutableReturnsPromptly`), not a hung test run.
     @Test("runProcess's catch block actually reaches its spawn-failure cleanup call")
     func runProcessCatchBlockReachesCleanup() throws {
         let cleanupRan = DispatchSemaphore(value: 0)
-        _ = try? CLITestHelper.runProcess(
-            executableURL: URL(fileURLWithPath: "/nonexistent/definitely-not-a-binary-\(UUID().uuidString)"),
-            arguments: [],
-            currentDirectory: nil,
-            timeout: 10,
-            onSpawnFailureCleanup: { cleanupRan.signal() })
+        let runner = Thread {
+            _ = try? CLITestHelper.runProcess(
+                executableURL: URL(fileURLWithPath: "/nonexistent/definitely-not-a-binary-\(UUID().uuidString)"),
+                arguments: [],
+                currentDirectory: nil,
+                timeout: 10,
+                onSpawnFailureCleanup: { cleanupRan.signal() })
+        }
+        runner.start()
         let observed = cleanupRan.wait(timeout: .now() + 5) == .success
         #expect(observed, "runProcess's catch block should reach its spawn-failure cleanup call for a nonexistent executable")
     }

@@ -155,10 +155,14 @@ struct ConvertRouteTests {
     func stdoutThroughARealPipeExitsZero() throws {
         let binary = try CLITestHelper.binaryPath
         let input = FixtureManager.srtFile()
-        let shellCommand = "set -o pipefail; '\(binary)' convert --to html --css dark '\(input)' | cat > /dev/null"
+        // `binary`/`input` are passed as shell positional args (`"$1"`/`"$2"`)
+        // rather than interpolated into the script source: single-quoting
+        // them inline would handle spaces but not an embedded `'` in either
+        // path (Codex round-3 finding).
+        let shellCommand = "set -o pipefail; \"$1\" convert --to html --css dark \"$2\" | cat > /dev/null"
         let result = try CLITestHelper.runProcess(
             executableURL: URL(fileURLWithPath: "/bin/sh"),
-            arguments: ["-c", shellCommand],
+            arguments: ["-c", shellCommand, "sh", binary, input],
             currentDirectory: CLITestHelper.repoRoot,
             timeout: 30)
         #expect(result.succeeded,
