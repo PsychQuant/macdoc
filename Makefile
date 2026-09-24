@@ -50,7 +50,8 @@ check-bib-fixtures:
 # current ArgumentParser declarations plus the metadata overlay in
 # Sources/CLISpec/MacDocCLIMetadata.swift (#72). Runs the drift test in record
 # mode; without MACDOC_RECORD_CLI_SPEC=1 the same test fails whenever the
-# committed file is stale. Commit the regenerated file.
+# committed file is stale. Record mode is refused when CI is set, so this
+# target is for local use only. Commit the regenerated file.
 cli-spec:
 	swift build
 	MACDOC_RECORD_CLI_SPEC=1 swift test --filter CLISpecDriftTests
