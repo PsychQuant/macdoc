@@ -274,9 +274,10 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         XCTAssertEqual(paragraph.properties.shading?.pattern?.rawValue, "clear")
     }
 
-    // MARK: - commentIds / bookmarkNames are permanent non-goals (evaluated
-    // and declined for #220 items 2/3 — see Tier3MetadataRestorer's doc
-    // comment for the concrete blockers)
+    // MARK: - commentIds / bookmarkNames are not restored in this release
+    // (evaluated and declined for #220 items 2/3, not ruled out
+    // permanently — see Tier3MetadataRestorer's doc comment for the
+    // concrete blockers and the unblocking path)
 
     func testCommentIdsAndBookmarkNamesAreNotRestoredInThisRelease() throws {
         // Per Tier3MetadataRestorer's doc-comment: these two fields were
@@ -388,6 +389,60 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         }
     }
 
+    func testRunFormattingSurvivesRunCoalescingAcrossACombiningCharacterBoundary() {
+        // Reproduces Codex cross-model review round 2's NEW-1 finding
+        // directly: a base letter ("e") and a combining acute accent
+        // (U+0301) captured as TWO separately-formatted runs on the forward
+        // side — "e" is 1 Character AND 1 scalar in isolation, "\u{0301}"
+        // is likewise 1 Character and 1 scalar in isolation, so
+        // `RunMeta.range` for the "bc" that follows is [2, 4) either way in
+        // THIS forward-side fixture (the two coordinate systems don't yet
+        // diverge on the forward side alone — see
+        // word-to-md-swift's `testRunMetaRangeIsMeasuredInUnicodeScalarsNotCharacters`
+        // for where they do). The divergence shows up HERE, on the reverse
+        // side: once reconstructed into a SINGLE run "e\u{0301}bc", the
+        // base+combining-mark pair merges into ONE Swift `Character`
+        // ("é"), so a naive `Character`-based split would place "bc" at
+        // [1, 3) instead of [2, 4) — silently formatting "́b" (accent +
+        // "b") instead of "bc". Scalar-based splitting (this restorer's
+        // actual implementation) is immune: the merge never happens at the
+        // scalar level, so [2, 4) still lands on exactly "bc".
+        let combined = "e\u{0301}bc" // 1 Character "é" + "b" + "c" = 3 Characters, but 4 scalars
+        XCTAssertEqual(combined.count, 3, "Fixture assumption: base+combining-mark merges into ONE Character once combined")
+        XCTAssertEqual(combined.unicodeScalars.count, 4, "Fixture assumption: still 4 scalars")
+
+        var document = WordDocument()
+        document.body.children = [.paragraph(Paragraph(text: combined))]
+
+        var meta = ParagraphMeta(index: 0)
+        meta.textFingerprint = ParagraphFingerprint.compute(combined)
+        meta.exactTextFingerprint = ParagraphFingerprint.computeExact(combined)
+        var runMeta = RunMeta(range: [2, 4]) // scalar offsets: targets "bc"
+        runMeta.fontName = "Georgia"
+        meta.runs = [runMeta]
+        let metadata = DocumentMetadata(paragraphs: [meta])
+
+        Tier3MetadataRestorer.restore(metadata, onto: &document)
+
+        guard case .paragraph(let restored) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        let fullText = restored.runs.map(\.text).joined()
+        XCTAssertEqual(fullText, combined, "Splitting must not change the paragraph's overall visible text")
+
+        let formattedText = restored.runs
+            .filter { $0.properties.fontName == "Georgia" }
+            .map(\.text)
+            .joined()
+        XCTAssertEqual(formattedText, "bc", "Scalar-based offsets must land on exactly \"bc\", not \"é\"-adjacent text")
+
+        let unformattedText = restored.runs
+            .filter { $0.properties.fontName != "Georgia" }
+            .map(\.text)
+            .joined()
+        XCTAssertEqual(unformattedText, "e\u{0301}", "The base+combining-mark pair must be left unformatted, intact")
+    }
+
     func testRunFormattingIsNotAppliedWhenLooseFingerprintMatchesButRawTextChangedByWhitespaceCollapse() {
         // Reproduces the exact scenario a Codex cross-model review round 1
         // finding identified as unsafe: original text "A  B" (two spaces)
@@ -423,37 +478,57 @@ final class Tier3MetadataRestorationTests: XCTestCase {
     }
 
     func testRunFormattingIsNotAppliedWhenLooseFingerprintMatchesButRawTextChangedByTypographicSubstitution() throws {
-        // Same fix, exercised through the real markdown parser: "a---bc"
+        // Same fix, exercised through the real markdown parser: "a---bcdef"
         // round-trips through swift-markdown's default smart-punctuation
-        // substitution to "a—bc" (em dash) with no actual edit. The loose
-        // fingerprint of the ORIGINAL "a---bc" matches the ACTUAL parsed
-        // text ("a—bc") — so paragraph-level fields still apply — but the
-        // exact fingerprint does not, so `runs` must be withheld rather
-        // than risk applying [4, 5) (originally "b") to the wrong offset in
-        // the now-shorter 4-character string.
-        let markdown = "a---bc"
+        // substitution to "a—bcdef" (em dash) with no actual edit. The loose
+        // fingerprint of the ORIGINAL "a---bcdef" matches the ACTUAL parsed
+        // text ("a—bcdef") — so paragraph-level fields still apply — but the
+        // exact fingerprint does not, so `runs` must be withheld.
+        //
+        // Uses a longer suffix than a minimal "a---bc" fixture deliberately
+        // (Codex cross-model review round 2 NEW-2): with only "bc" after the
+        // dash, [4, 5) clamps to an empty, in-bounds-but-zero-width range
+        // against the 4-character substituted text, so the test would pass
+        // vacuously even if the implementation regressed to gating `runs` on
+        // the LOOSE fingerprint (the clamped range would format nothing
+        // either way). With "bcdef" after the dash, [4, 5) against the
+        // 7-character substituted text is a real, non-empty, IN-BOUNDS
+        // range that lands on "d" (a different character than the
+        // originally-targeted "b") — so a regression to the unsafe gate
+        // would visibly mis-format "d", not silently no-op.
+        let markdown = "a---bcdef"
 
         var paragraphMeta = ParagraphMeta(index: 0)
         paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
         paragraphMeta.exactTextFingerprint = ParagraphFingerprint.computeExact(markdown)
         paragraphMeta.alignment = "center"
-        var runMeta = RunMeta(range: [4, 5]) // targets "b" in the ORIGINAL "a---bc"
+        var runMeta = RunMeta(range: [4, 5]) // targets "b" in the ORIGINAL "a---bcdef"
         runMeta.fontName = "Arial"
         paragraphMeta.runs = [runMeta]
         let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
 
-        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+        let (document, report) = try converter.convertMarkdownReportingTier3Restoration(markdown, metadata: metadata)
 
         guard case .paragraph(let paragraph) = document.body.children[0] else {
             return XCTFail("Expected a paragraph at index 0")
         }
-        // Sanity: confirm the parser actually substituted the dash, i.e.
-        // this test is exercising the real scenario, not a no-op.
+        // Sanity: confirm the parser actually substituted the dash AND that
+        // offset 4 is a real, in-bounds, non-"b" character in the
+        // substituted text — i.e. this test is exercising the scenario
+        // where an unsafe gate would mis-format something specific, not a
+        // no-op.
         let actualText = paragraph.runs.map(\.text).joined()
         XCTAssertNotEqual(actualText, markdown, "Fixture assumption: swift-markdown must have substituted the ASCII dash sequence")
+        XCTAssertEqual(actualText, "a\u{2014}bcdef")
+        let scalars = Array(actualText.unicodeScalars)
+        XCTAssertTrue(scalars.count > 5, "Fixture assumption: offset [4, 5) must be in-bounds against the substituted text")
+        XCTAssertNotEqual(String(scalars[4]), "b", "Fixture assumption: offset 4 must NOT coincidentally still be \"b\"")
 
         XCTAssertEqual(paragraph.properties.alignment, .center, "Paragraph-level fields still apply on a loose match")
         XCTAssertTrue(paragraph.runs.allSatisfy { $0.properties.fontName != "Arial" }, "Run-level fields must NOT apply without an exact match")
+        XCTAssertEqual(report.runsSkipped, [
+            Tier3RestorationReport.RunsSkippedEntry(index: 0, reason: .exactFingerprintMismatchOrAbsent),
+        ])
     }
 
     func testEntireEntryIsSkippedWhenFingerprintMismatches() throws {
