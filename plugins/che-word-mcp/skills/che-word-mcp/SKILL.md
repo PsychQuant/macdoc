@@ -208,8 +208,8 @@ export_all_images(doc_id, output_dir)
 
 | Tool | 參數 | 回傳 |
 |------|------|------|
-| `export_script` | `source_path`, `output_path`, 選填 `slots: [{name, para_id}]` | JSON：`dsl_parts` / `form_gaps_empty` / `slot_count` / `output_path` |
-| `get_script_coverage` | `source_path` | JSON：每個 part 的 `channel`（`dsl`/`raw`）、`bytes`、`dsl_ratio`，加 `aggregate_ratio` |
+| `export_script` | `source_path`, `output_path`, 選填 `slots: [{name, para_id}]`、`paragraphs_only`（預設 false，4.3.0+） | JSON：`dsl_parts` / `form_gaps_empty` / `slot_count` / `output_path`；`paragraphs_only: true` 時改回 `paragraphs_only` / `byte_equal: false` / `omitted_body_blocks` / `slot_count` / `output_path` |
+| `get_script_coverage` | `source_path` | JSON：每個 part 的 `channel`（`dsl`/`raw`）、`bytes`、`dsl_ratio`，加 `aggregate_ratio`；raw part 另帶 `raw_reason`（4.3.0+，原樣透傳，DSL part 不帶） |
 | `execute_script` | `script_path`, `output_path`, 選填 `verify_byte_equal_against`、`overwrite` | 成功時 JSON：`written`；**只有**傳了參考檔才有 `verified` / `broken_parts`。驗證失敗**不是**回應，是 tool error |
 
 **CLI 對應**：`export_script` ↔ `macdoc word reverse`，`execute_script` ↔ **`macdoc word render`**。同一個操作在兩個面的名字不同——MCP 這邊的名字是已發布 tool schema 的一部分，CLI 那邊的名字由 `mdocx-grammar` spec 固定。
@@ -232,7 +232,7 @@ export_all_images(doc_id, output_dir)
 
 實測真實官方表單（`REC-O-01`）：`0.0% DSL (0 / 190479 XML bytes across 16 parts)`，產出 24 行 / 212 KB，其中 document.xml 那行約 118 KB。**可完美重播，但不可讀、不可手改、無法有意義 diff。**這是這一份文件的量測結果，不是「含表格就必然 0% DSL」的通則——`swiftify` skill 有 canonical table 成功升級的對照案例。
 
-所以先跑 `get_script_coverage` 再決定期待值。**已知缺口**：`get_script_coverage` 的回應只有 `channel`／`bytes`／`dsl_ratio`（見上表），不像 macdoc CLI 0.9.0+ 的 `word reverse` stderr 那樣具名 part 落 raw 的根因（`table`／`paragraph-no-paraId`／…）；`export_script` 的回應同樣沒有對應的提示欄位。純走 MCP、看不到 CLI stderr 的呼叫端目前**無法**從這兩個工具的回應本身分辨「這份文件缺 paraId、可以改用 paragraphs-only」還是別的原因，而且 che-word-mcp **目前沒有** CLI `--paragraphs-only` 的對應工具或參數——判定原因與改走段落 DSL 這條備援路徑目前只能透過 macdoc CLI 本身完成。完整工作流見 macdoc plugin 的 `swiftify` skill。
+所以先跑 `get_script_coverage` 再決定期待值。4.3.0 起每個 raw part 都帶 `raw_reason`，說明它為什麼沒能升級（值原樣透傳，例如 `sibling-part`、`table`、`paragraph-no-paraId`、`byte-mismatch`，**不是封閉列舉**）。`word/document.xml` 的 `raw_reason` 是 `paragraph-no-paraId` 時，可以改走 `export_script` 帶 `paragraphs_only: true`，等同 CLI 的 `macdoc word reverse --paragraphs-only`，兩邊寫出的腳本逐位元組相同。代價要先講清楚：只匯出段落文字與 styleId，**省略表格等非段落內容、不保證 byte-equal**，所以對含省略內容的來源，`execute_script` 的 `verify_byte_equal_against` 會回報不符；來源旁有 oplog sidecar 時 MCP 會直接拒絕（CLI 會改匯出 sidecar）；`export_script` 會覆寫既有的 `output_path`（CLI 預設拒絕）。其他根因沒有這條備援路徑。完整工作流見 macdoc plugin 的 `swiftify` skill。
 
 ## Tips
 

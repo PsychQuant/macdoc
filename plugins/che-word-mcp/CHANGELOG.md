@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.3.0] - 2026-09-24
+
+### Added
+
+- **`get_script_coverage` 的 raw part 帶上 `raw_reason`**、**`export_script` 新增 `paragraphs_only`**（PsychQuant/che-word-mcp#227，PsychQuant/macdoc#193）。
+  純走 MCP 的呼叫端現在能自己分辨 part 落 raw 的原因；`paragraph-no-paraId` 時可改走 paragraphs-only（不保證 byte-equal）。
+  skill 的「已知缺口」段落改寫為新的判讀方式。
+
+### Changed
+
+- `binary_version` **4.2.0 → 4.3.0**（ooxml-swift 3.11.0：格式 profile 依 relationship 解析 part、匯入只收 UTF-8、缺欄位錯誤指名欄位；PsychQuant/macdoc#212–#214）。
+- gitlink `mcp/che-word-mcp` 指向 4.3.0 的 release commit。
+
 ## [4.2.0] - 2026-09-24
 
 ### Added
