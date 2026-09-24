@@ -96,12 +96,17 @@ final class CLITestHelperTimeoutTests: XCTestCase {
     /// down (see macdoc#219's fix commit message). So this test currently
     /// only proves "an invalid executable does not hang the caller" — a
     /// legitimate smoke-test property in its own right — not specifically
-    /// that the write-end-closing code is what makes that true. Turning it
-    /// into a real regression guard for the leak itself would need an
-    /// observable way to detect whether the two background readers have
-    /// actually completed (e.g. exposing their own completion signal for
-    /// tests), which is a large enough change to `runProcess`'s shape that
-    /// it is left as a follow-up rather than folded into this fix.
+    /// that the write-end-closing code is what makes that true.
+    ///
+    /// macdoc#224 closed this gap without changing `runProcess`'s shape:
+    /// `RunProcessFDInheritanceTests.closingWriteEndUnblocksBlockedReader`
+    /// exercises the exact mechanism this fix relies on directly — a reader
+    /// stuck in `readDataToEndOfFile()` on a still-open pipe stays blocked
+    /// (proven with a bounded negative-control wait), and closing the write
+    /// end is what unblocks it — independent of whatever `process.run()`'s
+    /// particular failure-mode timing does on any given platform. That test
+    /// is the real regression guard; this one stays as the smoke test it
+    /// always was.
     func testInvalidExecutableReturnsPromptly() {
         let returned = expectation(description: "runProcess returns despite process.run() throwing")
         DispatchQueue.global().async {

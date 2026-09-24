@@ -59,62 +59,37 @@ enum CLISpecHarness {
     }
 
     /// Runs the binary and returns its stdout bytes, failing on a non-zero
-    /// exit. stdout and stderr go to temporary files, not pipes.
-    ///
-    /// This used to be for two reasons; only the second still applies.
-    /// `CLITestHelper.runProcess` waited for the child to exit before
-    /// draining its pipes, so a child writing more than one pipe buffer (the
-    /// dump is ~180 KB) blocked until the timeout killed it — that deadlock
-    /// is fixed as of macdoc#219 (the pipes are now drained concurrently
-    /// while the process runs), so it is no longer a reason to avoid
-    /// `runProcess` here. But a pipe's EOF also waits for any concurrently
-    /// spawned test process that inherited its write end (observed as a
-    /// ~30 s stall while the route probe runs in parallel) — that is a
-    /// separate, still-unfixed FD-inheritance issue `runProcess` does not
-    /// address, so this harness keeps using files rather than switching
-    /// back to `runProcess`. A file has neither problem: read it after the
     /// exit.
+    ///
+    /// This used to go through temporary files instead of `CLITestHelper
+    /// .runProcess`, for two reasons; neither still applies. `runProcess`
+    /// used to wait for the child to exit before draining its pipes, so a
+    /// child writing more than one pipe buffer (the dump is ~180 KB)
+    /// blocked until the timeout killed it — fixed as of macdoc#219 (pipes
+    /// are now drained concurrently while the process runs). And a pipe's
+    /// EOF used to also wait for any concurrently spawned test process that
+    /// inherited its write end (observed as a ~30s stall while the route
+    /// probe ran in parallel) — fixed as of macdoc#224 (`runProcess` now
+    /// creates its pipes `FD_CLOEXEC` under a lock spanning pipe creation
+    /// through `process.run()`, so no concurrently spawned process can pick
+    /// them up). Both reasons this harness avoided `runProcess` are gone,
+    /// so it now shares the one drain/timeout/FD-safety implementation
+    /// instead of carrying a second, narrower one.
     private static func runCapturingFiles(_ binary: URL, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("macdoc-cli-spec-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let stdoutURL = directory.appendingPathComponent("stdout")
-        let stderrURL = directory.appendingPathComponent("stderr")
-        FileManager.default.createFile(atPath: stdoutURL.path, contents: nil)
-        FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
-        let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
-        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
-        defer {
-            try? stdoutHandle.close()
-            try? stderrHandle.close()
-        }
-
-        let process = Process()
-        process.executableURL = binary
-        process.arguments = arguments
-        process.currentDirectoryURL = CLITestHelper.repoRoot
-        process.standardOutput = stdoutHandle
-        process.standardError = stderrHandle
-        try process.run()
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning && Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.01)
-        }
-        if process.isRunning {
-            process.terminate()
-        }
-        process.waitUntilExit()
-
-        let stdout = try Data(contentsOf: stdoutURL)
-        guard process.terminationStatus == 0 else {
-            let stderr = (try? Data(contentsOf: stderrURL)) ?? Data()
+        let result = try CLITestHelper.runProcess(
+            executableURL: binary,
+            arguments: arguments,
+            currentDirectory: CLITestHelper.repoRoot,
+            timeout: timeout)
+        guard result.exitCode == 0 else {
             throw HarnessError.commandFailed(
-                arguments.joined(separator: " "), process.terminationStatus,
-                String(decoding: stderr, as: UTF8.self))
+                arguments.joined(separator: " "), result.exitCode, result.stderr)
         }
-        return stdout
+        // `runProcess` decodes stdout as UTF-8 (empty string on failure)
+        // rather than handing back raw bytes; `--experimental-dump-help`'s
+        // JSON and `--version`'s text are always valid UTF-8, so this
+        // round-trip is lossless for this harness's actual inputs.
+        return Data(result.stdout.utf8)
     }
 
     /// The full `cli-spec.yaml` text for the current binary and overlay.
