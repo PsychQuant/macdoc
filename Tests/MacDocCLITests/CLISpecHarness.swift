@@ -14,12 +14,32 @@ enum CLISpecHarness {
         CLITestHelper.repoRoot.appendingPathComponent("cli-spec.yaml")
     }
 
+    /// Set only by `make cli-spec`, for that one `swift test` invocation. It
+    /// is not a documented switch: recording is done with `make cli-spec`.
     static let recordEnvironmentKey = "MACDOC_RECORD_CLI_SPEC"
 
-    /// Record mode is on only for the exact value `1`.
-    static func isRecordMode(_ environment: [String: String]) -> Bool {
-        environment[recordEnvironmentKey] == "1"
+    enum RecordDecision: Equatable, Sendable {
+        /// Compare the committed file with a fresh generation.
+        case compare
+        /// Rewrite the committed file (`make cli-spec`).
+        case record
+        /// Record mode was requested under CI, where a rewrite would turn the
+        /// drift check into a silent pass.
+        case refusedUnderCI
     }
+
+    /// Record mode requires the exact value `1`, and is refused whenever the
+    /// `CI` variable is present (with any value) so that an inherited
+    /// `MACDOC_RECORD_CLI_SPEC=1` cannot disable the drift check in CI.
+    static func recordDecision(_ environment: [String: String]) -> RecordDecision {
+        guard environment[recordEnvironmentKey] == "1" else { return .compare }
+        return environment["CI"] == nil ? .record : .refusedUnderCI
+    }
+
+    static let ciRefusalMessage = """
+    MACDOC_RECORD_CLI_SPEC=1 在 CI 環境（CI 已設定）中被拒絕：CI 只做漂移比對，不得改寫 cli-spec.yaml。\
+    請在本機執行 make cli-spec 重新產生並提交；若是從外層環境繼承了 MACDOC_RECORD_CLI_SPEC，請移除它。
+    """
 
     struct Inputs {
         let dumpHelpJSON: Data
