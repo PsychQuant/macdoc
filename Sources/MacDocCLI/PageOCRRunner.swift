@@ -10,33 +10,58 @@ import PDFKit
 /// 取代 block segmentation + per-block AI transcription。
 struct PageOCRRunner {
 
-    enum Mode {
+    enum Mode: Equatable {
         case local
         case ollama(host: String)
+    }
+
+    /// #225: the injection point `run()` actually calls to build its
+    /// backend. `defaultBackendFactory` below is the production behavior
+    /// (unchanged); a test supplies its own closure so it can assert on the
+    /// `mode`/`model` `run()` passed in, without downloading an MLX model or
+    /// reaching a real Ollama server.
+    ///
+    /// This closes the exact gap #218's own test coverage left open
+    /// (documented on `makeOllamaBackend` below): a passing test against
+    /// `makeOllamaBackend` alone does not prove `run()` still calls it with
+    /// the resolved model instead of, say, a hardcoded literal — reverting
+    /// just the call site inside `run()` would not have been caught. With
+    /// the factory injected, a test can run the *actual* `run()` body (via
+    /// a recording factory) and assert on what it was called with.
+    typealias BackendFactory = @Sendable (Mode, String) async throws -> any OCRBackend
+
+    static let defaultBackendFactory: BackendFactory = { mode, model in
+        switch mode {
+        case .local:
+            return try await MLXBackend.load(repo: model)
+        case .ollama(let host):
+            return Self.makeOllamaBackend(host: host, model: model)
+        }
     }
 
     let mode: Mode
     let withPDFKit: Bool
     let model: String
+    let backendFactory: BackendFactory
 
-    init(mode: Mode = .local, withPDFKit: Bool = false, model: String = "mlx-community/Qwen3-VL-4B-Instruct-4bit") {
+    init(
+        mode: Mode = .local,
+        withPDFKit: Bool = false,
+        model: String = "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+        backendFactory: @escaping BackendFactory = PageOCRRunner.defaultBackendFactory
+    ) {
         self.mode = mode
         self.withPDFKit = withPDFKit
         self.model = model
+        self.backendFactory = backendFactory
     }
 
-    /// #218 (Codex round-1 finding #5a): pulled out of `run()`'s backend
+    /// #218 (Codex round-1 finding #5a): pulled out of `defaultBackendFactory`'s
     /// switch so a test can confirm this factory itself passes `model`
     /// through to `OllamaBackend` rather than hardcoding it (the bug this
     /// file used to have), without needing a running Ollama server or a
     /// real OCR pipeline — `OllamaBackend`'s initializer is a plain struct
     /// init (no I/O), so this is safe to call directly.
-    ///
-    /// Honest limitation (Codex round-2 finding #2): a test against this
-    /// factory only proves the factory itself is correct, not that `run()`
-    /// below actually calls it with the resolved `model` — reverting just
-    /// the one call site in `run()` back to a hardcoded literal, while
-    /// leaving this factory untouched, would not be caught by that test.
     static func makeOllamaBackend(host: String, model: String) -> OllamaBackend {
         OllamaBackend(host: host, model: model)
     }
@@ -68,18 +93,13 @@ struct PageOCRRunner {
             }
         }
 
-        // Build backend
-        let backend: any OCRBackend
-        switch mode {
-        case .local:
-            backend = try await MLXBackend.load(repo: model)
-        case .ollama(let host):
-            // #218: this used to hardcode "glm-ocr" regardless of `self.model`,
-            // silently discarding both an explicit `--model` and (once wired)
-            // `config ocr`'s default model. Use the resolved model the caller
-            // already picked.
-            backend = Self.makeOllamaBackend(host: host, model: model)
-        }
+        // Build backend. #225: goes through `backendFactory` (default:
+        // `defaultBackendFactory`, unchanged behavior) instead of a literal
+        // switch here, so a test can inject a recording factory and assert
+        // this call actually receives `mode`/`model` — the resolved
+        // flag > config > built-in-default values — rather than only
+        // proving that `makeOllamaBackend` itself is correct in isolation.
+        let backend: any OCRBackend = try await backendFactory(mode, model)
 
         // Detect if vector PDF (for PDFKit cross-validation)
         let usesPDFKit: Bool
