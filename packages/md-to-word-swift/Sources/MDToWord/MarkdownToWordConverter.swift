@@ -192,6 +192,35 @@ public struct MarkdownToWordConverter: DocumentConverter {
         return document
     }
 
+    /// Tier 3 metadata-sidecar-aware overload of `convertMarkdown(_:baseURL:sourceName:options:)`
+    /// (PsychQuant/macdoc#206). Converts `source` exactly as the base method
+    /// does, then — when `metadata` is non-nil — restores the paragraph
+    /// formatting fields captured in the sidecar (alignment, spacing,
+    /// indentation, keepNext/keepLines/pageBreakBefore, border, shading)
+    /// back onto the resulting paragraphs by `ParagraphMeta.index`.
+    ///
+    /// `metadata: nil` behaves identically to the base overload (no
+    /// restoration pass runs). See `Tier3MetadataRestorer` for the full
+    /// scope of what is/isn't restored and the index-mismatch policy.
+    public func convertMarkdown(
+        _ source: String,
+        metadata: DocumentMetadata?,
+        baseURL: URL? = nil,
+        sourceName: String? = nil,
+        options: ConversionOptions = .default
+    ) throws -> WordDocument {
+        var document = try convertMarkdown(
+            source,
+            baseURL: baseURL,
+            sourceName: sourceName,
+            options: options
+        )
+        if let metadata {
+            Tier3MetadataRestorer.restore(metadata, onto: &document)
+        }
+        return document
+    }
+
     private func renderDocumentXML(_ document: WordDocument) -> String {
         var bodyXML = ""
 
