@@ -65,6 +65,42 @@ final class ParagraphFingerprintTests: XCTestCase {
         )
     }
 
+    // MARK: - computeExact: byte-exact, NO normalization at all
+    // (mirrors word-to-md-swift's copy — see ParagraphFingerprint's doc
+    // comment for why this exists)
+
+    func testComputeExactSharedLiteralVectors() {
+        XCTAssertEqual(ParagraphFingerprint.computeExact("Hello, world!"), "38d1334144987bf4")
+        XCTAssertEqual(ParagraphFingerprint.computeExact("This paragraph's real text."), "dea38bc387d1a018")
+        XCTAssertEqual(ParagraphFingerprint.computeExact("A  B"), "96396e8c37aad7ca")
+        XCTAssertEqual(ParagraphFingerprint.computeExact("A B"), "fa95d919a0cae6d2")
+        XCTAssertEqual(ParagraphFingerprint.computeExact("a---bc"), "733503084b18a8c2")
+        XCTAssertEqual(ParagraphFingerprint.computeExact("a\u{2014}bc"), "ba79b701407cd4b5")
+        XCTAssertEqual(ParagraphFingerprint.computeExact(""), "cbf29ce484222325")
+    }
+
+    func testComputeExactDoesNotToleratesWhitespaceDifferences() {
+        XCTAssertNotEqual(
+            ParagraphFingerprint.computeExact("A  B"),
+            ParagraphFingerprint.computeExact("A B")
+        )
+        XCTAssertEqual(
+            ParagraphFingerprint.compute("A  B"),
+            ParagraphFingerprint.compute("A B")
+        )
+    }
+
+    func testComputeExactDoesNotToleratesTypographicSubstitution() {
+        XCTAssertNotEqual(
+            ParagraphFingerprint.computeExact("a---bc"),
+            ParagraphFingerprint.computeExact("a\u{2014}bc")
+        )
+        XCTAssertEqual(
+            ParagraphFingerprint.compute("a---bc"),
+            ParagraphFingerprint.compute("a\u{2014}bc")
+        )
+    }
+
     // MARK: - Content-drift sensitivity
 
     func testDifferentTextProducesDifferentFingerprint() {

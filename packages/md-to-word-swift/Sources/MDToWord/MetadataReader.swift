@@ -183,15 +183,24 @@ public struct MarginsMeta {
 
 public struct ParagraphMeta {
     public var index: Int
-    /// PsychQuant/macdoc#220 item 5: content-addressed fingerprint of this
-    /// paragraph's run text, written by word-to-md-swift ≥ 1.1.0's
+    /// PsychQuant/macdoc#220 item 5: "loose" content-addressed fingerprint
+    /// of this paragraph's run text, written by word-to-md-swift ≥ 1.1.0's
     /// `MetadataCollector`. `nil` for sidecars written by an older
     /// word-to-md-swift (or hand-constructed `DocumentMetadata` values, as
     /// most of this file's own tests do) — `Tier3MetadataRestorer` treats
     /// that as "no fingerprint to verify against" and falls back to its
     /// pre-#220 positional-index behavior for this entry's paragraph-level
-    /// fields (never for `runs`; see that type's doc comment).
+    /// fields. Gates paragraph-level fields ONLY — see
+    /// `exactTextFingerprint` for what gates `runs`.
     public var textFingerprint: String?
+    /// PsychQuant/macdoc#220 item 4 follow-up: byte-exact fingerprint of the
+    /// same run text (see `ParagraphFingerprint.computeExact`).
+    /// `Tier3MetadataRestorer` gates `RunMeta` per-run restoration on THIS
+    /// fingerprint, never on `textFingerprint` — the loose fingerprint's
+    /// normalization is length-changing and cannot guarantee
+    /// `RunMeta.range` character offsets are still valid even when it
+    /// matches.
+    public var exactTextFingerprint: String?
     public var alignment: String?
     public var spacing: SpacingMeta?
     public var indentation: IndentationMeta?
@@ -206,6 +215,7 @@ public struct ParagraphMeta {
 
     public init(index: Int,
                 textFingerprint: String? = nil,
+                exactTextFingerprint: String? = nil,
                 alignment: String? = nil,
                 spacing: SpacingMeta? = nil,
                 indentation: IndentationMeta? = nil,
@@ -219,6 +229,7 @@ public struct ParagraphMeta {
                 runs: [RunMeta] = []) {
         self.index = index
         self.textFingerprint = textFingerprint
+        self.exactTextFingerprint = exactTextFingerprint
         self.alignment = alignment
         self.spacing = spacing
         self.indentation = indentation
@@ -610,6 +621,7 @@ public struct MetadataReader {
         return ParagraphMeta(
             index: index,
             textFingerprint: dict["textFingerprint"] as? String,
+            exactTextFingerprint: dict["exactTextFingerprint"] as? String,
             alignment: dict["alignment"] as? String,
             spacing: spacing,
             indentation: indentation,

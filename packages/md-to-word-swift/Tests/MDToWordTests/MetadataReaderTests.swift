@@ -293,6 +293,23 @@ final class MetadataReaderTests: XCTestCase {
         XCTAssertEqual(meta.paragraphs[0].textFingerprint, "38d1334144987bf4")
     }
 
+    func testParagraphExactTextFingerprintIsParsed() throws {
+        let yaml = """
+        version: "1.0"
+        source:
+          format: "docx"
+
+        paragraphs:
+          - index: 0
+            textFingerprint: "38d1334144987bf4"
+            exactTextFingerprint: "38d1334144987bf4"
+            alignment: center
+        """
+
+        let meta = try MetadataReader.parse(yaml)
+        XCTAssertEqual(meta.paragraphs[0].exactTextFingerprint, "38d1334144987bf4")
+    }
+
     func testParagraphWithoutTextFingerprintParsesToNil() throws {
         // Old-format sidecar (pre-#220), written before textFingerprint existed.
         let yaml = """
@@ -307,6 +324,7 @@ final class MetadataReaderTests: XCTestCase {
 
         let meta = try MetadataReader.parse(yaml)
         XCTAssertNil(meta.paragraphs[0].textFingerprint)
+        XCTAssertNil(meta.paragraphs[0].exactTextFingerprint)
     }
 
     // MARK: - Paragraph Advanced Properties
