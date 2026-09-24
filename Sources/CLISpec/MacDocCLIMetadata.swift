@@ -279,7 +279,7 @@ public enum MacDocCLIMetadata {
             CLISpecMetadata.OverlapPath(
                 command: "macdoc config ocr",
                 usage: "macdoc config ocr list",
-                note: "Edits OCR host and model settings that feed `pdf ocr`'s --host/--model when those flags are omitted (#218); the backend setting is still not read by any command."
+                note: "Edits OCR host and model settings that feed `pdf ocr`'s --host/--model when those flags are omitted under --mode ollama (#218; --mode local never reads them); the backend setting is still not read by any command."
             ),
         ]),
         CLISpecMetadata.Overlap(topic: "BibLaTeX to APA 7", paths: [
