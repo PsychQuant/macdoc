@@ -51,6 +51,11 @@ packages/*
 !packages/tex-to-docx-swift/
 !packages/token-counter-swift/
 !packages/word-to-html-swift/
+# Every local `swift test` inside a package writes its Package.resolved; for a
+# library package that is a build artifact, not source. token-counter-swift
+# tracks its own on purpose (it pins a third-party fork by revision).
+packages/*/Package.resolved
+!packages/token-counter-swift/Package.resolved
 
 # Local test files (personal .note, .pptx, .docx etc.)
 test-files/
