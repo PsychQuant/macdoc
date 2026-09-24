@@ -1,5 +1,6 @@
 import XCTest
 @testable import MDToWord
+import CommonConverterSwift
 import OOXMLSwift
 
 /// Unit coverage for `MarkdownToWordConverter.convertMarkdown(_:metadata:...)`
@@ -292,7 +293,7 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         let markdown = "A paragraph that used to carry a comment and bookmark."
 
         var paragraphMeta = ParagraphMeta(index: 0)
-        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.loose(markdown)
         paragraphMeta.commentIds = [1]
         paragraphMeta.bookmarkNames = ["_Ref12345"]
         let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
@@ -346,8 +347,8 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         // the same computation.
 
         var paragraphMeta = ParagraphMeta(index: 0)
-        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
-        paragraphMeta.exactTextFingerprint = ParagraphFingerprint.computeExact(markdown)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.loose(markdown)
+        paragraphMeta.exactTextFingerprint = ParagraphFingerprint.exact(markdown)
         // "middle" is characters [5, 11) in "Bold middle word plain."
         // ("Bold " is 5 chars: B-o-l-d-space).
         var runMeta = RunMeta(range: [5, 11])
@@ -420,8 +421,8 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         document.body.children = [.paragraph(Paragraph(text: combined))]
 
         var meta = ParagraphMeta(index: 0)
-        meta.textFingerprint = ParagraphFingerprint.compute(combined)
-        meta.exactTextFingerprint = ParagraphFingerprint.computeExact(combined)
+        meta.textFingerprint = ParagraphFingerprint.loose(combined)
+        meta.exactTextFingerprint = ParagraphFingerprint.exact(combined)
         var runMeta = RunMeta(range: [2, 4]) // scalar offsets: targets "bc"
         runMeta.fontName = "Georgia"
         meta.runs = [runMeta]
@@ -461,8 +462,8 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         document.body.children = [.paragraph(Paragraph(text: "A B"))]
 
         var meta = ParagraphMeta(index: 0)
-        meta.textFingerprint = ParagraphFingerprint.compute("A  B") // loose: matches "A B" too
-        meta.exactTextFingerprint = ParagraphFingerprint.computeExact("A  B") // exact: does NOT match "A B"
+        meta.textFingerprint = ParagraphFingerprint.loose("A  B") // loose: matches "A B" too
+        meta.exactTextFingerprint = ParagraphFingerprint.exact("A  B") // exact: does NOT match "A B"
         meta.alignment = "center"
         var runMeta = RunMeta(range: [3, 4]) // targets "B" in the ORIGINAL "A  B"
         runMeta.fontName = "Arial"
@@ -504,8 +505,8 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         let markdown = "a---bcdef"
 
         var paragraphMeta = ParagraphMeta(index: 0)
-        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
-        paragraphMeta.exactTextFingerprint = ParagraphFingerprint.computeExact(markdown)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.loose(markdown)
+        paragraphMeta.exactTextFingerprint = ParagraphFingerprint.exact(markdown)
         paragraphMeta.alignment = "center"
         var runMeta = RunMeta(range: [4, 5]) // targets "b" in the ORIGINAL "a---bcdef"
         runMeta.fontName = "Arial"
@@ -547,7 +548,7 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         let markdown = "This paragraph's real text -- with a dash... and \"quotes\"."
 
         var paragraphMeta = ParagraphMeta(index: 0)
-        paragraphMeta.textFingerprint = ParagraphFingerprint.compute("Completely different captured text.")
+        paragraphMeta.textFingerprint = ParagraphFingerprint.loose("Completely different captured text.")
         paragraphMeta.alignment = "center"
         var runMeta = RunMeta(range: [0, 4])
         runMeta.fontName = "Arial"
@@ -569,7 +570,7 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         let markdown = "This paragraph's real text -- with a dash... and \"quotes\"."
 
         var paragraphMeta = ParagraphMeta(index: 0)
-        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.loose(markdown)
         paragraphMeta.alignment = "center"
         let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
 
@@ -629,7 +630,7 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         document.body.children = [.paragraph(Paragraph(text: "Actual text."))]
 
         var meta = ParagraphMeta(index: 0)
-        meta.textFingerprint = ParagraphFingerprint.compute("Different captured text.")
+        meta.textFingerprint = ParagraphFingerprint.loose("Different captured text.")
         meta.alignment = "center"
         let metadata = DocumentMetadata(paragraphs: [meta])
 
@@ -649,7 +650,7 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         var ok = ParagraphMeta(index: 0)
         ok.alignment = "center"
         var mismatched = ParagraphMeta(index: 1)
-        mismatched.textFingerprint = ParagraphFingerprint.compute("Wrong text entirely.")
+        mismatched.textFingerprint = ParagraphFingerprint.loose("Wrong text entirely.")
         mismatched.alignment = "right"
         var onTable = ParagraphMeta(index: 2)
         onTable.alignment = "center"
