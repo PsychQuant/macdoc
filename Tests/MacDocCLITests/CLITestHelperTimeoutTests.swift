@@ -102,7 +102,7 @@ final class CLITestHelperTimeoutTests: XCTestCase {
     /// actually completed (e.g. exposing their own completion signal for
     /// tests), which is a large enough change to `runProcess`'s shape that
     /// it is left as a follow-up rather than folded into this fix.
-    func testInvalidExecutableDoesNotLeakBlockedReaders() {
+    func testInvalidExecutableReturnsPromptly() {
         let returned = expectation(description: "runProcess returns despite process.run() throwing")
         DispatchQueue.global().async {
             _ = try? CLITestHelper.runProcess(
