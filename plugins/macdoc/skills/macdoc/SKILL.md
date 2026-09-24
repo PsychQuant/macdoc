@@ -220,6 +220,8 @@ macdoc config ocr list
 macdoc config document show                                   # defaultProfile 與已匯入的快照
 macdoc config document import-official --template 範本.dotx    # 匯入安全格式快照；不改預設值
 macdoc config document set-default official                    # 之後新建的文件預設套用 official
+macdoc config document gc                                     # 列出未被引用的舊快照（只預覽，CLI 0.10.0+）
+macdoc config document gc --force                             # 實際刪除；被引用的快照永遠不碰
 ```
 
 | profile | 意思 |
@@ -230,6 +232,9 @@ macdoc config document set-default official                    # 之後新建的
 **何時會讀設定檔**：新文件（`convert --to docx`）未給 `--profile` 時才退回 `defaultProfile`；
 既有文件與腳本重播（`word render`）只有明確給 `--profile` 才套用。省略 `--template` 時讀目前
 帳號 Word 的 Normal.dotm。快照缺失或損毀會直接報錯，不會靜默退回 inherit。
+
+每次 `import-official` 都會寫一份新的不可變快照；舊的不再被引用，但會一直留在 `profiles/`。
+`gc` 預設只列出這些快照，加 `--force` 才刪除；設定檔損毀、無法判定引用時，會在刪除任何東西之前失敗。
 
 ---
 
@@ -246,6 +251,7 @@ macdoc config document set-default official                    # 之後新建的
 
 ## 版本紀錄
 
+- **1.7.0**：新增 `config document gc`（清理未被引用的格式快照）；`pdf normalize` 會還原原書頁碼與圖片比例並印出摘要（需要 CLI 0.10.0）
 - **1.6.0**：新增 `config document`（文件格式 profile）與 `convert` / `word render` 的 `--profile`（需要 CLI 0.9.0）
 - **1.1.0**：新增 `config ocr` 子命令組,支援具名 host profile(`--host kyle` 等),預設 host/model 可存 config
 - **1.0.0**：初版
