@@ -198,7 +198,7 @@ public struct ParagraphMeta {
     /// `Tier3MetadataRestorer` gates `RunMeta` per-run restoration on THIS
     /// fingerprint, never on `textFingerprint` — the loose fingerprint's
     /// normalization is length-changing and cannot guarantee
-    /// `RunMeta.range` character offsets are still valid even when it
+    /// `RunMeta.range` scalar offsets are still valid even when it
     /// matches.
     public var exactTextFingerprint: String?
     public var alignment: String?

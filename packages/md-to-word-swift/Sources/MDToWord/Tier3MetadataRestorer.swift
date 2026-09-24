@@ -84,8 +84,10 @@ import OOXMLSwift
 ///
 /// ## Per-run formatting (PsychQuant/macdoc#220 item 4)
 ///
-/// `RunMeta.range` is a `[start, end)` character-offset pair into the
-/// concatenation of the *original* paragraph's `runs` — the same text
+/// `RunMeta.range` is a `[start, end)` Unicode-scalar-offset pair (not a
+/// `Character`/grapheme-cluster offset — see `applyRunFormatting`'s doc
+/// comment for why that distinction matters) into the concatenation of the
+/// *original* paragraph's `runs` — the same text
 /// `exactTextFingerprint` above is computed over. Once that fingerprint
 /// confirms the current paragraph's run text is byte-identical, those same
 /// offsets are valid against the current paragraph's own runs (regardless
@@ -116,8 +118,8 @@ import OOXMLSwift
 ///     `CommentRangeMarker.position` / `BookmarkRangeMarker.position` are
 ///     indices into the *interleaved* emission order of ALL paragraph
 ///     children (runs, hyperlinks, SDTs, footnote/endnote references,
-///     other range markers) — not a character offset — so translating a
-///     captured position into the character-offset universe this restorer
+///     other range markers) — not a scalar offset — so translating a
+///     captured position into the scalar-offset universe this restorer
 ///     already uses for `runs` would require walking that full interleaved
 ///     order (including nested hyperlink/SDT text, which `RunMeta`'s
 ///     existing offsets deliberately exclude). No such utility exists in
@@ -133,7 +135,7 @@ import OOXMLSwift
 ///     applies equally to bookmarks.
 ///   - This is left as a follow-up, not ruled out permanently: the concrete
 ///     unblocking path is (1) extend the sidecar schema to capture range
-///     endpoints, (2) build the interleaved-position-to-character-offset
+///     endpoints, (2) build the interleaved-position-to-scalar-offset
 ///     utility (belongs upstream in OOXMLSwift as a reusable primitive, not
 ///     duplicated ad hoc here), (3) extend `Tier3MetadataRestorer` to insert
 ///     the reconstructed markers/comments once (1) and (2) both exist.
@@ -453,7 +455,7 @@ public struct Tier3RestorationReport: Equatable {
         /// `ParagraphMeta.exactTextFingerprint` was nil (sidecar predates
         /// this field, or `runs` were hand-populated without it) or did not
         /// match the current paragraph's recomputed byte-exact fingerprint.
-        /// Either way, `RunMeta.range` character offsets are not proven
+        /// Either way, `RunMeta.range` scalar offsets are not proven
         /// safe to apply — see `ParagraphFingerprint`'s doc comment for why
         /// a *loose* fingerprint match is not sufficient for this. This is
         /// never a fallback-and-apply situation, unlike paragraph-level
