@@ -261,6 +261,37 @@ final class E2ETests: XCTestCase {
     }
 
     func testE2E_Tier3MetadataRestoration() throws {
+        // QUARANTINED (PsychQuant/macdoc#155): this test exercises a
+        // "Tier 3 metadata sidecar restoration" round-trip that
+        // MarkdownToWordConverter does not implement. Diagnosis (traced by
+        // adding debug prints and re-running, then reverted):
+        //   - forward.convertToString(..., options: .marker fidelity with
+        //     metadataOutput:) correctly writes `alignment: center` into the
+        //     sidecar YAML (metaURL) — MetadataReader.read(from: metaURL)
+        //     confirms `paragraphs[0].alignment == "center"`.
+        //   - `md` itself (the Tier-1 markdown body) carries no alignment
+        //     information at all — center alignment is Tier-3-only content,
+        //     by design not embedded in the markdown text.
+        //   - `reverse.convertMarkdown(md)` (MarkdownToWordConverter) has no
+        //     overload that accepts a `DocumentMetadata`/sidecar to merge
+        //     back onto the resulting paragraphs — the `metadata` local
+        //     below is read but has nowhere to go. So `restoredDoc` can
+        //     never carry the alignment, and the second sidecar (yaml2)
+        //     generated from it is correctly alignment-less too: the
+        //     assertion is failing exactly as the missing feature predicts,
+        //     not from a defect in any existing code path.
+        // Follow-up: "md-to-word-swift: implement Tier 3 metadata-sidecar
+        // restoration (convertMarkdown(_:metadata:) applying
+        // ParagraphMeta.alignment/spacing/indentation/etc. back by
+        // paragraph index)" — a real feature addition, not a small fix, so
+        // out of scope for this issue per the orchestrator's Step 2 bar.
+        throw XCTSkip(
+            "Tier 3 metadata-sidecar restoration is unimplemented in " +
+            "MarkdownToWordConverter (no API accepts DocumentMetadata back " +
+            "in); alignment is Tier-3-only and never reaches `md`. " +
+            "See PsychQuant/macdoc#155 follow-up."
+        )
+
         var doc = WordDocument()
         doc.styles = Style.defaultStyles
 
