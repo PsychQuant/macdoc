@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.6.1] - 2026-09-24
+
+### Changed
+
+- **`swiftify` 寫明空白段落的 slot 格式來源**（PsychQuant/macdoc#199）。段落裡沒有任何 run 時，填入的文字取段落標記的 rPr，
+  需要 CLI 0.9.0+ 或 che-word-mcp 4.1.0+；較舊的版本會落到 docDefaults。已用 v0.9.0 release binary 在官方表單上實測。
+  `binary_version` 不變（0.9.0）。
+- 補上 `15bd4dc` 漏掉的 marketplace.json 版號與本條目：該 commit 只 bump 了 plugin.json。
+
 ## [1.6.0] - 2026-09-24
 
 ### Changed
