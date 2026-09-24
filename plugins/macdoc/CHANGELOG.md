@@ -25,9 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`swiftify` skill 補上 MCP 端 paragraphs-only 的已知落差**（PsychQuant/macdoc#193）：`--paragraphs-only`
   目前是 CLI-only，che-word-mcp 沒有對應的參數或工具、回應也不會具名 `paragraph-no-paraId`；純走 MCP 的
   呼叫端目前只能改走 CLI 完成這條備援路徑。
+- **`swiftify` 以 release artifact 重測量測案例**（PsychQuant/macdoc#193）：下載 0.7.0、0.8.0、0.9.0 三個官方 release
+  binary，以 sha256 辨識版本（不靠 `--version` 字串），重跑 REC-O-01 的 coverage 與「raw slot 填空白段落」。coverage 三版相同；
+  slot 行為三版各異（0.7.0 印「已寫入」但沒填值、0.8.0 填了但 run 沒有 rPr、0.9.0 沿用段落標記字型），整理成表格寫進 skill，
+  並附上以 sha256 核對手上版本的方法。
 - `binary_version` 不變（0.9.0）——本次未改 CLI 原始碼行為，只加測試與文件。
 
-
+## [1.6.1] - 2026-09-24
 
 ### Changed
 
