@@ -186,29 +186,47 @@ struct RunProcessFDInheritanceTests {
     /// test-only `pipesForTesting` hook, while `runProcess` is still
     /// in-flight on another thread.
     @Test("runProcess's own pipes — not just makeCloseOnExecPipe() in isolation — do not leak into a raw fork+exec child")
-    func runProcessOwnPipesDoNotLeak() async throws {
+    func runProcessOwnPipesDoNotLeak() throws {
         final class Captured: @unchecked Sendable {
             var stdoutWriteFD: Int32?
         }
-        let captured = Captured()
-        let pipeReady = DispatchSemaphore(value: 0)
-
-        let runTask = Task {
-            try CLITestHelper.runProcess(
-                executableURL: URL(fileURLWithPath: "/bin/sh"),
-                arguments: ["-c", "sleep 0.5"],
-                currentDirectory: nil,
-                timeout: 10,
-                pipesForTesting: { stdout, _ in
-                    captured.stdoutWriteFD = stdout.fileHandleForWriting.fileDescriptor
-                    pipeReady.signal()
-                })
+        final class RunOutcome: @unchecked Sendable {
+            var result: Swift.Result<CLIResult, Error>?
         }
+        let captured = Captured()
+        let outcome = RunOutcome()
+        let pipeReady = DispatchSemaphore(value: 0)
+        let runFinished = DispatchSemaphore(value: 0)
+
+        // A real pthread, not a `Task` — same reasoning `runProcess`'s own
+        // reader threads document: a raw `DispatchSemaphore.wait()` inside
+        // an `async` test body would block a Swift concurrency
+        // cooperative-pool worker, which is the exact starvation class
+        // macdoc#219 exists to avoid (and, as of Swift 6, is a hard
+        // compiler error to write directly in an `async` context anyway).
+        let runner = Thread {
+            do {
+                let result = try CLITestHelper.runProcess(
+                    executableURL: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: ["-c", "sleep 0.5"],
+                    currentDirectory: nil,
+                    timeout: 10,
+                    pipesForTesting: { stdout, _ in
+                        captured.stdoutWriteFD = stdout.fileHandleForWriting.fileDescriptor
+                        pipeReady.signal()
+                    })
+                outcome.result = .success(result)
+            } catch {
+                outcome.result = .failure(error)
+            }
+            runFinished.signal()
+        }
+        runner.start()
 
         let observed = pipeReady.wait(timeout: .now() + 5) == .success
         #expect(observed, "did not observe runProcess's pipe via pipesForTesting in time")
         guard let writeFD = captured.stdoutWriteFD else {
-            _ = try await runTask.value
+            _ = runFinished.wait(timeout: .now() + 10)
             return
         }
 
@@ -217,7 +235,10 @@ struct RunProcessFDInheritanceTests {
         // for real, the same way the factory-level test above does.
         #expect(try !probesAsLeaked(fd: writeFD), "runProcess's own stdout pipe write end (fd \(writeFD)) must not leak into a raw fork+exec child")
 
-        _ = try await runTask.value
+        _ = runFinished.wait(timeout: .now() + 10)
+        if case .failure(let error) = outcome.result {
+            throw error
+        }
     }
 
     /// Point 2, mechanism: this is the exact function `runProcess`'s
