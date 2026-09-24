@@ -32,24 +32,36 @@ final class PDFNormalizeReportTests: XCTestCase {
         XCTAssertEqual(lines.count, 3, "\(lines)")
     }
 
-    func testFigureSummaryCountsRoutineOutcomesAndListsActionableOnes() {
-        let lines = MacDoc.PDF.Normalize.pageAndFigureSummary(report(figures: [
-            FigureWidthResolution(path: "figures/a.png", page: 2, line: 10, outcome: .widthApplied(fraction: 0.5, widthPoints: 297.6)),
-            FigureWidthResolution(path: "figures/b.png", page: 2, line: 11, outcome: .explicitSizePreserved),
-            FigureWidthResolution(path: "figures/c.png", page: nil, line: 12, outcome: .noPageContext),
-            FigureWidthResolution(path: "figures/d.png", page: 3, line: 20, outcome: .noMatchingFigure),
-            FigureWidthResolution(path: "figures/e.png", page: 4, line: 30, outcome: .invalidBoundingBox([0, 0, 2, 1])),
-            FigureWidthResolution(path: "figures/f.png", page: 5, line: 40, outcome: .metadataUnavailable("manifest.json 不存在")),
-        ], unreadable: ["responses/page_006.json"]))
-        XCTAssertEqual(lines.first, "  figure widths: 1 applied, 1 already sized, 1 without page context")
-        for path in ["figures/d.png", "figures/e.png", "figures/f.png"] {
-            XCTAssertTrue(lines.contains { $0.contains(path) }, "\(path) 未列出：\(lines)")
+    /// 每一種 Outcome 都放進來：例行的三種各放不同筆數（抓寫死計數），需要處理的七種各一筆，
+    /// 逐筆核對路徑、頁碼、行號與原因（抓「把某種問題誤歸為例行」）。
+    func testFigureSummaryCountsRoutineOutcomesAndListsEveryActionableOne() {
+        let applied = (0..<3).map { FigureWidthResolution(path: "figures/ok\($0).png", page: 2, line: 10 + $0, outcome: .widthApplied(fraction: 0.5, widthPoints: 297.6)) }
+        let sized = (0..<2).map { FigureWidthResolution(path: "figures/sized\($0).png", page: 2, line: 20 + $0, outcome: .explicitSizePreserved) }
+        let noContext = (0..<4).map { FigureWidthResolution(path: "figures/nopage\($0).png", page: nil, line: 30 + $0, outcome: .noPageContext) }
+        let actionable: [(FigureWidthResolution, String)] = [
+            (FigureWidthResolution(path: "figures/d.png", page: 3, line: 41, outcome: .noMatchingFigure), "responses 沒有這張圖"),
+            (FigureWidthResolution(path: "figures/e.png", page: 4, line: 42, outcome: .ambiguousFigure), "多筆互相矛盾"),
+            (FigureWidthResolution(path: "figures/f.png", page: 5, line: 43, outcome: .invalidBoundingBox([0, 0, 2, 1])), "bbox 不合法"),
+            (FigureWidthResolution(path: "figures/g.png", page: 6, line: 44, outcome: .widthNotRepresentable(1e-9)), "寬度太小"),
+            (FigureWidthResolution(path: "figures/h.png", page: 7, line: 45, outcome: .missingPageRecord), "manifest.json 沒有該頁"),
+            (FigureWidthResolution(path: "figures/i.png", page: 8, line: 46, outcome: .missingImageFile), "圖檔不存在"),
+            (FigureWidthResolution(path: "figures/j.png", page: 9, line: 47, outcome: .metadataUnavailable("manifest.json 不存在")), "manifest.json 不存在"),
+        ]
+        let lines = MacDoc.PDF.Normalize.pageAndFigureSummary(report(
+            figures: applied + sized + noContext + actionable.map(\.0), unreadable: ["responses/page_006.json"]))
+
+        XCTAssertEqual(lines.first, "  figure widths: 3 applied, 2 already sized, 4 without page context")
+        for (figure, reason) in actionable {
+            let matches = lines.filter { $0.contains(figure.path) }
+            XCTAssertEqual(matches.count, 1, "\(figure.path) 應恰好列出一次：\(lines)")
+            let line = matches.first ?? ""
+            XCTAssertTrue(line.contains("page \(figure.page!)") && line.contains("line \(figure.line)") && line.contains(reason), line)
         }
-        for path in ["figures/a.png", "figures/b.png", "figures/c.png"] {
-            XCTAssertFalse(lines.contains { $0.contains(path) }, "例行結果不必逐筆列出：\(lines)")
+        for routine in applied + sized + noContext {
+            XCTAssertFalse(lines.contains { $0.contains(routine.path) }, "例行結果不必逐筆列出：\(lines)")
         }
-        XCTAssertTrue(lines.contains { $0.contains("manifest.json 不存在") }, "\(lines)")
         XCTAssertTrue(lines.contains { $0.contains("responses/page_006.json") }, "\(lines)")
+        XCTAssertEqual(lines.count, 1 + actionable.count + 1, "\(lines)")
     }
 
     /// 端到端：CLI 真的走到 0.3.0 的兩個步驟，並把摘要印出來。

@@ -380,5 +380,15 @@ final class DocumentProfileCLITests: XCTestCase {
         let result = try CLITestHelper.run(["config", "document", "gc", "--force", "--config", config.path])
         XCTAssertNotEqual(result.exitCode, 0)
         XCTAssertTrue(FileManager.default.fileExists(atPath: snapshot.path))
+        XCTAssertFalse(result.stdout.contains("已刪除"), result.stdout)
+        XCTAssertFalse(result.stderr.isEmpty, "失敗必須在 stderr 留下診斷")
+
+        // 語法層級的損毀（截斷的 JSON）走的是另一條錯誤路徑，同樣不得刪檔。
+        try Data(#"{"document":{"officialSnapshot":"#.utf8).write(to: config)
+        let truncated = try CLITestHelper.run(["config", "document", "gc", "--force", "--config", config.path])
+        XCTAssertNotEqual(truncated.exitCode, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: snapshot.path))
+        XCTAssertFalse(truncated.stdout.contains("已刪除"), truncated.stdout)
+        XCTAssertFalse(truncated.stderr.isEmpty, "失敗必須在 stderr 留下診斷")
     }
 }
