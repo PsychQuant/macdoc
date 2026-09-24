@@ -52,6 +52,8 @@ public enum MacDocCLIMetadata {
                 "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown.",
                 "--mode local runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release).",
                 "--mode ollama sends page images to the Ollama server at --host.",
+                "#218: --host and --model have no static default; when omitted, priority is the matching `macdoc config ocr` setting, then a built-in fallback. --host also resolves a `config ocr add-host` profile name to its address. --mode itself still has to be given explicitly every time — it is not read from `config ocr set-backend` (see that command's own abstract for why).",
+                "--config points at an alternate settings file instead of ~/.config/macdoc/config.json, same flag as `macdoc config ocr`.",
             ]
         ),
         CLISpecMetadata.CommandInfo(
@@ -109,7 +111,7 @@ public enum MacDocCLIMetadata {
             status: .active,
             notes: [
                 "Stores Ollama host profiles, the OCR model and the OCR backend in the macdoc config file.",
-                "Since the top-level `ocr` command was removed (#145) no macdoc command reads these settings; `macdoc pdf ocr` takes --mode, --host and --model flags.",
+                "#218: `macdoc pdf ocr` reads the host profiles and the OCR model as fallbacks for its own --host/--model when those flags are omitted (priority: explicit flag > this setting > pdf ocr's built-in default). The OCR backend setting is stored but still not read by any command — see `macdoc config ocr set-backend`'s own abstract for why.",
             ]
         ),
         CLISpecMetadata.CommandInfo(
@@ -188,14 +190,15 @@ public enum MacDocCLIMetadata {
             converter: "srt-to-html-swift", output: .stdoutOrFile,
             options: ["--full", "--css"], styles: ["dark", "light"],
             notes: [
-                "This route accepts only --css dark or --css light and rejects the option's default, so pass one explicitly.",
+                "This route accepts only --css dark or --css light. --css has no built-in default (#216); when it is omitted this route falls back to dark.",
                 "Speaker labels (`Speaker 1:` or `[Speaker 1]`) become speaker badges.",
             ]
         ),
         CLISpecMetadata.Conversion(
             label: "BibLaTeX → APA HTML", command: convert, from: ["bib"], to: "html",
             converter: "bib-apa-to-html-swift", output: .stdoutOrFile,
-            options: ["--full", "--css"], styles: ["minimal", "web"]
+            options: ["--full", "--css"], styles: ["minimal", "web"],
+            notes: ["--css has no built-in default (#216); when it is omitted this route falls back to web."]
         ),
         CLISpecMetadata.Conversion(
             label: "BibLaTeX → APA Markdown", command: convert, from: ["bib"], to: "md",
@@ -234,7 +237,7 @@ public enum MacDocCLIMetadata {
             notes: [
                 "Legacy plist-based .note only; modern FlatBuffers .ntb containers are recognized and rejected.",
                 "Writes <input-stem>/ with index.html and media/ (or --output); --stdout prints one self-contained HTML, with --full for a complete document.",
-                "This route accepts only --css dark or --css light and rejects the option's default, so pass one explicitly.",
+                "This route accepts only --css dark or --css light. --css has no built-in default (#216); when it is omitted this route falls back to dark.",
             ]
         ),
         CLISpecMetadata.Conversion(
@@ -276,7 +279,7 @@ public enum MacDocCLIMetadata {
             CLISpecMetadata.OverlapPath(
                 command: "macdoc config ocr",
                 usage: "macdoc config ocr list",
-                note: "Edits OCR host/model/backend settings that no current command reads; `pdf ocr` takes flags."
+                note: "Edits OCR host and model settings that feed `pdf ocr`'s --host/--model when those flags are omitted (#218); the backend setting is still not read by any command."
             ),
         ]),
         CLISpecMetadata.Overlap(topic: "BibLaTeX to APA 7", paths: [

@@ -73,11 +73,17 @@ struct CLISpecContractTests {
                 help: "Target format (md, html, docx, pdf, json, marker, tokens)"
 
         """))
+        // --css has no static default (#216): the bib/srt/note routes that
+        // accept it disagree on what "omitted" should mean (bib → web,
+        // srt/note → dark), so no single ArgumentParser-level default can be
+        // correct for all of them — each route's own fallback lives in its
+        // `conversions[].notes` overlay entry instead (see
+        // `cssAndOCRHostModelHaveNoStaticDefault` and `cssFallbacksAreDocumentedPerRoute`
+        // below), not here.
         #expect(yaml.contains("""
               - names: ["--css"]
                 value_name: css
                 required: false
-                default: web
                 values: [minimal, web, dark, light]
                 help: "CSS style: minimal|web (bib), dark|light (srt)"
 
@@ -103,10 +109,20 @@ struct CLISpecContractTests {
     @Test("pdf ocr is a nested path with its defaults and dependencies")
     func pdfOCR() throws {
         let ocr = try command("macdoc pdf ocr")
+        // --mode keeps a static default: it is deliberately NOT read from
+        // `config ocr` (#218 — that setting's own struct-level default would
+        // silently flip everyone's default mode from local to ollama; see
+        // the `macdoc pdf ocr` project note).
         #expect(try option("--mode", of: "macdoc pdf ocr").defaultValue == "local")
-        #expect(try option("--host", of: "macdoc pdf ocr").defaultValue == "localhost:11434")
         #expect(try option("--page-dpi", of: "macdoc pdf ocr").defaultValue == "200.0")
-        #expect(try option("--model", of: "macdoc pdf ocr").defaultValue == "EZCon/GLM-OCR-8bit-mlx")
+        // --host and --model have no static default as of #218: when
+        // omitted, `pdf ocr` falls back to `config ocr`'s setting and only
+        // then to a built-in default (documented in the `macdoc pdf ocr`
+        // project note, not restated here — see `cssDefaultNotes`-style
+        // reasoning in `noOverlayProseRestatesAnArgumentParserDerivedDefault`).
+        #expect(try option("--host", of: "macdoc pdf ocr").defaultValue == nil)
+        #expect(try option("--model", of: "macdoc pdf ocr").defaultValue == nil)
+        #expect(ocr.options.contains { $0.names.contains("--config") })
         #expect(ocr.flags.map(\.names) == [["--with-pdfkit"]])
         #expect(ocr.project?.status == .active)
         #expect(ocr.project?.dependencies == ["huggingface", "ollama"])
@@ -219,24 +235,52 @@ struct CLISpecContractTests {
         #expect(tex.usedBy == ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate"])
     }
 
-    @Test("routes whose styles exclude the --css default say so, and no overlay prose quotes a default value")
-    func cssDefaultNotes() throws {
+    // #216 / #218: --css (on `convert`) and --host/--model (on `pdf ocr`)
+    // used to carry a single static ArgumentParser default each, and this
+    // test used to check that no overlay prose restated an ArgumentParser
+    // default anywhere. That single-default model broke down: bib/srt/note
+    // disagree on what "no --css" should mean (web vs. dark), and pdf ocr's
+    // own built-in host/model must lose to a `config ocr` setting when one
+    // exists — neither is expressible as one declared default, so all three
+    // options now have none (`cssAndOCRHostModelHaveNoStaticDefault`), and
+    // their actual per-route/per-priority fallback is documented in overlay
+    // prose instead, which is the one place still allowed to state a
+    // fallback value (`cssFallbacksAreDocumentedPerRoute` /
+    // `noOverlayProseRestatesAnArgumentParserDerivedDefault`).
+
+    @Test("--css and pdf ocr's --host/--model have no static ArgumentParser default (#216, #218)")
+    func cssAndOCRHostModelHaveNoStaticDefault() throws {
+        #expect(try option("--css", of: "macdoc convert").defaultValue == nil)
+        #expect(try option("--host", of: "macdoc pdf ocr").defaultValue == nil)
+        #expect(try option("--model", of: "macdoc pdf ocr").defaultValue == nil)
+    }
+
+    @Test("every --css route documents its own fallback (#216)")
+    func cssFallbacksAreDocumentedPerRoute() throws {
         let document = try CLISpecHarness.document()
-        let cssDefault = try #require(try option("--css", of: "macdoc convert").defaultValue)
         for conversion in document.conversions where conversion.options.contains("--css") {
-            let rejectsDefault = !conversion.styles.contains(cssDefault)
-            let noted = conversion.notes.contains { $0.contains("rejects the option's default") }
-            #expect(rejectsDefault == noted,
-                    "\(conversion.label): --css default \(cssDefault) rejected=\(rejectsDefault) but note present=\(noted)")
+            let documented = conversion.notes.contains { $0.contains("falls back to") }
+            #expect(documented, "\(conversion.label) accepts --css but does not document what it falls back to when --css is omitted")
         }
-        // Defaults are derived from ArgumentParser; prose restating them would drift silently.
+    }
+
+    @Test("no overlay prose restates an ArgumentParser-derived default")
+    func noOverlayProseRestatesAnArgumentParserDerivedDefault() throws {
+        let document = try CLISpecHarness.document()
+        // Defaults that ARE derived from ArgumentParser (--mode, --page-dpi,
+        // bib's own --css, …) must not also be restated in hand-written
+        // prose — that copy would drift silently the next time the declared
+        // default changes. This deliberately does not cover --css / pdf
+        // ocr's --host / --model: those fallbacks are not ArgumentParser-
+        // derived (see `cssAndOCRHostModelHaveNoStaticDefault` above), so
+        // prose is the only place that can document them at all.
         let prose = document.commands.compactMap(\.project).flatMap(\.notes)
             + document.conversions.flatMap(\.notes)
             + document.externalDependencies.map(\.dependency.purpose)
             + document.overlaps.flatMap(\.paths).map(\.note)
         for text in prose {
             #expect(!text.contains("(default)") && !text.contains("defaults to") && !text.contains("default localhost"),
-                    "overlay prose restates a default: \(text)")
+                    "overlay prose restates an ArgumentParser-derived default: \(text)")
         }
     }
 
