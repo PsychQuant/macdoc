@@ -29,9 +29,28 @@ import Foundation
 /// are defined against on the forward side (word-to-md-swift's
 /// `MetadataCollector`). `Tier3MetadataRestorer` computes this identically
 /// over the freshly-converted paragraph's own `runs` before comparing
-/// against `ParagraphMeta.textFingerprint`.
+/// against `ParagraphMeta.textFingerprint` / `exactTextFingerprint`.
 ///
-/// ## Normalization
+/// ## Two fingerprints, two different guarantees — do not conflate them
+///
+/// `compute(_:)` and `computeExact(_:)` below serve different purposes:
+///
+/// - `compute(_:)` ("loose") tolerates markdown-round-trip noise —
+///   appropriate for `Tier3MetadataRestorer`'s paragraph-*level* gate
+///   (alignment/spacing/etc., none of which depend on character offsets).
+/// - `computeExact(_:)` requires byte-for-byte identical text. This is the
+///   ONLY fingerprint `Tier3MetadataRestorer` may gate per-run restoration
+///   on: the loose fingerprint's normalization steps are length-changing
+///   (whitespace collapsing, typographic canonicalization), so two texts
+///   can share a loose-fingerprint match while having different lengths or
+///   character positions — silently invalidating, or worse shifting,
+///   `RunMeta.range` offsets onto the wrong characters. See
+///   `computeExact`'s doc comment for a concrete worked example (this gap
+///   was found by a Codex cross-model review round during #220's
+///   implementation, not anticipated up front).
+///
+/// ## Normalization (applies to `compute(_:)` only — `computeExact(_:)`
+/// ## applies none of it)
 ///
 /// 1. Unicode NFC normalize (`precomposedStringWithCanonicalMapping`).
 /// 2. **Typographic canonicalization**: fold "smart punctuation" variants
@@ -72,6 +91,25 @@ enum ParagraphFingerprint {
 
     static func compute(_ runsText: String) -> String {
         fnv1a64Hex(normalize(runsText))
+    }
+
+    /// Byte-exact fingerprint — hashes `runsText` with NO normalization at
+    /// all. Two texts sharing this fingerprint are guaranteed
+    /// character-for-character identical, which is the guarantee
+    /// `RunMeta.range` character offsets need to remain valid.
+    ///
+    /// Concretely: original text `"a---bc"` with a `RunMeta.range` of
+    /// `[4, 5)` (targeting `"b"`) round-trips through markdown to `"a—bc"`
+    /// (smart-punctuation substitution, unrelated to any real edit); the
+    /// *loose* `compute(_:)` fingerprint of both strings is identical, but
+    /// `[4, 5)` against `"a—bc"` (length 4) is out of bounds — or, with more
+    /// trailing text, could land on a *different* character than `"b"`
+    /// entirely, silently formatting the wrong text.
+    /// `Tier3MetadataRestorer.restore` gates `applyRunFormatting` on this
+    /// fingerprint specifically (not `compute(_:)`) for exactly this
+    /// reason.
+    static func computeExact(_ runsText: String) -> String {
+        fnv1a64Hex(runsText)
     }
 
     static func normalize(_ text: String) -> String {
