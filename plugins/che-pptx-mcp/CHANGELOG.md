@@ -4,6 +4,17 @@ All notable changes to the che-pptx-mcp plugin shell will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-09-24
+
+### Changed
+
+- `binary_version` 0.2.0 → **0.3.0**（依賴 pptx-swift 0.3.0）：
+  - 存出的簡報帶有每張圖片的 relationship、media part 與 content type，不論圖片是插入的還是讀進來的（PsychQuant/pptx-swift#1）。
+  - 原生比例考慮 EXIF 方向；`fit_picture_to_native_aspect` 以 `srcRect` 裁切後的可見區域計算（PsychQuant/pptx-swift#2）。
+  - 整數參數改為嚴格 JSON 型別與範圍檢查，無效時回錯而不 crash（PsychQuant/che-pptx-mcp#5）；新元素 id 涵蓋群組內的元素（#6）；重用有未存檔修改的 `doc_id` 會被拒絕（#8）；另修正 `insert_image` 同名覆寫、autosave 失敗仍清掉 dirty、`delete_image` 誤刪非圖片元素。
+- skill 的誠實邊界同步更新：拿掉「插入圖片後 PowerPoint 可能要求修復」與「裁切／EXIF 尚未建模」兩條，補上群組存檔會遺失（PsychQuant/pptx-swift#5）、整數參數嚴格化與 `doc_id` 保護。
+- gitlink `mcp/che-pptx-mcp` 指向 v0.3.0 的 release commit。
+
 ## [0.2.0] - 2026-09-24
 
 ### Changed

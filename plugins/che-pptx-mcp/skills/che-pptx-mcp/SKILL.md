@@ -73,8 +73,11 @@ Read tools accept either `source_path` or `doc_id` when their schema offers both
 - `export_image` returns an embedded image as base64; it does not render a slide.
 - `insert_image`, text-shape placement, `set_shape_position`, and `set_shape_size` use EMU. The three geometry tools (binary 0.2.0+, PsychQuant/macdoc#90) take centimetres and convert to EMU internally (360000 EMU per cm).
 - `set_placeholder_geometry` works on any top-level shape, picture, or table frame; groups and group children are rejected. Off-slide placement is applied and returned with a warning; non-positive sizes are an error before anything changes.
-- `place_picture_at` derives the height from the image's native aspect when `height_cm` is omitted; images ImageIO cannot decode need an explicit `height_cm`. Cropping (`srcRect`) and EXIF orientation are not modelled yet, so fitting a cropped or rotated photo can distort it (PsychQuant/pptx-swift#2).
-- **Saved decks with inserted pictures may need repair in PowerPoint**: the writer does not yet write the slide image relationships for pictures added in a session (`insert_image` and `place_picture_at` alike; PsychQuant/pptx-swift#1). Tell the user before relying on a saved deck with new pictures.
+- `place_picture_at` derives the height from the image's native aspect when `height_cm` is omitted; images ImageIO cannot decode need an explicit `height_cm`. Since binary 0.3.0 the native aspect honours EXIF orientation (5–8 swap width and height) and `fit_picture_to_native_aspect` uses the area a `srcRect` crop leaves visible (PsychQuant/pptx-swift#2); a crop that leaves nothing visible is an error.
+- Since binary 0.3.0 saved decks carry the slide image relationships, media parts and content types for every picture, inserted or read (PsychQuant/pptx-swift#1). Not verified by opening the result in PowerPoint.
+- **Groups are not written back**: a deck read with grouped shapes loses the groups and everything inside them on save (PsychQuant/pptx-swift#5, pre-existing). Warn the user before saving a deck that contains groups.
+- Integer parameters are strict JSON numbers since binary 0.3.0: the string `"3"` or `0.5` is a parameter error, not silently converted.
+- `create_presentation`／`open_presentation` refuse to reuse a `doc_id` whose session has unsaved changes (PsychQuant/che-pptx-mcp#8); save or close it first.
 - Rich text runs and layout-based slide creation are not part of the current published surface.
 
 ## Common mistakes
