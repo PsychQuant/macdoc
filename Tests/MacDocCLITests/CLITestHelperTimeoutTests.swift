@@ -82,17 +82,26 @@ final class CLITestHelperTimeoutTests: XCTestCase {
     /// `run()` then throws (here: a nonexistent executable), nothing used
     /// to close the pipes' write ends, so both readers — blocked forever
     /// in `readDataToEndOfFile()` waiting for an EOF that would never come
-    /// — leaked for the rest of the process's lifetime, along with their
-    /// file descriptors.
+    /// — could leak for the rest of the process's lifetime, along with
+    /// their file descriptors. `runProcess` now closes both write ends on
+    /// that failure path before rethrowing, so the readers see EOF and
+    /// return normally instead.
     ///
-    /// A leaked background thread can't be observed directly from here, but
-    /// the fix (closing the write ends on the `run()` failure path) is the
-    /// same thing that lets `runProcess` itself return promptly instead of
-    /// hanging forever. Race the call against a bounded `XCTestExpectation`
-    /// timeout rather than trusting `runProcess`'s own `timeout` parameter,
-    /// which only bounds an already-started *process* — it does nothing for
-    /// a `run()` that throws before the timeout loop is even reached, which
-    /// is exactly the path this test exercises.
+    /// Honest limitation (Codex round-2 finding #1): this test does NOT
+    /// actually discriminate the fix from the bug it describes. Verified by
+    /// hand — reverting the write-end-closing fix still passes this test,
+    /// because on this Foundation implementation `readDataToEndOfFile()`
+    /// already returns promptly once `process.run()` throws for a
+    /// nonexistent path, for reasons this investigation did not fully pin
+    /// down (see macdoc#219's fix commit message). So this test currently
+    /// only proves "an invalid executable does not hang the caller" — a
+    /// legitimate smoke-test property in its own right — not specifically
+    /// that the write-end-closing code is what makes that true. Turning it
+    /// into a real regression guard for the leak itself would need an
+    /// observable way to detect whether the two background readers have
+    /// actually completed (e.g. exposing their own completion signal for
+    /// tests), which is a large enough change to `runProcess`'s shape that
+    /// it is left as a follow-up rather than folded into this fix.
     func testInvalidExecutableDoesNotLeakBlockedReaders() {
         let returned = expectation(description: "runProcess returns despite process.run() throwing")
         DispatchQueue.global().async {

@@ -26,13 +26,17 @@ struct PageOCRRunner {
     }
 
     /// #218 (Codex round-1 finding #5a): pulled out of `run()`'s backend
-    /// switch so a test can confirm the resolved `model` actually reaches
-    /// `OllamaBackend`, without needing a running Ollama server or a real
-    /// OCR pipeline — `OllamaBackend`'s initializer is a plain struct init
-    /// (no I/O), so this is safe to call directly. Exists specifically so a
-    /// regression like reverting to a hardcoded `"glm-ocr"` (the bug this
-    /// file used to have) fails a fast unit test instead of only being
-    /// visible at OCR runtime against a real server.
+    /// switch so a test can confirm this factory itself passes `model`
+    /// through to `OllamaBackend` rather than hardcoding it (the bug this
+    /// file used to have), without needing a running Ollama server or a
+    /// real OCR pipeline — `OllamaBackend`'s initializer is a plain struct
+    /// init (no I/O), so this is safe to call directly.
+    ///
+    /// Honest limitation (Codex round-2 finding #2): a test against this
+    /// factory only proves the factory itself is correct, not that `run()`
+    /// below actually calls it with the resolved `model` — reverting just
+    /// the one call site in `run()` back to a hardcoded literal, while
+    /// leaving this factory untouched, would not be caught by that test.
     static func makeOllamaBackend(host: String, model: String) -> OllamaBackend {
         OllamaBackend(host: host, model: model)
     }

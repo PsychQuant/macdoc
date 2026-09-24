@@ -247,9 +247,14 @@ enum CLITestHelper {
         process.waitUntilExit()
 
         // Each background read reaches EOF (and `drainGroup.leave()`) once
-        // the pipe's write end closes, which happens once the process (and
-        // anything else holding the fd open) has exited — already true by
-        // this point, so this returns promptly rather than blocking further.
+        // every process holding the pipe's write end open has exited.
+        // `waitUntilExit()` above only guarantees *this* process (the one
+        // we spawned) has exited — not any grandchildren, or an unrelated
+        // concurrently-spawned process that happened to inherit the same
+        // fd (see `CLISpecHarness.swift`'s comment on why it avoids
+        // `runProcess` for exactly this reason). So this usually returns
+        // promptly, but is not a hard guarantee independent of the
+        // `timeout` parameter above.
         drainGroup.wait()
 
         return CLIResult(
