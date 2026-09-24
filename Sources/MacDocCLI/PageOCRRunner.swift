@@ -58,7 +58,11 @@ struct PageOCRRunner {
         case .local:
             backend = try await MLXBackend.load(repo: model)
         case .ollama(let host):
-            backend = OllamaBackend(host: host, model: "glm-ocr")
+            // #218: this used to hardcode "glm-ocr" regardless of `self.model`,
+            // silently discarding both an explicit `--model` and (once wired)
+            // `config ocr`'s default model. Use the resolved model the caller
+            // already picked.
+            backend = OllamaBackend(host: host, model: model)
         }
 
         // Detect if vector PDF (for PDFKit cross-validation)
