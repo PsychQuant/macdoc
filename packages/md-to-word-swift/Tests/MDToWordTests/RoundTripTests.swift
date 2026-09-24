@@ -1,4 +1,5 @@
 import XCTest
+import Foundation
 @testable import MDToWord
 import OOXMLSwift
 import WordToMD
@@ -49,6 +50,150 @@ final class RoundTripTests: XCTestCase {
 
         return result.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // =========================================================
+    // MARK: - Volatile-ID normalizer (test-only, PsychQuant/macdoc#155)
+    // =========================================================
+    //
+    // `appendParagraph` (ooxml-swift Document.swift) unconditionally stamps
+    // every paragraph that arrives without a caller-preset `w14ParaId` via
+    // `withStampedParaId`, which draws a fresh random 8-hex ID from
+    // `ParaIdGenerator()`'s unseeded `SystemRandomNumberGenerator()`. Two
+    // independent calls to `MarkdownToWordConverter.convertMarkdown` on the
+    // same markdown therefore produce `WordDocument`s that are semantically
+    // identical but differ on every paragraph's `w14ParaId`/`w14TextId` —
+    // and `Paragraph`'s custom `Equatable` (detached mode) includes both IDs
+    // in its `contentEquals`. Tier C's `XCTAssertEqual(w1, w2)` compares raw
+    // `WordDocument`s, so it fails on ID noise alone, independent of any
+    // real conversion bug.
+    //
+    // A second, independently-discovered source of the same class of noise:
+    // `MarkdownToWordConverter.convertMarkdown` (MarkdownToWordConverter.swift
+    // :373-374) stamps `document.properties.created = Date()` /
+    // `.modified = Date()` on every call. Two calls microseconds apart wall
+    // -clock-stamp differently, so even the single-paragraph
+    // `testRoundTripC_BasicParagraph` failed `WordDocument.==` on
+    // `properties` alone (confirmed by field-by-field bisection — `body`,
+    // `styles`, `numbering`, etc. all compared equal; only `properties` did
+    // not) even after `w14ParaId`/`w14TextId` were stripped. Cleared here for
+    // the same reason: it is wall-clock noise orthogonal to conversion
+    // correctness, not a claim that `created`/`modified` should never be set
+    // in production.
+    //
+    // This normalizer is TEST-ONLY: it does not touch ooxml-swift (the
+    // op-log addressing contract that `w14ParaId` serves is a legitimate
+    // production need — see `withStampedParaId`'s doc comment) nor
+    // `MarkdownToWordConverter` (stamping fresh `w14ParaId`/`created`/
+    // `modified` on every authored document is correct production behavior
+    // for a converter that authors new documents rather than editing
+    // existing ones). It only strips the volatile fields from a
+    // `WordDocument` copy immediately before a Tier C equality assertion.
+
+    /// Recursively clears `w14ParaId`/`w14TextId` on every paragraph reachable
+    /// from `doc.body.children` — body-level paragraphs, table cell
+    /// paragraphs (nested tables included), and content-control children —
+    /// mirroring the traversal ooxml-swift's `Document.collectAllParagraphs`
+    /// uses internally. Also clears `properties.created`/`properties.modified`
+    /// (see comment above). Returns a new value; `doc` is untouched.
+    func stripVolatileIDs(_ doc: WordDocument) -> WordDocument {
+        var result = doc
+        result.body.children = doc.body.children.map(strippedBodyChild)
+        result.properties.created = nil
+        result.properties.modified = nil
+        return result
+    }
+
+    private func strippedBodyChild(_ child: BodyChild) -> BodyChild {
+        switch child {
+        case .paragraph(let para):
+            return .paragraph(strippedParagraph(para))
+        case .table(let table):
+            return .table(strippedTable(table))
+        case .contentControl(let control, let children):
+            return .contentControl(control, children: children.map(strippedBodyChild))
+        case .bookmarkMarker, .rawBlockElement:
+            return child
+        }
+    }
+
+    private func strippedParagraph(_ paragraph: Paragraph) -> Paragraph {
+        var p = paragraph
+        p.w14ParaId = nil
+        p.w14TextId = nil
+        return p
+    }
+
+    private func strippedTable(_ table: Table) -> Table {
+        var t = table
+        t.rows = table.rows.map(strippedRow)
+        return t
+    }
+
+    private func strippedRow(_ row: TableRow) -> TableRow {
+        var r = row
+        r.cells = row.cells.map(strippedCell)
+        return r
+    }
+
+    private func strippedCell(_ cell: TableCell) -> TableCell {
+        var c = cell
+        c.paragraphs = cell.paragraphs.map(strippedParagraph)
+        // Nested tables (up to depth 5, ooxml-swift parser limit) can also
+        // carry stamped paraIds on their own cell paragraphs.
+        c.nestedTables = cell.nestedTables.map(strippedTable)
+        return c
+    }
+
+    /// RED→GREEN unit test for the normalizer itself: two documents whose
+    /// only difference is `w14ParaId`/`w14TextId` (body paragraph, table
+    /// cell paragraph, and content-control child paragraph) must become
+    /// equal after `stripVolatileIDs`, while the un-normalized originals
+    /// must NOT be equal (otherwise the test would be vacuous).
+    func testStripVolatileIDs_NormalizesParaIdNoiseEverywhere() {
+        func makeDoc(bodyId: String, cellId: String, controlChildId: String) -> WordDocument {
+            var doc = WordDocument()
+
+            var bodyPara = Paragraph(text: "Hello")
+            bodyPara.w14ParaId = bodyId
+            bodyPara.w14TextId = bodyId
+            doc.body.children.append(.paragraph(bodyPara))
+
+            var cellPara = Paragraph(text: "Cell")
+            cellPara.w14ParaId = cellId
+            let table = Table(rows: [TableRow(cells: [TableCell(paragraphs: [cellPara])])])
+            doc.body.children.append(.table(table))
+
+            var controlChildPara = Paragraph(text: "Control child")
+            controlChildPara.w14ParaId = controlChildId
+            let control = ContentControl(sdt: StructuredDocumentTag(), content: "")
+            doc.body.children.append(
+                .contentControl(control, children: [.paragraph(controlChildPara)])
+            )
+
+            return doc
+        }
+
+        var docA = makeDoc(bodyId: "AAAAAAAA", cellId: "BBBBBBBB", controlChildId: "CCCCCCCC")
+        var docB = makeDoc(bodyId: "11111111", cellId: "22222222", controlChildId: "33333333")
+
+        // Precondition: without normalization these differ (otherwise this
+        // test would trivially pass regardless of whether stripVolatileIDs
+        // actually strips anything).
+        XCTAssertNotEqual(docA, docB, "fixture sanity: raw docs must differ on paraId alone")
+
+        XCTAssertEqual(stripVolatileIDs(docA), stripVolatileIDs(docB))
+
+        // Same coverage for the second volatile-noise source: wall-clock
+        // `created`/`modified` timestamps (MarkdownToWordConverter.swift
+        // :373-374 stamps `Date()` on every call).
+        docA.properties.created = Date(timeIntervalSince1970: 1_000)
+        docA.properties.modified = Date(timeIntervalSince1970: 2_000)
+        docB.properties.created = Date(timeIntervalSince1970: 3_000)
+        docB.properties.modified = Date(timeIntervalSince1970: 4_000)
+
+        XCTAssertNotEqual(docA, docB, "fixture sanity: raw docs must differ on timestamps alone")
+        XCTAssertEqual(stripVolatileIDs(docA), stripVolatileIDs(docB))
     }
 
     // =========================================================
@@ -417,9 +562,11 @@ final class RoundTripTests: XCTestCase {
         let md1 = try toMarkdown(w1)
         let w2 = try reverse.convertMarkdown(md1)
 
-        // 4. g ∘ f = id_{W*}
-        XCTAssertEqual(w1, w2,
-            "g ∘ f should be identity on W*.\n" +
+        // 4. g ∘ f = id_{W*}（比較前剝除 w14ParaId/w14TextId — 每次
+        //    appendParagraph 都會用未播種的系統亂數重新戳記，屬於與轉換語意
+        //    無關的雜訊，見 stripVolatileIDs 上方註解與 PsychQuant/macdoc#155）
+        XCTAssertEqual(stripVolatileIDs(w1), stripVolatileIDs(w2),
+            "g ∘ f should be identity on W* (mod volatile w14ParaId/w14TextId).\n" +
             "md* = \(mdStar.debugDescription)\n" +
             "md₁ = \(md1.debugDescription)",
             file: file, line: line)
@@ -609,9 +756,10 @@ final class RoundTripTests: XCTestCase {
         let md1 = try toMarkdownHTML(w1)
         let w2 = try reverse.convertMarkdown(md1)
 
-        // 4. g ∘ f = id_{W*}
-        XCTAssertEqual(w1, w2,
-            "g ∘ f should be identity on W* (HTML).\n" +
+        // 4. g ∘ f = id_{W*}（比較前剝除 w14ParaId/w14TextId，理由同上方
+        //    assertWordLevelRoundTrip，見 PsychQuant/macdoc#155）
+        XCTAssertEqual(stripVolatileIDs(w1), stripVolatileIDs(w2),
+            "g ∘ f should be identity on W* (HTML, mod volatile w14ParaId/w14TextId).\n" +
             "md* = \(mdStar.debugDescription)\n" +
             "md₁ = \(md1.debugDescription)",
             file: file, line: line)
