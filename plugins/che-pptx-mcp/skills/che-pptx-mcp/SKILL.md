@@ -75,8 +75,12 @@ Read tools accept either `source_path` or `doc_id` when their schema offers both
 - `set_placeholder_geometry` works on any top-level shape, picture, or table frame; groups and group children are rejected. Off-slide placement is applied and returned with a warning; non-positive sizes are an error before anything changes.
 - `place_picture_at` derives the height from the image's native aspect when `height_cm` is omitted; images ImageIO cannot decode need an explicit `height_cm`. Since binary 0.3.0 the native aspect honours EXIF orientation (5–8 swap width and height) and `fit_picture_to_native_aspect` uses the area a `srcRect` crop leaves visible (PsychQuant/pptx-swift#2); a crop that leaves nothing visible is an error.
 - Since binary 0.3.0 saved decks carry the slide image relationships, media parts and content types for every picture, inserted or read (PsychQuant/pptx-swift#1). Not verified by opening the result in PowerPoint.
-- **Groups are not written back**: a deck read with grouped shapes loses the groups and everything inside them on save (PsychQuant/pptx-swift#5, pre-existing). Warn the user before saving a deck that contains groups.
+- Since binary 0.4.0 groups are written back, nested groups and their child transform included, and pictures inside groups keep their media (PsychQuant/pptx-swift#5). Checked by converting round-tripped decks to PDF with LibreOffice, not by opening them in PowerPoint.
+- **Rotation and flips are not modelled**: `rot`／`flipH`／`flipV` on any shape, picture or group are dropped on save, so a rotated or mirrored element comes back upright (PsychQuant/pptx-swift#7). Warn the user before saving a deck that uses them.
+- **A deck with audio, video or a transition sound cannot be saved** (binary 0.4.0+): playback is not modelled, so `save_presentation` and autosave refuse instead of writing a deck that has silently lost it. `open_presentation` says which slides are affected; tell the user the deck is read-only here.
+- Linked pictures (`r:link`, "Insert and Link") keep their link on save since binary 0.4.0.
 - Integer parameters are strict JSON numbers since binary 0.3.0: the string `"3"` or `0.5` is a parameter error, not silently converted.
+- Boolean parameters (`autosave`) are strict JSON booleans since binary 0.4.0: `"true"`, `"false"` or `1` is a parameter error; `null` or omitted means the default `false` (PsychQuant/che-pptx-mcp#10).
 - `create_presentation`／`open_presentation` refuse to reuse a `doc_id` whose session has unsaved changes (PsychQuant/che-pptx-mcp#8); save or close it first.
 - Rich text runs and layout-based slide creation are not part of the current published surface.
 
