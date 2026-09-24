@@ -1,4 +1,4 @@
-.PHONY: release debug install clean metallib check-bib-fixtures test-release
+.PHONY: release debug install clean metallib check-bib-fixtures test-release cli-spec
 
 # Build release binary + Metal shaders
 release:
@@ -45,3 +45,12 @@ clean:
 # fixtures haven't drifted apart (macdoc#189)
 check-bib-fixtures:
 	./scripts/tests/check-bib-fixture-consistency.sh
+
+# Regenerate cli-spec.yaml — the machine-readable CLI specification — from the
+# current ArgumentParser declarations plus the metadata overlay in
+# Sources/CLISpec/MacDocCLIMetadata.swift (#72). Runs the drift test in record
+# mode; without MACDOC_RECORD_CLI_SPEC=1 the same test fails whenever the
+# committed file is stale. Commit the regenerated file.
+cli-spec:
+	swift build
+	MACDOC_RECORD_CLI_SPEC=1 swift test --filter CLISpecDriftTests

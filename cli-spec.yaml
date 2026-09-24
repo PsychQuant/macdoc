@@ -1,0 +1,1132 @@
+# cli-spec.yaml — macdoc CLI specification (schema_version 1)
+# GENERATED FILE — do not edit by hand. Regenerate: make cli-spec
+# Authority: ArgumentParser declarations in Sources/MacDocCLI (code-first)
+# Project metadata overlay: Sources/CLISpec/MacDocCLIMetadata.swift
+# Contract: openspec change cli-spec-yaml, capability cli-spec (PsychQuant/macdoc#72)
+schema_version: 1
+tool:
+  name: macdoc
+  version: "0.9.0"
+  abstract: "原生 macOS 文件處理工具"
+source:
+  authority: "ArgumentParser declarations in Sources/MacDocCLI (code-first)"
+  dump_help_serialization_version: 0
+  overlay: "Sources/CLISpec/MacDocCLIMetadata.swift"
+  regenerate: "make cli-spec"
+commands:
+  - path: macdoc
+    abstract: "原生 macOS 文件處理工具"
+    subcommands: [convert, pdf, bib, config, ocr, docx, word]
+  - path: "macdoc convert"
+    abstract: "Convert documents between formats (textutil-compatible)"
+    arguments:
+      - name: input
+        required: true
+        help: "Input file"
+    options:
+      - names: ["--to"]
+        value_name: to
+        required: true
+        help: "Target format (md, html, docx, pdf, json, marker, tokens)"
+      - names: ["--profile"]
+        value_name: profile
+        required: false
+        values: [inherit, official]
+        help: "DOCX 文件格式：inherit 或 official；優先於新文件預設設定"
+      - names: ["--document-config"]
+        value_name: document-config
+        required: false
+        help: "文件設定檔路徑"
+      - names: ["--model"]
+        value_name: model
+        required: false
+        help: "Token model: gpt-4o or claude-sonnet-4-6"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "Output file path (or directory for marker)"
+      - names: ["--css"]
+        value_name: css
+        required: false
+        default: web
+        values: [minimal, web, dark, light]
+        help: "CSS style: minimal|web (bib), dark|light (srt)"
+      - names: ["--math"]
+        value_name: math
+        required: false
+        values: [literal, omath]
+        help: "Markdown math mode: literal|omath (Markdown to DOCX only; default: literal)"
+    flags:
+      - names: ["--allow-network"]
+        required: false
+        help: "Allow sending the complete input text to a network provider"
+      - names: ["--stdout"]
+        required: false
+        help: "Force output to stdout"
+      - names: ["--hard-breaks"]
+        required: false
+        help: "Treat soft breaks as hard line breaks"
+      - names: ["--full"]
+        required: false
+        help: "Output full HTML document instead of fragment"
+      - names: ["--frontmatter"]
+        required: false
+        help: "Include YAML frontmatter metadata"
+      - names: ["--html-extensions"]
+        required: false
+        help: "Preserve <u>/<sup>/<sub>/<mark> as raw HTML in Markdown"
+    project:
+      status: active
+      notes:
+        - "The input format is detected from the file extension; `conversions` lists every route with its route-specific options."
+        - "Text targets go to stdout unless --output is given; binary targets (docx, pdf) and directories never go to stdout."
+      docs: [".claude/rules/cli-design/convert-entry-point.md", CONVERSIONS.md]
+  - path: "macdoc pdf"
+    abstract: "PDF → LaTeX pipeline 工具"
+    default_subcommand: status
+    subcommands: [init, segment, render, ocr, blocks, transcribe, transcribe-pages, resume, chapters, assemble, normalize, fix-envs, compile-check, consolidate, compare, detect-source, status]
+  - path: "macdoc pdf init"
+    abstract: "建立 PDF 轉 LaTeX 專案資料夾與 manifest。"
+    options:
+      - names: ["--pdf"]
+        value_name: pdf
+        required: true
+        help: "來源 PDF 路徑。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "專案輸出資料夾。"
+  - path: "macdoc pdf segment"
+    abstract: "掃描來源 PDF 頁面資訊，更新 manifest。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+  - path: "macdoc pdf render"
+    abstract: "把來源 PDF 每頁渲染成 PNG。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+      - names: ["--dpi"]
+        value_name: dpi
+        required: false
+        default: "144.0"
+        help: "輸出 DPI。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+  - path: "macdoc pdf ocr"
+    abstract: "整頁 GLM-OCR（簡化 pipeline，取代 blocks + transcribe）。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        help: "專案資料夾。"
+      - names: ["--pdf"]
+        value_name: pdf
+        required: false
+        help: "來源 PDF。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "輸出資料夾。"
+      - names: ["--mode"]
+        value_name: mode
+        required: false
+        default: local
+        help: "執行模式 (local|ollama)。"
+      - names: ["--host"]
+        value_name: host
+        required: false
+        default: "localhost:11434"
+        help: "Ollama host (預設 localhost:11434)。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--page-dpi"]
+        value_name: page-dpi
+        required: false
+        default: "200.0"
+        help: "頁面渲染 DPI。"
+      - names: ["--model"]
+        value_name: model
+        required: false
+        default: "EZCon/GLM-OCR-8bit-mlx"
+        help: "HuggingFace 模型 repo。"
+    flags:
+      - names: ["--with-pdfkit"]
+        required: false
+        help: "強制啟用 PDFKit 交叉比對（向量 PDF 自動啟用）。"
+    project:
+      status: active
+      dependencies: [huggingface, ollama]
+      notes:
+        - "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown."
+        - "--mode local (default) runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release)."
+        - "--mode ollama sends page images to the Ollama server at --host."
+  - path: "macdoc pdf blocks"
+    abstract: "（已棄用）以 Vision OCR 偵測頁面文字區塊。請改用 `macdoc pdf ocr`。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        help: "專案資料夾。"
+      - names: ["--pdf"]
+        value_name: pdf
+        required: false
+        help: "來源 PDF。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "輸出資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--page-dpi"]
+        value_name: page-dpi
+        required: false
+        default: "144.0"
+        help: "頁面渲染 DPI。"
+    project:
+      status: deprecated
+      replacement: "macdoc pdf ocr"
+      notes:
+        - "Block-level Vision OCR, superseded by whole-page GLM-OCR."
+  - path: "macdoc pdf transcribe"
+    abstract: "（已棄用）用 AI 將 block 圖轉成 LaTeX snippet。請改用 `macdoc pdf ocr`。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        help: "專案資料夾。"
+      - names: ["--pdf"]
+        value_name: pdf
+        required: false
+        help: "來源 PDF。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "輸出資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--page-dpi"]
+        value_name: page-dpi
+        required: false
+        default: "144.0"
+        help: "頁面渲染 DPI。"
+      - names: ["--model"]
+        value_name: model
+        required: false
+        default: gpt-5.4
+        help: "AI 模型。"
+      - names: ["--backend"]
+        value_name: backend
+        required: false
+        help: "AI CLI 後端 (codex|claude|gemini)。預設從 model 名稱自動偵測。"
+      - names: ["--max-blocks"]
+        value_name: max-blocks
+        required: false
+        help: "最多轉寫幾個 blocks。"
+      - names: ["--block-id"]
+        value_name: block-id
+        required: false
+        repeating: true
+        parsing: up_to_next_option
+        help: "指定 block id。"
+      - names: ["--concurrency"]
+        value_name: concurrency
+        required: false
+        default: "1"
+        help: "並行數。"
+      - names: ["--throttle-seconds"]
+        value_name: throttle-seconds
+        required: false
+        default: "0.0"
+        help: "節流秒數。"
+      - names: ["--timeout-seconds"]
+        value_name: timeout-seconds
+        required: false
+        default: "90.0"
+        help: "超時秒數。"
+    flags:
+      - names: ["--overwrite"]
+        required: false
+        help: "重新轉寫。"
+    project:
+      status: deprecated
+      replacement: "macdoc pdf ocr"
+      dependencies: [ai-cli]
+      notes:
+        - "Block-level AI transcription, superseded by whole-page GLM-OCR."
+  - path: "macdoc pdf transcribe-pages"
+    abstract: "（已棄用）Page-level 轉寫。請改用 `macdoc pdf ocr`。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        help: "專案資料夾。"
+      - names: ["--pdf"]
+        value_name: pdf
+        required: false
+        help: "來源 PDF。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "輸出資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--page-dpi"]
+        value_name: page-dpi
+        required: false
+        default: "144.0"
+        help: "頁面渲染 DPI。"
+      - names: ["--model"]
+        value_name: model
+        required: false
+        help: "AI 模型名稱（預設依 backend: claude=claude-sonnet-4-6, codex=gpt-5.4, gemini=gemini-3.1-pro-preview）。"
+      - names: ["--backend"]
+        value_name: backend
+        required: false
+        help: "AI CLI 後端 (codex|claude|gemini)。預設從 model 名稱自動偵測，未指定 model 時預設 claude。"
+      - names: ["--pages-per-request"]
+        value_name: pages-per-request
+        required: false
+        help: "每次送幾頁（預設 2）。"
+      - names: ["--reasoning-effort"]
+        value_name: reasoning-effort
+        required: false
+        default: medium
+        help: "Reasoning effort (none|low|medium|high|xhigh)。"
+      - names: ["--timeout-seconds"]
+        value_name: timeout-seconds
+        required: false
+        default: "600.0"
+        help: "單次請求超時秒數。"
+      - names: ["--source"]
+        value_name: source
+        required: false
+        help: "PDF 來源格式覆蓋 (latex|word|typst|scanned|designer)。未指定時自動偵測。"
+    project:
+      status: deprecated
+      replacement: "macdoc pdf ocr"
+      dependencies: [ai-cli]
+      notes:
+        - "Page-level AI transcription, superseded by whole-page GLM-OCR."
+  - path: "macdoc pdf resume"
+    abstract: "（已棄用）從 checkpoint 續跑轉寫。請改用 `macdoc pdf ocr`。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--page-dpi"]
+        value_name: page-dpi
+        required: false
+        default: "144.0"
+        help: "頁面渲染 DPI。"
+      - names: ["--model"]
+        value_name: model
+        required: false
+        default: gpt-5.4
+        help: "AI 模型。"
+      - names: ["--backend"]
+        value_name: backend
+        required: false
+        help: "AI CLI 後端 (codex|claude|gemini)。預設從 model 名稱自動偵測。"
+      - names: ["--block-id"]
+        value_name: block-id
+        required: false
+        repeating: true
+        parsing: up_to_next_option
+        help: "指定 block id。"
+      - names: ["--max-blocks"]
+        value_name: max-blocks
+        required: false
+        help: "最多續跑幾個 blocks。"
+      - names: ["--concurrency"]
+        value_name: concurrency
+        required: false
+        default: "1"
+        help: "並行數。"
+      - names: ["--throttle-seconds"]
+        value_name: throttle-seconds
+        required: false
+        default: "0.0"
+        help: "節流秒數。"
+      - names: ["--timeout-seconds"]
+        value_name: timeout-seconds
+        required: false
+        default: "90.0"
+        help: "超時秒數。"
+    project:
+      status: deprecated
+      replacement: "macdoc pdf ocr"
+      dependencies: [ai-cli]
+      notes:
+        - "Resumes the deprecated block transcription from its checkpoint."
+  - path: "macdoc pdf chapters"
+    abstract: "自動偵測章節切法。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        help: "專案資料夾。"
+      - names: ["--pdf"]
+        value_name: pdf
+        required: false
+        help: "來源 PDF。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "輸出資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--chapter-strategy"]
+        value_name: chapter-strategy
+        required: false
+        default: auto
+        values: [auto, outline, toc, headings, pages, single, custom]
+        help: "偵測策略。"
+      - names: ["--page-ranges"]
+        value_name: page-ranges
+        required: false
+        help: "頁碼範圍，例如 1-24,25-60。"
+      - names: ["--output-config"]
+        value_name: output-config
+        required: false
+        help: "輸出路徑。"
+  - path: "macdoc pdf assemble"
+    abstract: "組裝已轉寫的 snippets 成可編譯的 TeX。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        help: "專案資料夾。"
+      - names: ["--pdf"]
+        value_name: pdf
+        required: false
+        help: "來源 PDF。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "輸出資料夾。"
+      - names: ["--first-page"]
+        value_name: first-page
+        required: false
+        help: "起始頁碼。"
+      - names: ["--last-page"]
+        value_name: last-page
+        required: false
+        help: "結束頁碼。"
+      - names: ["--page-dpi"]
+        value_name: page-dpi
+        required: false
+        default: "216.0"
+        help: "頁面背景渲染 DPI。"
+      - names: ["--chapter-strategy"]
+        value_name: chapter-strategy
+        required: false
+        default: auto
+        values: [auto, outline, toc, headings, pages, single, custom]
+        help: "章節切法。"
+      - names: ["--page-ranges"]
+        value_name: page-ranges
+        required: false
+        help: "頁碼範圍。"
+      - names: ["--chapter-config"]
+        value_name: chapter-config
+        required: false
+        help: "chapter config JSON 路徑。"
+    flags:
+      - names: ["--skip-compile"]
+        required: false
+        help: "只產生 TeX，不編譯。"
+    project:
+      status: active
+      dependencies: [tex]
+      notes:
+        - "Compiles the assembled main TeX file with latexmk unless --skip-compile is given."
+  - path: "macdoc pdf normalize"
+    abstract: "機械式清理 accumulated.tex（document class、符號、跨頁去重、數學運算子、貨幣符號、紙張/字型校正）。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+      - names: ["--source-pdf"]
+        value_name: source-pdf
+        required: false
+        help: "原始 PDF 路徑（用於提取紙張大小和字型 metadata）。"
+    flags:
+      - names: ["--strip-markers"]
+        required: false
+        help: "移除頁面標記 (%% === Page N ===)。"
+  - path: "macdoc pdf fix-envs"
+    abstract: "偵測（並可選修復）LaTeX 環境配對問題。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+    flags:
+      - names: ["--fix"]
+        required: false
+        help: "自動修復。"
+  - path: "macdoc pdf compile-check"
+    abstract: "執行 pdflatex 編譯並產生結構化錯誤報告。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+    project:
+      status: active
+      dependencies: [tex]
+      notes:
+        - "Runs pdflatex on accumulated.tex and writes compile-report.json into the project."
+  - path: "macdoc pdf consolidate"
+    abstract: "機械清理 + AI agent 修復剩餘編譯錯誤。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+      - names: ["--agent"]
+        value_name: agent
+        required: false
+        help: "AI agent 後端 (codex|claude|gemini)。"
+      - names: ["--source"]
+        value_name: source
+        required: false
+        help: "PDF 來源格式覆蓋 (latex|word|typst|scanned|designer)。影響正規化策略。"
+    flags:
+      - names: ["--dry-run"]
+        required: false
+        help: "只跑機械步驟，不呼叫 agent。"
+    project:
+      status: active
+      dependencies: [tex, ai-cli]
+      notes:
+        - "Runs the mechanical clean-up, then hands remaining compile errors to the AI CLI chosen by --agent or `macdoc config ai`; --dry-run skips the agent."
+  - path: "macdoc pdf compare"
+    abstract: "比較原始 PDF 和重製 PDF 的相似度（章節對齊、詞彙覆蓋、序列相似度）。"
+    options:
+      - names: ["--original"]
+        value_name: original
+        required: true
+        help: "原始 PDF 路徑。"
+      - names: ["--reproduced"]
+        value_name: reproduced
+        required: true
+        help: "重製 PDF 路徑。"
+      - names: ["--output", "-o"]
+        value_name: output
+        required: false
+        help: "輸出目錄（存放 JSON 報告）。"
+  - path: "macdoc pdf detect-source"
+    abstract: "偵測 PDF 的來源格式（LaTeX、Word、掃描件等）。"
+    arguments:
+      - name: pdf
+        required: true
+        help: "PDF 檔案路徑。"
+    flags:
+      - names: ["--json"]
+        required: false
+        help: "以 JSON 格式輸出。"
+  - path: "macdoc pdf status"
+    abstract: "顯示 PDF 轉 LaTeX 專案狀態。"
+    options:
+      - names: ["--project"]
+        value_name: project
+        required: false
+        default: "."
+        help: "專案資料夾。"
+  - path: "macdoc bib"
+    abstract: "BibLaTeX (.bib) → APA 7 格式轉換（支援 --key filtering，無 --key 時可用 convert）"
+    subcommands: [to-html, to-json, to-md, list]
+    project:
+      status: active
+      notes:
+        - "`macdoc convert --to html|md|json file.bib` converts a whole file; these subcommands add repeatable --key filtering and `list`."
+  - path: "macdoc bib to-html"
+    abstract: "將 .bib 轉換為 APA 7 HTML 參考文獻列表"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入 .bib 檔案路徑"
+    options:
+      - names: ["--output", "-o"]
+        value_name: output
+        required: false
+        help: "輸出 .html 檔案路徑（預設為 stdout）"
+      - names: ["--css"]
+        value_name: css
+        required: false
+        default: web
+        values: [minimal, web, dark, light]
+        help: "CSS 風格：minimal（學術）或 web（現代）"
+      - names: ["--key"]
+        value_name: key
+        required: false
+        repeating: true
+        help: "只輸出指定 entry key（可多次使用）"
+    flags:
+      - names: ["--full"]
+        required: false
+        help: "輸出完整 HTML 文件（含 <html>, <head>, CSS）"
+  - path: "macdoc bib to-json"
+    abstract: "將 .bib 轉換為 APA 7 JSON（含 pre-rendered HTML）"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入 .bib 檔案路徑"
+    options:
+      - names: ["--output", "-o"]
+        value_name: output
+        required: false
+        help: "輸出 .json 檔案路徑（預設為 stdout）"
+      - names: ["--key"]
+        value_name: key
+        required: false
+        repeating: true
+        help: "只輸出指定 entry key（可多次使用）"
+    flags:
+      - names: ["--compact"]
+        required: false
+        help: "壓縮輸出（不換行）"
+  - path: "macdoc bib to-md"
+    abstract: "將 .bib 轉換為 APA 7 Markdown 參考文獻列表"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入 .bib 檔案路徑"
+    options:
+      - names: ["--output", "-o"]
+        value_name: output
+        required: false
+        help: "輸出 .md 檔案路徑（預設為 stdout）"
+      - names: ["--key"]
+        value_name: key
+        required: false
+        repeating: true
+        help: "只輸出指定 entry key（可多次使用）"
+    flags:
+      - names: ["--heading"]
+        required: false
+        help: "加入 '## References' 標題"
+  - path: "macdoc bib list"
+    abstract: "列出 .bib 檔案中的所有 entry keys"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入 .bib 檔案路徑"
+    flags:
+      - names: ["--show-type"]
+        required: false
+        help: "顯示 entry type"
+  - path: "macdoc config"
+    abstract: "macdoc 設定管理"
+    subcommands: [ai, ocr, document]
+  - path: "macdoc config ai"
+    abstract: "AI CLI 工具設定"
+    subcommands: [detect, list, set]
+  - path: "macdoc config ai detect"
+    abstract: "自動偵測已安裝的 AI CLI 工具，寫入設定檔。"
+  - path: "macdoc config ai list"
+    abstract: "顯示目前的 AI 設定。"
+  - path: "macdoc config ai set"
+    abstract: "設定 AI 參數（如 transcription、agent）。"
+    arguments:
+      - name: key
+        required: true
+        help: "設定鍵（transcription 或 agent）。"
+      - name: value
+        required: true
+        help: "設定值（codex、claude 或 gemini）。"
+  - path: "macdoc config ocr"
+    abstract: "OCR Ollama host 與模型設定"
+    subcommands: [list, add-host, remove-host, set-default, set-model, set-backend]
+    project:
+      status: active
+      notes:
+        - "Stores Ollama host profiles, the OCR model and the OCR backend in the macdoc config file."
+        - "Since the top-level `ocr` command was removed (#145) no macdoc command reads these settings; `macdoc pdf ocr` takes --mode, --host and --model flags."
+  - path: "macdoc config ocr list"
+    abstract: "顯示目前的 OCR 設定。"
+  - path: "macdoc config ocr add-host"
+    abstract: "新增或更新具名 host profile（如 kyle → localhost:11435）。"
+    arguments:
+      - name: name
+        required: true
+        help: "Profile 名稱（如 kyle、local、production）。"
+      - name: address
+        required: true
+        help: "Ollama 伺服器地址（如 localhost:11435 或 192.168.1.100:11434）。"
+  - path: "macdoc config ocr remove-host"
+    abstract: "移除具名 host profile。"
+    arguments:
+      - name: name
+        required: true
+        help: "要移除的 profile 名稱。"
+  - path: "macdoc config ocr set-default"
+    abstract: "設定預設 host profile（之後 macdoc ocr 不傳 --host 就用這個）。"
+    arguments:
+      - name: name
+        required: true
+        help: "已存在的 profile 名稱。傳空字串清除。"
+  - path: "macdoc config ocr set-model"
+    abstract: "設定預設 OCR 模型名稱。"
+    arguments:
+      - name: model
+        required: true
+        help: "模型名稱（如 glm-ocr）。"
+  - path: "macdoc config ocr set-backend"
+    abstract: "設定預設 OCR 後端（ollama 或 mlx）。"
+    arguments:
+      - name: backend
+        required: true
+        help: "後端名稱（ollama 或 mlx）。"
+  - path: "macdoc config document"
+    abstract: "文件格式設定與範本快照"
+    subcommands: [show, set-default, import-official]
+  - path: "macdoc config document show"
+    abstract: "顯示文件格式設定"
+    options:
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "文件設定檔路徑（預設 ~/.config/macdoc/config.json）"
+  - path: "macdoc config document set-default"
+    abstract: "設定新文件的預設格式"
+    arguments:
+      - name: profile
+        required: true
+        values: [inherit, official]
+        help: "inherit 或 official"
+    options:
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "文件設定檔路徑（預設 ~/.config/macdoc/config.json）"
+  - path: "macdoc config document import-official"
+    abstract: "從 Normal 範本匯入安全格式快照；不變更新文件預設值"
+    options:
+      - names: ["--template"]
+        value_name: template
+        required: false
+        help: "範本路徑（省略時使用目前帳號的 Word Normal.dotm）"
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "文件設定檔路徑（預設 ~/.config/macdoc/config.json）"
+    project:
+      status: active
+      dependencies: [microsoft-word]
+      notes:
+        - "Without --template it reads Normal.dotm from Microsoft Word's Office group container for the current account."
+  - path: "macdoc ocr"
+    abstract: "（已移除）文字辨識改用 bestocr — PsychQuant/bestOCR"
+    arguments:
+      - name: ignored
+        required: false
+        repeating: true
+        parsing: all_unrecognized
+        hidden: true
+    project:
+      status: removed
+      replacement: "bestocr (https://github.com/PsychQuant/bestOCR)"
+      notes:
+        - "Deprecation shim (#145): accepts and ignores any arguments, prints migration guidance to stderr and exits with status 2."
+        - "General-purpose OCR belongs to bestOCR; page-level OCR inside the PDF → LaTeX pipeline is `macdoc pdf ocr`."
+  - path: "macdoc docx"
+    abstract: "Manifest-driven .docx edit workflows."
+    subcommands: [apply, plan, verify, diff]
+  - path: "macdoc docx apply"
+    abstract: "Apply a manifest to a baseline .docx and write the result."
+    arguments:
+      - name: manifest-path
+        required: true
+        help: "Path to the manifest JSON file."
+    options:
+      - names: ["--input", "-i"]
+        value_name: input
+        required: true
+        help: "Baseline .docx input path."
+      - names: ["--output", "-o"]
+        value_name: output
+        required: true
+        help: "Output .docx path."
+  - path: "macdoc docx plan"
+    abstract: "Resolve anchors and print the planned Edit sequence without writing output."
+    arguments:
+      - name: manifest-path
+        required: true
+        help: "Path to the manifest JSON file."
+    options:
+      - names: ["--input", "-i"]
+        value_name: input
+        required: true
+        help: "Baseline .docx input path."
+  - path: "macdoc docx verify"
+    abstract: "Run the verify chain only, against an existing baseline + output pair."
+    options:
+      - names: ["--manifest"]
+        value_name: manifest
+        required: true
+        help: "Path to the manifest JSON file (carrying the verify block)."
+      - names: ["--input", "-i"]
+        value_name: input
+        required: true
+        help: "Baseline .docx path."
+      - names: ["--output", "-o"]
+        value_name: output
+        required: true
+        help: "Output .docx path (the document to verify against the baseline)."
+  - path: "macdoc docx diff"
+    abstract: "Print structural differences between two .docx documents (Phase 1: paragraph-level)."
+    arguments:
+      - name: a
+        required: true
+        help: "First .docx path."
+      - name: b
+        required: true
+        help: "Second .docx path."
+  - path: "macdoc word"
+    abstract: "Word 文件工具（.mdocx 腳本轉換）"
+    subcommands: [reverse, render]
+    project:
+      status: active
+      docs: ["docs/swift-as-document-source.md", "openspec/specs/mdocx-grammar/spec.md"]
+  - path: "macdoc word reverse"
+    abstract: "從 docx 反向生成 .mdocx.swift 腳本"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入的 .docx 檔案"
+    options:
+      - names: ["--to-mdocx"]
+        value_name: to-mdocx
+        required: false
+        help: "輸出的 .mdocx.swift 路徑（省略時須搭配 --coverage）"
+      - names: ["--slot"]
+        value_name: "name=paraId"
+        required: false
+        repeating: true
+        help: "具名內容 slot：<name>=<paragraph-id>（可重複）。指定段落的文字成為腳本的 Swift 函式參數，其餘內容逐字重建"
+    flags:
+      - names: ["--from-oplog"]
+        required: false
+        help: "強制使用 oplog sidecar（優先 <docx-full-name>.oplog.jsonl；缺少時可讀 legacy <stem>.oplog.jsonl；兩者皆無則報錯）"
+      - names: ["--force"]
+        required: false
+        help: "覆寫既有的輸出檔案"
+      - names: ["--coverage"]
+        required: false
+        help: "印出 per-part DSL/raw 覆蓋率報告（dual-track coverage metric）"
+      - names: ["--paragraphs-only"]
+        required: false
+        help: "只反向工程段落（舊行為）；預設為 full-fidelity 全 parts byte-equal 腳本"
+  - path: "macdoc word render"
+    abstract: "執行 .mdocx.swift 腳本重建 docx"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入的 .mdocx.swift（或 .mdocx）腳本"
+    options:
+      - names: ["--to-docx"]
+        value_name: to-docx
+        required: true
+        help: "輸出的 .docx 路徑"
+      - names: ["--profile"]
+        value_name: profile
+        required: false
+        values: [inherit, official]
+        help: "明示套用 inherit 或 official；省略時不讀取新文件預設設定"
+      - names: ["--document-config"]
+        value_name: document-config
+        required: false
+        help: "文件設定檔路徑"
+      - names: ["--verify-against"]
+        value_name: verify-against
+        required: false
+        help: "參考 .docx；提供時對重建的 part set 做 byte-equal 驗證（含 binary part）"
+    flags:
+      - names: ["--force"]
+        required: false
+        help: "覆寫既有的輸出檔案"
+conversions:
+  - label: "Word → Markdown"
+    command: "macdoc convert"
+    from: [docx]
+    to: md
+    converter: word-to-md-swift
+    output: stdout_or_file
+    options: ["--frontmatter", "--hard-breaks"]
+  - label: "Word → HTML"
+    command: "macdoc convert"
+    from: [docx]
+    to: html
+    converter: word-to-html-swift
+    output: stdout_or_file
+    options: ["--frontmatter"]
+  - label: "Word → Marker"
+    command: "macdoc convert"
+    from: [docx]
+    to: marker
+    converter: marker-word-converter-swift
+    output: directory
+    options: ["--frontmatter", "--hard-breaks"]
+    notes:
+      - "Writes Markdown, _meta.json and images/ into --output, or <input-stem>_output/ beside the input; --stdout is rejected."
+  - label: "HTML → Markdown"
+    command: "macdoc convert"
+    from: [html, htm]
+    to: md
+    converter: html-to-md-swift
+    output: stdout_or_file
+    options: ["--frontmatter", "--hard-breaks", "--html-extensions"]
+  - label: "HTML → PDF"
+    command: "macdoc convert"
+    from: [html, htm]
+    to: pdf
+    converter: playwright
+    output: file
+    dependencies: [playwright]
+    notes:
+      - "Runs `playwright pdf` with A4 paper; without playwright on PATH it fails with an install hint."
+  - label: "HTML → Word"
+    command: "macdoc convert"
+    from: [html, htm]
+    to: docx
+    converter: html-to-word-swift
+    output: file
+    options: ["--profile", "--document-config"]
+  - label: "Markdown → HTML"
+    command: "macdoc convert"
+    from: [md, markdown]
+    to: html
+    converter: md-to-html-swift
+    output: stdout_or_file
+    options: ["--full"]
+  - label: "Markdown → Word"
+    command: "macdoc convert"
+    from: [md, markdown]
+    to: docx
+    converter: md-to-word-swift
+    output: file
+    options: ["--hard-breaks", "--math", "--profile", "--document-config"]
+    notes:
+      - "--math omath turns $…$ formulas into native Word OMath; literal (default) keeps them as text."
+  - label: "SRT → HTML"
+    command: "macdoc convert"
+    from: [srt]
+    to: html
+    converter: srt-to-html-swift
+    output: stdout_or_file
+    options: ["--full", "--css"]
+    styles: [dark, light]
+    notes:
+      - "--css defaults to web, which this route rejects: pass --css dark or --css light."
+      - "Speaker labels (`Speaker 1:` or `[Speaker 1]`) become speaker badges."
+  - label: "BibLaTeX → APA HTML"
+    command: "macdoc convert"
+    from: [bib]
+    to: html
+    converter: bib-apa-to-html-swift
+    output: stdout_or_file
+    options: ["--full", "--css"]
+    styles: [minimal, web]
+  - label: "BibLaTeX → APA Markdown"
+    command: "macdoc convert"
+    from: [bib]
+    to: md
+    converter: bib-apa-to-md-swift
+    output: stdout_or_file
+  - label: "BibLaTeX → APA JSON"
+    command: "macdoc convert"
+    from: [bib]
+    to: json
+    converter: bib-apa-to-json-swift
+    output: stdout_or_file
+  - label: "PDF → Markdown"
+    command: "macdoc convert"
+    from: [pdf]
+    to: md
+    converter: pdf-to-md-swift
+    output: stdout_or_file
+    options: ["--frontmatter", "--hard-breaks"]
+    notes:
+      - "Reads the embedded text layer with PDFKit (no OCR)."
+  - label: "PDF → DOCX"
+    command: "macdoc convert"
+    from: [pdf]
+    to: docx
+    converter: pdf-to-docx-swift
+    output: file
+    options: ["--hard-breaks", "--profile", "--document-config"]
+    notes:
+      - "Reads the embedded text layer with PDFKit (no OCR)."
+  - label: "PDF → LaTeX"
+    command: "macdoc pdf"
+    from: [pdf]
+    to: tex
+    converter: pdf-to-latex-swift
+    output: directory
+    notes:
+      - "Multi-step project pipeline, not a `convert` route: init → render → ocr → chapters → assemble, then normalize → fix-envs → compile-check → consolidate."
+  - label: "LaTeX → Word"
+    command: "macdoc convert"
+    from: [tex]
+    to: docx
+    converter: tex-to-docx-swift
+    output: file
+    options: ["--profile", "--document-config"]
+  - label: "舊版 Note → HTML"
+    command: "macdoc convert"
+    from: [note, ntb]
+    to: html
+    converter: note-to-html-swift
+    output: directory_or_stdout
+    options: ["--full", "--css"]
+    styles: [dark, light]
+    notes:
+      - "Legacy plist-based .note only; modern FlatBuffers .ntb containers are recognized and rejected."
+      - "Writes <input-stem>/ with index.html and media/ (or --output); --stdout prints one self-contained HTML, with --full for a complete document."
+      - "--css defaults to web, which this route rejects: pass --css dark or --css light."
+  - label: "舊版 Note → PDF"
+    command: "macdoc convert"
+    from: [note, ntb]
+    to: pdf
+    converter: note-to-pdf-swift
+    output: file
+    notes:
+      - "Legacy plist-based .note only; modern FlatBuffers .ntb containers are recognized and rejected."
+  - label: "UTF-8 text → Token count"
+    command: "macdoc convert"
+    from: ["*"]
+    to: tokens
+    converter: token-counter-swift
+    output: stdout_or_file
+    options: ["--model", "--allow-network"]
+    dependencies: [anthropic-api]
+    notes:
+      - "Measurement route: any extension, strict UTF-8, at most 1,000,000 bytes."
+      - "gpt-4o counts offline; claude-sonnet-4-6 sends the whole file to Anthropic and needs --allow-network and ANTHROPIC_API_KEY."
+overlaps:
+  - topic: "PDF text, OCR and LaTeX"
+    paths:
+      - command: "macdoc convert"
+        usage: "macdoc convert --to md file.pdf"
+        note: "Reads the PDF's embedded text layer with PDFKit plus heading/list heuristics; no OCR, so scanned pages yield no text. `--to docx` does the same into Word."
+      - command: "macdoc pdf ocr"
+        usage: "macdoc pdf ocr --project <dir>"
+        note: "Page-image GLM-OCR (local MLX or Ollama) inside the PDF → LaTeX project pipeline; results feed `pdf chapters` and `pdf assemble`."
+      - command: "macdoc ocr"
+        usage: "macdoc ocr <input>"
+        note: "Removed shim (#145): exits with status 2 and points to bestocr, which owns general-purpose OCR."
+      - command: "macdoc config ocr"
+        usage: "macdoc config ocr list"
+        note: "Edits OCR host/model/backend settings that no current command reads; `pdf ocr` takes flags."
+  - topic: "BibLaTeX to APA 7"
+    paths:
+      - command: "macdoc convert"
+        usage: "macdoc convert --to html file.bib"
+        note: "Whole file to APA 7 HTML, Markdown or JSON; HTML takes --full and --css minimal|web."
+      - command: "macdoc bib to-html"
+        usage: "macdoc bib to-html file.bib --key smith2020"
+        note: "Same renderers with repeatable --key filtering and -o; `bib to-md` and `bib to-json` likewise, `bib list` prints entry keys."
+  - topic: "Word documents and .mdocx scripts"
+    paths:
+      - command: "macdoc convert"
+        usage: "macdoc convert --to md file.docx"
+        note: "Readable Markdown export; lossy by design."
+      - command: "macdoc word reverse"
+        usage: "macdoc word reverse file.docx --to-mdocx out.mdocx.swift"
+        note: "Full-fidelity .mdocx.swift script; `macdoc word render` rebuilds the .docx from it."
+      - command: "macdoc docx apply"
+        usage: "macdoc docx apply manifest.json -i base.docx -o out.docx"
+        note: "Manifest-driven edits of an existing .docx."
+external_dependencies:
+  - id: playwright
+    kind: cli
+    purpose: "Renders HTML to PDF through Chromium (`playwright pdf`)."
+    install: "pip install playwright && playwright install chromium"
+    used_by: ["HTML → PDF"]
+  - id: tex
+    kind: cli
+    purpose: "latexmk and pdflatex from a TeX distribution compile the assembled or accumulated LaTeX."
+    install: "MacTeX or TeX Live"
+    used_by: ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate"]
+  - id: ai-cli
+    kind: cli
+    purpose: "codex, claude or gemini CLI, delegated for block/page transcription and compile-error repair."
+    install: "Install at least one; `macdoc config ai detect` records what is available."
+    used_by: ["macdoc pdf transcribe", "macdoc pdf transcribe-pages", "macdoc pdf resume", "macdoc pdf consolidate"]
+  - id: ollama
+    kind: network_service
+    purpose: "Serves the glm-ocr model over HTTP for `pdf ocr --mode ollama` (--host, default localhost:11434)."
+    install: "Install Ollama and pull the glm-ocr model."
+    used_by: ["macdoc pdf ocr"]
+  - id: huggingface
+    kind: network_service
+    purpose: "Hugging Face Hub, from which `pdf ocr --mode local` downloads the MLX model named by --model on first use."
+    used_by: ["macdoc pdf ocr"]
+  - id: anthropic-api
+    kind: network_service
+    purpose: "Anthropic token counting for `--to tokens --model claude-sonnet-4-6`; needs --allow-network and ANTHROPIC_API_KEY."
+    used_by: ["UTF-8 text → Token count"]
+  - id: microsoft-word
+    kind: application
+    purpose: "Provides the Normal.dotm template that `config document import-official` reads when --template is omitted."
+    used_by: ["macdoc config document import-official"]
