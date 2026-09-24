@@ -200,15 +200,26 @@ enum CLITestHelper {
         let stderrBox = OutputBox()
         let drainGroup = DispatchGroup()
 
-        drainGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            stdoutBox.data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            drainGroup.leave()
-        }
-        drainGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            stderrBox.data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            drainGroup.leave()
+        // Dedicated threads, not `DispatchQueue.global()`: non-overcommit
+        // global queues share the constrained thread limit (≈ CPU count)
+        // with Swift concurrency's cooperative pool. Swift Testing runs many
+        // tests in parallel on that pool and each one blocks synchronously
+        // below (`waitUntilExit`, `drainGroup.wait()`); once every
+        // cooperative thread is blocked, the workqueue spawns no thread for
+        // a GCD reader, the reader never runs, and every caller waits
+        // forever. Observed: the whole CLISpec suite hung with all 18
+        // cooperative threads parked in `drainGroup.wait()` and no reader
+        // thread in existence. A `Thread` is a real pthread outside that
+        // limit, so each reader always gets to run.
+        for (handle, box) in [(stdoutPipe.fileHandleForReading, stdoutBox),
+                              (stderrPipe.fileHandleForReading, stderrBox)] {
+            drainGroup.enter()
+            let reader = Thread {
+                box.data = handle.readDataToEndOfFile()
+                drainGroup.leave()
+            }
+            reader.stackSize = 1 << 18
+            reader.start()
         }
 
         do {
