@@ -43,7 +43,7 @@ The YAML schema is owned by macdoc and versioned by its own `schema_version: 1`,
 
 ### Metadata overlay as a compiler-checked Swift literal
 
-The overlay is a Swift value (`MacDocCLIMetadata.overlay`, type `CLISpecMetadata`) in the `CLISpec` target. Status, output mode and dependency kind are Swift enums, so a typo is a compile error; comments are allowed next to each fact. The builder cross-checks every reference against the derived surface (closed list of failure classes in the spec). Alternatives considered: a YAML overlay file (needs a YAML parser — a third-party dependency, contrary to `.claude/rules/native-macos-compat.md`); a JSON overlay (native `JSONDecoder`, but it silently ignores misspelled keys and forbids comments, and the overlay would be a second hand-edited data file beside the generated one).
+The overlay is a Swift value (`MacDocCLIMetadata.overlay`, type `CLISpecMetadata`) in the `CLISpec` target. Overlay prose never restates a value ArgumentParser already reports (defaults, allowed values); a contract test rejects notes that quote a default. Status, output mode and dependency kind are Swift enums, so a typo is a compile error; comments are allowed next to each fact. The builder cross-checks every reference against the derived surface (closed list of failure classes in the spec). Alternatives considered: a YAML overlay file (needs a YAML parser — a third-party dependency, contrary to `.claude/rules/native-macos-compat.md`); a JSON overlay (native `JSONDecoder`, but it silently ignores misspelled keys and forbids comments, and the overlay would be a second hand-edited data file beside the generated one).
 
 ### Deterministic YAML subset emitter over an ordered node tree
 
@@ -63,7 +63,7 @@ Because the route table is not introspectable, a test checks the overlay's `macd
 
 ### CONVERSIONS.md consistency by label equality
 
-Each overlay conversion carries a `label` equal to the first cell of its row in CONVERSIONS.md's "Converter Details" table. The consistency test requires the two label sets to be equal. CONVERSIONS.md gains rows for Word → Marker, HTML → PDF and LaTeX → Word (and the cross matrix gains the matching cells), and PDF → LaTeX maps to the `macdoc pdf` conversion. Alternative considered: generating the whole CONVERSIONS.md from the spec — deferred (Non-Goals); the check is the smallest end-to-end proof the diagnosis asked for.
+Each overlay conversion carries a `label` equal to the first cell of its row in CONVERSIONS.md's "Converter Details" table. The consistency test requires the two label sets to be equal. CONVERSIONS.md gains Converter Details rows for Word → Marker, HTML → PDF and LaTeX → Word; the cross matrix gains the HTML → PDF cell and a LaTeX source row (Marker has no matrix column because it is a directory format, so it appears only in the table); PDF → LaTeX maps to the `macdoc pdf` conversion. Alternative considered: generating the whole CONVERSIONS.md from the spec — deferred (Non-Goals); the check is the smallest end-to-end proof the diagnosis asked for.
 
 ## Implementation Contract
 

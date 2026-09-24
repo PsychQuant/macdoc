@@ -182,6 +182,14 @@ struct CLISpecBuilderTests {
             try generate(badKind)
         }
         #expect(kindError?.isMalformedDump == true)
+
+        let badNameKind = Self.dumpJSON().replacingOccurrences(of: #"{"kind":"long","name":"full"}"#,
+                                                               with: #"{"kind":"doubleDash","name":"full"}"#)
+        #expect(badNameKind != Self.dumpJSON())
+        let nameKindError = #expect(throws: CLISpecError.self) {
+            try generate(badNameKind)
+        }
+        #expect(nameKindError?.isMalformedDump == true)
     }
 
     @Test("version output is trimmed; an empty one is rejected")
@@ -433,6 +441,10 @@ struct CLISpecBuilderTests {
                 Self.conversion("One", from: ["html"], to: "pdf"),
                 Self.conversion("Two", from: ["htm", "html"], to: "pdf"),
             ]))
+        }
+        // A repeated extension inside one conversion is not a second conversion.
+        #expect(throws: Never.self) {
+            try generate(metadata: Self.metadata(conversions: [Self.conversion("One", from: ["html", "html"], to: "pdf")]))
         }
         // The same pair on different commands is not a duplicate.
         #expect(throws: Never.self) {

@@ -43,6 +43,34 @@ struct CLISpecEmitterTests {
         #expect(YAMLEmitter.scalar("x\u{0001}y") == "\"x\\u0001y\"")
         #expect(YAMLEmitter.scalar("p\u{2028}q\u{0085}r\u{2029}") == "\"p\\u2028q\\u0085r\\u2029\"")
         #expect(YAMLEmitter.scalar("del\u{7F}") == "\"del\\u007F\"")
+        #expect(YAMLEmitter.scalar("c1\u{80}\u{9F}") == "\"c1\\u0080\\u009F\"")
+        #expect(YAMLEmitter.scalar("nc\u{FFFE}\u{FFFF}") == "\"nc\\uFFFE\\uFFFF\"")
+        // U+00A0 and ordinary non-ASCII text stay literal.
+        #expect(YAMLEmitter.scalar("nb\u{A0}sp 中") == "\"nb\u{A0}sp 中\"")
+    }
+
+    @Test("sequence items whose first entry is a block, and nested sequences")
+    func nestedBlocks() {
+        let document = YAMLNode.sequence([
+            .mapping([
+                YAMLEntry("paths", .sequence([
+                    .mapping([YAMLEntry("command", .string("x")), YAMLEntry("note", .string("n"))]),  // "n" is a YAML 1.1 bool word → quoted
+                ])),
+                YAMLEntry("topic", .string("t")),
+            ]),
+            .sequence([.string("a"), .string("b")]),
+        ])
+        let actual = YAMLEmitter.emit(document)
+        #expect(actual == """
+        - paths:
+            - command: x
+              note: "n"
+          topic: t
+        -
+          - a
+          - b
+
+        """, "\(actual.debugDescription)")
     }
 
     @Test("block and flow layout, header, booleans, integers and trailing newline")

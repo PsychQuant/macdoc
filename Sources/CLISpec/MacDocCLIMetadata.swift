@@ -40,7 +40,7 @@ public enum MacDocCLIMetadata {
             status: .active,
             notes: [
                 "The input format is detected from the file extension; `conversions` lists every route with its route-specific options.",
-                "Text targets go to stdout unless --output is given; binary targets (docx, pdf) and directories never go to stdout.",
+                "Output handling is per route: see `output` on each entry of `conversions`.",
             ],
             docs: [".claude/rules/cli-design/convert-entry-point.md", "CONVERSIONS.md"]
         ),
@@ -50,7 +50,7 @@ public enum MacDocCLIMetadata {
             dependencies: ["huggingface", "ollama"],
             notes: [
                 "Whole-page GLM-OCR for the PDF → LaTeX project pipeline; results are written into the project folder, not printed as Markdown.",
-                "--mode local (default) runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release).",
+                "--mode local runs MLX and downloads the --model repository from Hugging Face on first use; it needs mlx.metallib beside the binary (make release).",
                 "--mode ollama sends page images to the Ollama server at --host.",
             ]
         ),
@@ -181,14 +181,14 @@ public enum MacDocCLIMetadata {
             label: "Markdown → Word", command: convert, from: ["md", "markdown"], to: "docx",
             converter: "md-to-word-swift", output: .file,
             options: ["--hard-breaks", "--math"] + docxProfileOptions,
-            notes: ["--math omath turns $…$ formulas into native Word OMath; literal (default) keeps them as text."]
+            notes: ["--math omath turns $…$ formulas into native Word OMath; --math literal keeps them as text."]
         ),
         CLISpecMetadata.Conversion(
             label: "SRT → HTML", command: convert, from: ["srt"], to: "html",
             converter: "srt-to-html-swift", output: .stdoutOrFile,
             options: ["--full", "--css"], styles: ["dark", "light"],
             notes: [
-                "--css defaults to web, which this route rejects: pass --css dark or --css light.",
+                "This route accepts only --css dark or --css light and rejects the option's default, so pass one explicitly.",
                 "Speaker labels (`Speaker 1:` or `[Speaker 1]`) become speaker badges.",
             ]
         ),
@@ -234,7 +234,7 @@ public enum MacDocCLIMetadata {
             notes: [
                 "Legacy plist-based .note only; modern FlatBuffers .ntb containers are recognized and rejected.",
                 "Writes <input-stem>/ with index.html and media/ (or --output); --stdout prints one self-contained HTML, with --full for a complete document.",
-                "--css defaults to web, which this route rejects: pass --css dark or --css light.",
+                "This route accepts only --css dark or --css light and rejects the option's default, so pass one explicitly.",
             ]
         ),
         CLISpecMetadata.Conversion(
@@ -330,7 +330,7 @@ public enum MacDocCLIMetadata {
         ),
         CLISpecMetadata.ExternalDependency(
             id: "ollama", kind: .networkService,
-            purpose: "Serves the glm-ocr model over HTTP for `pdf ocr --mode ollama` (--host, default localhost:11434).",
+            purpose: "Serves the glm-ocr model over HTTP for `pdf ocr --mode ollama` at the address given by --host.",
             install: "Install Ollama and pull the glm-ocr model."
         ),
         CLISpecMetadata.ExternalDependency(

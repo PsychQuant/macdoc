@@ -167,11 +167,13 @@ public enum YAMLEmitter {
         return out + "\""
     }
 
-    /// C0 controls, DEL, and the characters YAML treats as line breaks
-    /// (U+0085 NEL, U+2028 LS, U+2029 PS).
+    /// Characters YAML does not allow unescaped: C0 controls, DEL, C1
+    /// controls (U+0080–U+009F, including U+0085 NEL), the line/paragraph
+    /// separators U+2028 and U+2029, and the noncharacters U+FFFE / U+FFFF.
     private static func needsUnicodeEscape(_ scalar: Unicode.Scalar) -> Bool {
-        scalar.value < 0x20 || scalar.value == 0x7F
-            || scalar.value == 0x85 || scalar.value == 0x2028 || scalar.value == 0x2029
+        let value = scalar.value
+        return value < 0x20 || (0x7F...0x9F).contains(value)
+            || value == 0x2028 || value == 0x2029 || value == 0xFFFE || value == 0xFFFF
     }
 
     private static func hex4(_ value: UInt32) -> String {
