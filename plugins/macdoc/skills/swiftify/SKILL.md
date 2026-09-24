@@ -157,6 +157,7 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 - full-fidelity 能將 canonical minimal table 表成 `appendTable`；但整個 `document.xml` 是否升級為 DSL，仍取決於所有內容都可表示且試重建 byte-equal。rich／foreign-form table 不受支援時，才可能以 `table` 原因讓整個 part 落 raw。
 - 對確實落 raw 的文件，腳本仍能完美重播、能填 slot（`// @slot-raw`，paraId 定位；替換採「坍縮為主 run」語意，見上面 Slot 一節）、能驗證——**但除了 call-site 的 slot 參數值外不能讀、不能手改**（改 slot 值正是設計內的唯一手改點）。
 - **版控 diff 對 raw 腳本沒有意義**：改一個字會讓那條大型單行重新 escape，diff 顯示「一行變了」。
+- **`--paragraphs-only` 目前是 CLI-only**：che-word-mcp 的 `export_script`／`get_script_coverage` 沒有對應的參數或工具，也不會像 CLI 0.9.0+ 那樣在回應裡具名 `paragraph-no-paraId`（見 che-word-mcp skill「產物可讀嗎？先看 coverage」一節）。純走 MCP、碰到 `word/document.xml` 落 raw 的呼叫端，目前判定根因與改走段落 DSL 這條備援路徑都只能透過 macdoc CLI 完成——上面「每一步都列 CLI 與 MCP 兩個入口」的通則在這個備援路徑上不成立，是已知落差而非尚未寫進文件。
 
 只有在檢視文件來源與實際內容、確認唯一根因是 `word/document.xml = paragraph-no-paraId`，而且接受只保留段落時，才可明確改走 paragraphs-only。不能只由 CLI 的 raw／0% 摘要推定；即使 CLI 具名提示該原因，也要確認非段落內容可捨棄。無法確認時保留 full-fidelity，不把其他原因類推成 lossy 模式。診斷與相容路徑依 CLI 版本不同：
 
