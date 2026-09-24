@@ -94,7 +94,7 @@ extension MacDoc.PDF {
         /// 項目逐筆列出，因為那些是使用者要自己回頭處理的。沒有任何紀錄時回傳空陣列。
         static func pageAndFigureSummary(_ report: NormalizeProjectReport) -> [String] {
             var lines: [String] = []
-            var inserted = 0, moved = 0
+            var inserted = 0, moved = 0, numbering = 0
             var pageProblems: [String] = []
             for note in report.pageCounterNotes {
                 switch note.kind {
@@ -104,19 +104,28 @@ extension MacDoc.PDF {
                     pageProblems.append("  ⚠ page counter line \(note.line): 既有 \\setcounter{page}{\(existing)} 與 marker 推得的 \(expected) 不同，該章未插入")
                 case .chapterTitleNotFound:
                     pageProblems.append("  ⚠ page counter line \(note.line): 找不到 \\chapter 章名的結尾大括號，頁碼未還原")
+                case .numberingInserted: numbering += 1
+                case .pageLabelUnsupported(let page, let label):
+                    pageProblems.append("  ⚠ page counter line \(note.line): 第 \(page) 頁的 page label「\(label)」不是阿拉伯或羅馬數字，該處頁碼未還原")
+                case .pageLabelMissing(let page):
+                    pageProblems.append("  ⚠ page counter line \(note.line): 第 \(page) 頁沒有 page label，該處頁碼未還原")
                 }
             }
             if !report.pageCounterNotes.isEmpty {
-                lines.append("  page counters: \(inserted) inserted, \(moved) legacy moved")
+                lines.append("  page counters: \(inserted) inserted, \(moved) legacy moved"
+                             + (numbering > 0 ? ", \(numbering) numbering switches" : ""))
                 lines += pageProblems
             }
 
-            var applied = 0, sized = 0, noContext = 0
+            var applied = 0, upgraded = 0, sized = 0, noContext = 0
             var figureProblems: [String] = []
             for figure in report.figureWidthResolutions {
                 let reason: String
                 switch figure.outcome {
-                case .widthApplied: applied += 1; continue
+                case .widthApplied:
+                    applied += 1
+                    if figure.replacedLegacyWidth { upgraded += 1 }
+                    continue
                 case .explicitSizePreserved: sized += 1; continue
                 case .noPageContext: noContext += 1; continue
                 case .noMatchingFigure: reason = "responses 沒有這張圖"
@@ -131,10 +140,33 @@ extension MacDoc.PDF {
                 figureProblems.append("  ⚠ figure \(figure.path) (\(page), line \(figure.line)): \(reason)，未改寫")
             }
             if !report.figureWidthResolutions.isEmpty {
-                lines.append("  figure widths: \(applied) applied, \(sized) already sized, \(noContext) without page context")
+                lines.append("  figure widths: \(applied) applied"
+                             + (upgraded > 0 ? " (\(upgraded) upgraded from the 0.3.0 format)" : "")
+                             + ", \(sized) already sized, \(noContext) without page context")
                 lines += figureProblems
             }
             lines += report.unreadableResponseFiles.map { "  ⚠ unreadable: \($0)" }
+
+            switch report.chapterOpening {
+            case .openAnyAdded:
+                lines.append("  chapter opening: openany added (a chapter starts on an even page)")
+            case .explicitOpenRightKept:
+                lines.append("  ⚠ chapter opening: 有章節從偶數頁開始，但 \\documentclass 明確寫了 openright，保留不動；這些章節前會多一張同頁碼的空白頁")
+            case .notNeeded, .alreadyOpenAny, .oneSide, .notBookClass:
+                break
+            }
+
+            var rejoined = 0
+            for note in report.splitListNotes {
+                switch note.kind {
+                case .listRejoined: rejoined += 1
+                case .unmodelledListCommand(let name):
+                    lines.append("  ⚠ split lists line \(note.line): 有 \\\(name) 這類無法建模的列表指令，整份未做跨頁列表修正")
+                case .unmatchedEnvironmentEnd:
+                    lines.append("  ⚠ split lists line \(note.line): 遇到無法配對的 \\end，之後不再做跨頁列表修正")
+                }
+            }
+            if rejoined > 0 { lines.append("  split lists: \(rejoined) rejoined") }
             return lines
         }
     }

@@ -97,7 +97,8 @@ extension MacDoc {
                 manifest.pages = pages.map {
                     PageRecord(
                         number: $0.number, width: $0.width, height: $0.height,
-                        rotation: $0.rotation, renderedImagePath: nil, renderedDPI: nil
+                        rotation: $0.rotation, renderedImagePath: nil, renderedDPI: nil,
+                        label: $0.label
                     )
                 }
                 manifest.updatedAt = Support.nowISO8601()
@@ -147,7 +148,8 @@ extension MacDoc {
                     manifest.pages = try PDFScanner().scan(pdfAt: pdfURL).map {
                         PageRecord(
                             number: $0.number, width: $0.width, height: $0.height,
-                            rotation: $0.rotation, renderedImagePath: nil, renderedDPI: nil
+                            rotation: $0.rotation, renderedImagePath: nil, renderedDPI: nil,
+                            label: $0.label
                         )
                     }
                 }

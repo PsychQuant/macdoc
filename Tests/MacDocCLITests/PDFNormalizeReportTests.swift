@@ -64,6 +64,54 @@ final class PDFNormalizeReportTests: XCTestCase {
         XCTAssertEqual(lines.count, 1 + actionable.count + 1, "\(lines)")
     }
 
+    /// pdf-to-latex-swift 0.4.0（#211、#207、#210、#215）新增的紀錄：例行的計數，需要處理的逐筆列出。
+    func testSummaryCoversThe040Notes() {
+        let full = NormalizeProjectReport(
+            mainFileChanged: true, preambleFileChanged: false, preambleURL: nil,
+            documentClassFixed: false, mathOperatorsAdded: [], currencyDollarsEscaped: 0,
+            figureWidthResolutions: [
+                FigureWidthResolution(path: "figures/p002-a.png", page: 2, line: 5,
+                                      outcome: .widthApplied(fraction: 0.5, widthPoints: 306), replacedLegacyWidth: true),
+                FigureWidthResolution(path: "figures/p002-b.png", page: 2, line: 6,
+                                      outcome: .widthApplied(fraction: 0.4, widthPoints: 244.8)),
+            ],
+            pageCounterNotes: [
+                PageCounterNote(line: 3, kind: .counterInserted(page: 1)),
+                PageCounterNote(line: 3, kind: .numberingInserted(style: .roman)),
+                PageCounterNote(line: 9, kind: .pageLabelUnsupported(page: 4, label: "A-1")),
+                PageCounterNote(line: 12, kind: .pageLabelMissing(page: 7)),
+            ],
+            chapterOpening: .openAnyAdded,
+            splitListNotes: [
+                SplitListNote(line: 20, kind: .listRejoined(environment: "itemize")),
+                SplitListNote(line: 30, kind: .unmodelledListCommand(name: "trivlist")),
+                SplitListNote(line: 40, kind: .unmatchedEnvironmentEnd),
+            ])
+        let lines = MacDoc.PDF.Normalize.pageAndFigureSummary(full)
+        XCTAssertTrue(lines.contains("  page counters: 1 inserted, 0 legacy moved, 1 numbering switches"), "\(lines)")
+        XCTAssertTrue(lines.contains { $0.contains("line 9") && $0.contains("A-1") }, "\(lines)")
+        XCTAssertTrue(lines.contains { $0.contains("line 12") && $0.contains("第 7 頁") }, "\(lines)")
+        XCTAssertTrue(lines.contains("  figure widths: 2 applied (1 upgraded from the 0.3.0 format), 0 already sized, 0 without page context"), "\(lines)")
+        XCTAssertTrue(lines.contains("  chapter opening: openany added (a chapter starts on an even page)"), "\(lines)")
+        XCTAssertTrue(lines.contains("  split lists: 1 rejoined"), "\(lines)")
+        XCTAssertTrue(lines.contains { $0.contains("line 30") && $0.contains("trivlist") }, "\(lines)")
+        XCTAssertTrue(lines.contains { $0.contains("line 40") && $0.contains("\\end") }, "\(lines)")
+    }
+
+    /// 明確的 openright 會保留，但使用者要知道偶數頁起始的章節前會多一張空白頁；其餘四種結果不印。
+    func testChapterOpeningOnlyReportsWhatNeedsAttention() {
+        func lines(_ outcome: ChapterOpeningOutcome) -> [String] {
+            MacDoc.PDF.Normalize.pageAndFigureSummary(NormalizeProjectReport(
+                mainFileChanged: false, preambleFileChanged: false, preambleURL: nil,
+                documentClassFixed: false, mathOperatorsAdded: [], currencyDollarsEscaped: 0,
+                chapterOpening: outcome))
+        }
+        XCTAssertTrue(lines(.explicitOpenRightKept).first?.contains("openright") == true)
+        for quiet in [ChapterOpeningOutcome.notNeeded, .alreadyOpenAny, .oneSide, .notBookClass] {
+            XCTAssertEqual(lines(quiet), [], "\(quiet)")
+        }
+    }
+
     /// 端到端：CLI 真的走到 0.3.0 的兩個步驟，並把摘要印出來。
     func testNormalizeCommandRestoresPageCounterAndReportsIt() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("normalize-\(UUID().uuidString)")
