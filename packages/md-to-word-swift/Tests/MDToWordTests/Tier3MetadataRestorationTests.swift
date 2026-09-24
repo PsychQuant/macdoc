@@ -278,15 +278,16 @@ final class Tier3MetadataRestorationTests: XCTestCase {
     // and declined for #220 items 2/3 — see Tier3MetadataRestorer's doc
     // comment for the concrete blockers)
 
-    func testCommentIdsAndBookmarkNamesAreNeverRestored() throws {
-        // Per Tier3MetadataRestorer's doc-comment: these two fields are
-        // deliberately out of scope (referential-integrity / position-model
-        // risk — see PsychQuant/macdoc#220 items 2/3). Unlike `runs` (below),
-        // there is no fingerprint-gated path that ever restores them: this
-        // test pins that as observable behavior regardless of whether a
-        // matching textFingerprint is present, so a future change that
-        // silently starts (or silently fails to) restore them is caught
-        // either way.
+    func testCommentIdsAndBookmarkNamesAreNotRestoredInThisRelease() throws {
+        // Per Tier3MetadataRestorer's doc-comment: these two fields were
+        // evaluated for #220 and declined for THIS release — not ruled out
+        // permanently — because the sidecar does not capture the range
+        // endpoints reconstruction would need (see PsychQuant/macdoc#220
+        // items 2/3). Unlike `runs` (below), there is no fingerprint-gated
+        // path that ever restores them today: this test pins that as
+        // observable behavior regardless of whether a matching
+        // textFingerprint is present, so a future change that silently
+        // starts (or silently fails to) restore them is caught either way.
         let markdown = "A paragraph that used to carry a comment and bookmark."
 
         var paragraphMeta = ParagraphMeta(index: 0)
@@ -304,12 +305,16 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         XCTAssertTrue(paragraph.bookmarks.isEmpty)
     }
 
-    // MARK: - runs are restored, but ONLY when a matching textFingerprint
-    // gates them (PsychQuant/macdoc#220 items 4/5)
+    // MARK: - runs are restored, but ONLY when a matching exactTextFingerprint
+    // gates them — a byte-exact check, deliberately stricter than the loose
+    // textFingerprint used for paragraph-level fields (PsychQuant/macdoc#220
+    // items 4/5; the exact/loose split itself is a follow-up fix — see
+    // ParagraphFingerprint's doc comment for why a loose match alone is NOT
+    // safe for run-offset restoration)
 
-    func testRunFormattingIsNotAppliedWithoutATextFingerprint() throws {
+    func testRunFormattingIsNotAppliedWithoutAnExactTextFingerprint() throws {
         // Old-sidecar backward compat: a `ParagraphMeta` with `runs`
-        // populated but no `textFingerprint` (as every sidecar written
+        // populated but no `exactTextFingerprint` (as every sidecar written
         // before word-to-md-swift ≥ 1.1.0 looks) must NOT have its `runs`
         // applied — there is no way to verify the freshly-converted
         // paragraph's runs still line up with the offsets `RunMeta.range`
@@ -318,7 +323,7 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         let markdown = "A paragraph that used to carry per-run formatting."
 
         var paragraphMeta = ParagraphMeta(index: 0)
-        // textFingerprint deliberately left nil.
+        // exactTextFingerprint (and textFingerprint) deliberately left nil.
         var runMeta = RunMeta(range: [0, 1])
         runMeta.fontName = "Arial"
         paragraphMeta.runs = [runMeta]
@@ -332,16 +337,19 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         XCTAssertNil(paragraph.runs.first?.properties.fontName)
     }
 
-    func testRunFormattingIsAppliedWhenFingerprintMatches() throws {
+    func testRunFormattingIsAppliedWhenExactFingerprintMatches() throws {
         let markdown = "Bold middle word plain."
         // Runs text on the reverse side is exactly the markdown source here
-        // (no escaping needed), so the fingerprint over the original run
-        // text and over this string are the same computation.
+        // (no escaping, no smart-punctuation substitution), so the exact
+        // fingerprint over the original run text and over this string are
+        // the same computation.
 
         var paragraphMeta = ParagraphMeta(index: 0)
         paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
-        // "middle" is characters [11, 17) in "Bold middle word plain."
-        var runMeta = RunMeta(range: [11, 17])
+        paragraphMeta.exactTextFingerprint = ParagraphFingerprint.computeExact(markdown)
+        // "middle" is characters [5, 11) in "Bold middle word plain."
+        // ("Bold " is 5 chars: B-o-l-d-space).
+        var runMeta = RunMeta(range: [5, 11])
         runMeta.fontName = "Georgia"
         runMeta.color = "FF0000"
         paragraphMeta.runs = [runMeta]
@@ -355,19 +363,97 @@ final class Tier3MetadataRestorationTests: XCTestCase {
         let fullText = paragraph.runs.map(\.text).joined()
         XCTAssertEqual(fullText, markdown, "Splitting runs must not change the paragraph's overall visible text")
 
-        // Every run whose text falls inside [11, 17) ("middle") must carry
-        // the new formatting; every run outside it must not.
+        // Directly assert the formatted substring is exactly "middle", not
+        // merely "some run inside a range" — pins the actual claim the test
+        // name makes (a prior version of this test used the wrong range,
+        // [11, 17) = " word " instead of [5, 11) = "middle", and passed
+        // vacuously because its own assertion loop re-used the same wrong
+        // bounds; caught by Codex cross-model review round 1).
+        let formattedText = paragraph.runs
+            .filter { $0.properties.fontName == "Georgia" }
+            .map(\.text)
+            .joined()
+        XCTAssertEqual(formattedText, "middle")
+
         var cursor = 0
         for run in paragraph.runs {
             let range = cursor..<(cursor + run.text.count)
             cursor = range.upperBound
-            if range.lowerBound >= 11 && range.upperBound <= 17 {
+            if range.lowerBound >= 5 && range.upperBound <= 11 {
                 XCTAssertEqual(run.properties.fontName, "Georgia", "Run '\(run.text)' at \(range) should be formatted")
                 XCTAssertEqual(run.properties.color, "FF0000")
             } else {
                 XCTAssertNotEqual(run.properties.fontName, "Georgia", "Run '\(run.text)' at \(range) should NOT be formatted")
             }
         }
+    }
+
+    func testRunFormattingIsNotAppliedWhenLooseFingerprintMatchesButRawTextChangedByWhitespaceCollapse() {
+        // Reproduces the exact scenario a Codex cross-model review round 1
+        // finding identified as unsafe: original text "A  B" (two spaces)
+        // and current text "A B" (one space) share a LOOSE fingerprint
+        // match (both normalize to "A B"), but they are different lengths —
+        // a RunMeta.range captured against the 4-character original is not
+        // safely appliable to the 3-character current text. This is why
+        // `runs` restoration must gate on exactTextFingerprint, never on
+        // textFingerprint alone.
+        var document = WordDocument()
+        document.body.children = [.paragraph(Paragraph(text: "A B"))]
+
+        var meta = ParagraphMeta(index: 0)
+        meta.textFingerprint = ParagraphFingerprint.compute("A  B") // loose: matches "A B" too
+        meta.exactTextFingerprint = ParagraphFingerprint.computeExact("A  B") // exact: does NOT match "A B"
+        meta.alignment = "center"
+        var runMeta = RunMeta(range: [3, 4]) // targets "B" in the ORIGINAL "A  B"
+        runMeta.fontName = "Arial"
+        meta.runs = [runMeta]
+        let metadata = DocumentMetadata(paragraphs: [meta])
+
+        let report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+
+        guard case .paragraph(let restored) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        XCTAssertEqual(restored.properties.alignment, .center, "Paragraph-level fields still apply on a loose match")
+        XCTAssertNil(restored.runs.first?.properties.fontName, "Run-level fields must NOT apply without an exact match")
+        XCTAssertEqual(report.appliedCount, 1)
+        XCTAssertEqual(report.runsSkipped, [
+            Tier3RestorationReport.RunsSkippedEntry(index: 0, reason: .exactFingerprintMismatchOrAbsent),
+        ])
+    }
+
+    func testRunFormattingIsNotAppliedWhenLooseFingerprintMatchesButRawTextChangedByTypographicSubstitution() throws {
+        // Same fix, exercised through the real markdown parser: "a---bc"
+        // round-trips through swift-markdown's default smart-punctuation
+        // substitution to "a—bc" (em dash) with no actual edit. The loose
+        // fingerprint of the ORIGINAL "a---bc" matches the ACTUAL parsed
+        // text ("a—bc") — so paragraph-level fields still apply — but the
+        // exact fingerprint does not, so `runs` must be withheld rather
+        // than risk applying [4, 5) (originally "b") to the wrong offset in
+        // the now-shorter 4-character string.
+        let markdown = "a---bc"
+
+        var paragraphMeta = ParagraphMeta(index: 0)
+        paragraphMeta.textFingerprint = ParagraphFingerprint.compute(markdown)
+        paragraphMeta.exactTextFingerprint = ParagraphFingerprint.computeExact(markdown)
+        paragraphMeta.alignment = "center"
+        var runMeta = RunMeta(range: [4, 5]) // targets "b" in the ORIGINAL "a---bc"
+        runMeta.fontName = "Arial"
+        paragraphMeta.runs = [runMeta]
+        let metadata = DocumentMetadata(paragraphs: [paragraphMeta])
+
+        let document = try converter.convertMarkdown(markdown, metadata: metadata)
+
+        guard case .paragraph(let paragraph) = document.body.children[0] else {
+            return XCTFail("Expected a paragraph at index 0")
+        }
+        // Sanity: confirm the parser actually substituted the dash, i.e.
+        // this test is exercising the real scenario, not a no-op.
+        let actualText = paragraph.runs.map(\.text).joined()
+        XCTAssertNotEqual(actualText, markdown, "Fixture assumption: swift-markdown must have substituted the ASCII dash sequence")
+
+        XCTAssertEqual(paragraph.properties.alignment, .center, "Paragraph-level fields still apply on a loose match")
+        XCTAssertTrue(paragraph.runs.allSatisfy { $0.properties.fontName != "Arial" }, "Run-level fields must NOT apply without an exact match")
     }
 
     func testEntireEntryIsSkippedWhenFingerprintMismatches() throws {

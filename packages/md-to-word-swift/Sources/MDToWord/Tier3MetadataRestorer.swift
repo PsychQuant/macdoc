@@ -38,82 +38,105 @@ import OOXMLSwift
 /// lineRule: .auto`, from `MarkdownWordBuilder`) to survive would reproduce
 /// something the source document never had, not restore it.
 ///
-/// ## Paragraph text-fingerprint gate (PsychQuant/macdoc#220 item 5)
+/// ## Two fingerprint gates for two different guarantees (PsychQuant/macdoc#220
+/// item 5, extended by a follow-up finding during item 4's implementation —
+/// see `ParagraphFingerprint`'s doc comment for the full rationale)
 ///
-/// Every `ParagraphMeta` entry MAY carry a `textFingerprint` — a
-/// content-addressed hash of the *original* paragraph's run text (see
-/// `ParagraphFingerprint`). When present, this restorer recomputes the same
-/// fingerprint over the *current* body child at `meta.index`'s run text and
-/// compares:
+/// A `ParagraphMeta` entry MAY carry `textFingerprint` (loose,
+/// whitespace/typography-tolerant) and/or `exactTextFingerprint`
+/// (byte-exact) — content-addressed hashes of the *original* paragraph's
+/// run text. **They gate different things and must not be conflated**: a
+/// loose-fingerprint match only proves "this is still roughly the same
+/// paragraph" (fine for alignment/spacing/etc., which don't depend on
+/// character positions); it does NOT prove `RunMeta.range` character
+/// offsets are still valid, because the loose fingerprint's normalization
+/// (whitespace collapsing, typographic canonicalization) is
+/// length-changing.
 ///
-/// - **Match** → the entry is trusted; both paragraph-level fields and
-///   per-run formatting (if any) are applied.
+/// **Paragraph-level fields** are gated on `textFingerprint`:
+/// - **Match** → applied.
 /// - **Mismatch** → positive evidence that `meta.index` no longer points at
 ///   the paragraph it was captured against (e.g. the markdown was
 ///   hand-edited and an earlier paragraph was inserted, shifting every
 ///   later index by one). The *entire* entry is skipped — paragraph-level
-///   fields included, not just `runs` — and the skip is recorded in the
-///   `Tier3RestorationReport` returned by `restore(_:onto:)` as
-///   `.fingerprintMismatch`. This is the fix for the failure mode #220 was
-///   opened to close: previously an index collision like this would apply
-///   formatting to the wrong paragraph with no warning at all.
+///   fields AND `runs` both — recorded in the returned
+///   `Tier3RestorationReport` as `.fingerprintMismatch`. This is the fix
+///   for the failure mode #220 was opened to close: previously an index
+///   collision like this would apply formatting to the wrong paragraph
+///   with no warning at all.
 /// - **Absent** (`textFingerprint == nil`) → the sidecar predates
 ///   word-to-md-swift ≥ 1.1.0 (or was hand-constructed, as most of this
-///   package's own unit tests do). Paragraph-level fields fall back to the
-///   pre-#220 behavior: apply unconditionally by position, matching #206's
-///   original (and still-supported) contract. **Per-run formatting is the
-///   one exception**: since restoring `runs` is new in #220 and never had
-///   an established "trust the index blindly" behavior to preserve, it is
-///   applied ONLY when a fingerprint is present AND matches — never as a
-///   backward-compat fallback. A sidecar with `runs` populated but no
-///   `textFingerprint` behaves exactly as it did before #220: `runs` are
-///   left untouched.
+///   package's own unit tests do). Falls back to the pre-#220 behavior:
+///   apply unconditionally by position, matching #206's original (and
+///   still-supported) contract.
+///
+/// **`runs`** are gated on `exactTextFingerprint` independently, with no
+/// backward-compat fallback in any case (restoring `runs` is new in #220
+/// and never had an established "trust the index blindly" behavior to
+/// preserve):
+/// - **Present and matching** → `applyRunFormatting` runs; the current
+///   paragraph's run text is proven byte-identical to what `RunMeta.range`
+///   was captured against, so the offsets are safe.
+/// - **Absent, or present but not matching** → `runs` are left untouched,
+///   recorded in the report as `.exactFingerprintMismatchOrAbsent`. This
+///   still leaves the entry's paragraph-level fields applied (if the loose
+///   gate above passed) — only `runs` specifically are withheld.
 ///
 /// ## Per-run formatting (PsychQuant/macdoc#220 item 4)
 ///
 /// `RunMeta.range` is a `[start, end)` character-offset pair into the
-/// concatenation of the *original* paragraph's `runs` — the same text the
-/// fingerprint above is computed over. Once the fingerprint confirms the
-/// current paragraph's run text is identical, those same offsets are valid
-/// against the current paragraph's own runs (regardless of how the
-/// markdown-only conversion happened to segment them): `applyRunFormatting`
-/// splits the current `runs` at every metadata range's boundaries and
-/// applies each entry's formatting to the segments that fall fully inside
-/// its range. See that function's doc comment for the splitting algorithm.
+/// concatenation of the *original* paragraph's `runs` — the same text
+/// `exactTextFingerprint` above is computed over. Once that fingerprint
+/// confirms the current paragraph's run text is byte-identical, those same
+/// offsets are valid against the current paragraph's own runs (regardless
+/// of how the markdown-only conversion happened to segment them):
+/// `applyRunFormatting` splits the current `runs` at every metadata range's
+/// boundaries and applies each entry's formatting to the segments that fall
+/// fully inside its range. See that function's doc comment for the
+/// splitting algorithm.
 ///
 /// ## Deliberately NOT restored (evaluated for #220, declined — documented,
 /// not silently dropped)
 ///
-/// - **`commentIds`**: reconstructing a comment requires re-creating the
-///   `Comment` (author/text) from `DocumentMetadata.document.comments` *and*
-///   re-establishing the `<w:commentRangeStart/End>` wrapper at the correct
-///   position. OOXMLSwift's `CommentRangeMarker.position` is an index into
-///   the *interleaved* emission order of ALL paragraph children (runs,
-///   hyperlinks, SDTs, footnote/endnote references, other range markers) —
-///   not a character offset — so translating it into the character-offset
-///   universe this restorer already uses for `runs` would require walking
-///   that full interleaved order (including nested hyperlink/SDT text,
-///   which `RunMeta`'s existing offsets deliberately exclude) to compute
-///   cumulative visible-text length. No such utility exists in
-///   word-to-md-swift or OOXMLSwift today; building one is materially more
-///   work than the `runs` case (which only ever deals with plain top-level
-///   `Run`s) and belongs upstream as a reusable primitive, not duplicated
-///   ad hoc here. Comment reconstruction also needs to *insert* new marker
-///   nodes into a run sequence built by unrelated markdown-parsing code —
-///   an insertion, not the property-overlay-on-existing-runs this restorer
-///   already does for `runs`. `ParagraphMeta` also does not carry the range
-///   information needed to place the markers correctly even if the position
-///   model were solved. Left as a follow-up.
-/// - **`bookmarkNames`**: names survive in the sidecar, but not the original
-///   numeric ids, and Word requires document-unique bookmark ids. Minting
-///   fresh ids is low-risk *today* (`MarkdownToWordConverter` does not
-///   currently mint any bookmark ids of its own — no collision source
-///   exists yet), but restoring bookmarks hits the exact same
-///   position-model blocker as comments above (`BookmarkRangeMarker`'s
-///   `position` is the same interleaved-order index), so id-minting safety
-///   is not actually the limiting factor. Left as a follow-up alongside
-///   comments, since solving the position-model problem once would unblock
-///   both.
+/// - **`commentIds`** and **`bookmarkNames`**: the decisive blocker for
+///   both is the same, and it is more fundamental than any position-model
+///   complexity below — **`ParagraphMeta` does not carry the original
+///   range endpoints at all.** `collectParagraph` (word-to-md-swift) only
+///   ever records *which* comment ids / bookmark names touched a paragraph
+///   (`para.commentIds` / `para.bookmarks.map(\.name)`), never *where*
+///   within the paragraph's text they started or ended. No amount of
+///   restorer-side cleverness can reconstruct a range that was never
+///   captured — this is a sidecar-schema gap, not (only) a restorer
+///   limitation, and the concrete first step of a follow-up is extending
+///   `MetadataCollector`/`ParagraphMeta` to capture that range in the first
+///   place (analogous to how `RunMeta.range` already does for run
+///   formatting).
+///   - A secondary complication, layered on top of the missing-range
+///     problem once range capture existed: OOXMLSwift's
+///     `CommentRangeMarker.position` / `BookmarkRangeMarker.position` are
+///     indices into the *interleaved* emission order of ALL paragraph
+///     children (runs, hyperlinks, SDTs, footnote/endnote references,
+///     other range markers) — not a character offset — so translating a
+///     captured position into the character-offset universe this restorer
+///     already uses for `runs` would require walking that full interleaved
+///     order (including nested hyperlink/SDT text, which `RunMeta`'s
+///     existing offsets deliberately exclude). No such utility exists in
+///     word-to-md-swift or OOXMLSwift today.
+///   - Comment reconstruction additionally needs to *insert* new marker
+///     nodes into a run sequence built by unrelated markdown-parsing code —
+///     an insertion, not the property-overlay-on-existing-runs this
+///     restorer already does for `runs`.
+///   - Minting fresh bookmark ids is comparatively low-risk *today*
+///     (`MarkdownToWordConverter` does not currently mint any bookmark ids
+///     of its own, so there is no existing collision source) — but that
+///     was never the limiting factor; the missing-range-data blocker above
+///     applies equally to bookmarks.
+///   - This is left as a follow-up, not ruled out permanently: the concrete
+///     unblocking path is (1) extend the sidecar schema to capture range
+///     endpoints, (2) build the interleaved-position-to-character-offset
+///     utility (belongs upstream in OOXMLSwift as a reusable primitive, not
+///     duplicated ad hoc here), (3) extend `Tier3MetadataRestorer` to insert
+///     the reconstructed markers/comments once (1) and (2) both exist.
 ///
 /// ## Index-mismatch policy (unchanged from #206, extended with the
 /// ## fingerprint gate above)
@@ -140,20 +163,33 @@ enum Tier3MetadataRestorer {
                 continue
             }
 
-            var fingerprintConfirmedMatch = false
-            if let expectedFingerprint = meta.textFingerprint {
-                let actualText = paragraph.runs.map(\.text).joined()
-                let actualFingerprint = ParagraphFingerprint.compute(actualText)
-                guard actualFingerprint == expectedFingerprint else {
+            let rawRunsText = paragraph.runs.map(\.text).joined()
+
+            if let expectedLooseFingerprint = meta.textFingerprint {
+                guard ParagraphFingerprint.compute(rawRunsText) == expectedLooseFingerprint else {
                     report.skipped.append(Tier3RestorationReport.SkippedEntry(index: meta.index, reason: .fingerprintMismatch))
                     continue
                 }
-                fingerprintConfirmedMatch = true
             }
 
             apply(meta, to: &paragraph.properties)
-            if fingerprintConfirmedMatch, !meta.runs.isEmpty {
-                applyRunFormatting(meta.runs, to: &paragraph.runs)
+
+            if !meta.runs.isEmpty {
+                // Per-run restoration is gated on the byte-exact fingerprint
+                // ONLY — never on the loose one above, and never as an
+                // "old sidecar, trust it anyway" fallback. See
+                // `ParagraphFingerprint`'s doc comment on why the loose
+                // fingerprint's normalization cannot guarantee
+                // `RunMeta.range` offsets are still valid.
+                if let expectedExactFingerprint = meta.exactTextFingerprint,
+                   ParagraphFingerprint.computeExact(rawRunsText) == expectedExactFingerprint {
+                    applyRunFormatting(meta.runs, to: &paragraph.runs)
+                } else {
+                    report.runsSkipped.append(Tier3RestorationReport.RunsSkippedEntry(
+                        index: meta.index,
+                        reason: .exactFingerprintMismatchOrAbsent
+                    ))
+                }
             }
 
             document.body.children[meta.index] = .paragraph(paragraph)
@@ -304,10 +340,18 @@ enum Tier3MetadataRestorer {
             segments.append((pieceStart..<runEnd, lastPiece))
         }
 
-        // Apply each entry's formatting to every fully-contained segment.
+        // Apply each entry's formatting to every fully-contained,
+        // non-empty, non-drawing segment. The emptiness check matters at a
+        // shared boundary: a zero-length segment sitting exactly at a
+        // metadata range's edge would otherwise satisfy the containment
+        // test (`lowerBound >= start && upperBound <= end` holds trivially
+        // when lowerBound == upperBound) and pick up formatting from
+        // whichever entry's range happens to end/start there, even though
+        // it carries no text.
         for (start, end, meta) in normalizedRanges {
             for index in segments.indices {
                 let segmentRange = segments[index].range
+                guard !segmentRange.isEmpty else { continue }
                 guard segments[index].run.drawing == nil else { continue }
                 guard segmentRange.lowerBound >= start, segmentRange.upperBound <= end else { continue }
                 applyRunProperties(meta, to: &segments[index].run.properties)
@@ -377,13 +421,44 @@ public struct Tier3RestorationReport: Equatable {
         }
     }
 
-    /// Number of `ParagraphMeta` entries that were applied (paragraph-level
-    /// fields at minimum; `runs` too when the fingerprint gate allowed it).
+    /// Closed enumeration of every reason a `ParagraphMeta`'s `runs` were
+    /// NOT applied, distinct from `SkipReason` above: these entries still
+    /// count toward `appliedCount` (their paragraph-level fields DID apply
+    /// — `SkipReason` is reserved for when the WHOLE entry was skipped).
+    public enum RunsSkipReason: Hashable {
+        /// `ParagraphMeta.exactTextFingerprint` was nil (sidecar predates
+        /// this field, or `runs` were hand-populated without it) or did not
+        /// match the current paragraph's recomputed byte-exact fingerprint.
+        /// Either way, `RunMeta.range` character offsets are not proven
+        /// safe to apply — see `ParagraphFingerprint`'s doc comment for why
+        /// a *loose* fingerprint match is not sufficient for this. This is
+        /// never a fallback-and-apply situation, unlike paragraph-level
+        /// fields on a fingerprint-less old sidecar: per-run restoration is
+        /// new in #220 and has no established "trust it anyway" behavior to
+        /// preserve.
+        case exactFingerprintMismatchOrAbsent
+    }
+
+    public struct RunsSkippedEntry: Hashable {
+        public let index: Int
+        public let reason: RunsSkipReason
+
+        public init(index: Int, reason: RunsSkipReason) {
+            self.index = index
+            self.reason = reason
+        }
+    }
+
+    /// Number of `ParagraphMeta` entries that had at least their
+    /// paragraph-level fields applied. An entry counted here MAY still have
+    /// its `runs` skipped — check `runsSkipped` for that.
     public var appliedCount: Int = 0
     public var skipped: [SkippedEntry] = []
+    public var runsSkipped: [RunsSkippedEntry] = []
 
-    public init(appliedCount: Int = 0, skipped: [SkippedEntry] = []) {
+    public init(appliedCount: Int = 0, skipped: [SkippedEntry] = [], runsSkipped: [RunsSkippedEntry] = []) {
         self.appliedCount = appliedCount
         self.skipped = skipped
+        self.runsSkipped = runsSkipped
     }
 }
