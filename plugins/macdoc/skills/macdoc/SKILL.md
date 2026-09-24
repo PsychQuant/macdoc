@@ -181,6 +181,8 @@ macdoc config ai set transcription codex # 設定 one-shot 轉寫預設後端
 macdoc config ai set agent claude        # 設定 agentic 後端
 ```
 
+`detect` 只覆寫偵測到的三個欄位（`available`／`transcription`／`agent`），不會動 `config ocr` 的設定（CLI 0.12.0+；更早的版本會把 OCR host／model 打回預設值）。三個子命令都支援 `--config <path>` 指向別的設定檔。
+
 ### config ocr — OCR host/model 設定（v1.1+）
 
 | 子命令 | 用途 |
@@ -192,7 +194,10 @@ macdoc config ai set agent claude        # 設定 agentic 後端
 | `set-model <model>` | 設定預設模型（如 glm-ocr） |
 | `set-backend <ollama\|mlx>` | 設定預設後端 |
 
-**誰會讀這些設定**（CLI 0.11.0+）：`pdf ocr --mode ollama` 沒給 `--host`／`--model` 時，改用這裡的預設 host 與 model（優先序：明確的 flag > `config ocr` > 內建預設）。`--mode local` 不讀；`set-backend` 目前沒有任何命令讀取，`pdf ocr` 的 `--mode` 仍要明確指定。0.10.0 以前 `pdf ocr` 完全不讀這些設定。
+**誰會讀這些設定**：`pdf ocr`，優先序一律是「明確的 flag > `config ocr` > 內建預設」。
+
+- `--mode`（CLI 0.12.0+）：沒給時用 `set-backend` 設定的值（`mlx` 即 `local`），都沒設時用 `local`。只認經由 `set-backend` 設定的值；`list` 在未設定時顯示「未設定」。設定檔讀不到或值無法辨識時退回 `local` 並在 stderr 警告；不合法的 `--mode` 值會報錯。
+- `--host`／`--model`（CLI 0.11.0+）：只在 `--mode ollama` 時讀這裡的預設 host 與 model。明確給 `--mode local` 時完全不讀設定檔。
 
 ```bash
 # 完整範例：設定 kyle 遠端 + local 兩個 profile
@@ -253,6 +258,7 @@ macdoc config document gc --force                             # 實際刪除；�
 
 ## 版本紀錄
 
+- **1.9.0**：`convert` 的輸出接 pipe 時不再 exit 1；`pdf ocr` 沒給 `--mode` 時採用 `config ocr set-backend` 的值；`config ai detect` 不再洗掉 OCR 設定；新增 `pdf migrate-figures`（0.4.0 前的舊專案重新裁切成帶頁碼的圖檔名，不呼叫 AI）；旋轉頁的渲染修正（需要 CLI 0.12.0）
 - **1.8.0**：`pdf ocr --mode ollama` 會讀 `config ocr` 的 host／model；SRT／note 轉 HTML 不帶 `--css` 時預設 `dark`；`pdf normalize` 會依 PDF 的 page labels 還原頁碼、為偶數頁起始的章節加 `openany`、圖寬改為原書絕對尺寸（需要 CLI 0.11.0）
 - **1.7.0**：新增 `config document gc`（清理未被引用的格式快照）；`pdf normalize` 會還原原書頁碼與圖片比例並印出摘要（需要 CLI 0.10.0）
 - **1.6.0**：新增 `config document`（文件格式 profile）與 `convert` / `word render` 的 `--profile`（需要 CLI 0.9.0）
