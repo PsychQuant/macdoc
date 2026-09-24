@@ -7,16 +7,20 @@ import CLISpec
 /// specification"; PsychQuant/macdoc#72).
 ///
 /// Compares the committed file byte-for-byte with a fresh generation from the
-/// built binary. With `MACDOC_RECORD_CLI_SPEC=1` it rewrites the file instead
-/// — that is exactly what `make cli-spec` runs.
+/// built binary. `make cli-spec` — the only way to record — runs this same
+/// test with `MACDOC_RECORD_CLI_SPEC=1` for that one invocation, which
+/// rewrites the file instead; under CI that request is refused.
 struct CLISpecDriftTests {
 
-    @Test("committed cli-spec.yaml equals a fresh generation (record mode rewrites it)")
+    @Test("committed cli-spec.yaml equals a fresh generation (make cli-spec rewrites it)")
     func committedSpecIsFresh() throws {
+        let decision = CLISpecHarness.recordDecision(ProcessInfo.processInfo.environment)
+        try #require(decision != .refusedUnderCI, Comment(rawValue: CLISpecHarness.ciRefusalMessage))
+
         let generated = Data(try CLISpecHarness.generate().utf8)
         let url = CLISpecHarness.specURL
 
-        if CLISpecHarness.isRecordMode(ProcessInfo.processInfo.environment) {
+        if decision == .record {
             try generated.write(to: url, options: .atomic)
             print("[cli-spec] recorded \(url.path) (\(generated.count) bytes)")
             return
@@ -30,14 +34,25 @@ struct CLISpecDriftTests {
         #expect(report == nil, Comment(rawValue: report ?? ""))
     }
 
-    @Test("record mode is on only for the exact value 1", arguments: [
-        ([String: String](), false),
-        (["MACDOC_RECORD_CLI_SPEC": "1"], true),
-        (["MACDOC_RECORD_CLI_SPEC": "true"], false),
-        (["MACDOC_RECORD_CLI_SPEC": "0"], false),
+    @Test("record mode is on only for the exact value 1, and never under CI", arguments: [
+        ([String: String](), CLISpecHarness.RecordDecision.compare),
+        (["MACDOC_RECORD_CLI_SPEC": "1"], .record),
+        (["MACDOC_RECORD_CLI_SPEC": "true"], .compare),
+        (["MACDOC_RECORD_CLI_SPEC": "0"], .compare),
+        (["CI": "true"], .compare),
+        (["MACDOC_RECORD_CLI_SPEC": "1", "CI": "true"], .refusedUnderCI),
+        (["MACDOC_RECORD_CLI_SPEC": "1", "CI": ""], .refusedUnderCI),
     ])
-    func recordModeSwitch(environment: [String: String], expected: Bool) {
-        #expect(CLISpecHarness.isRecordMode(environment) == expected)
+    func recordModeSwitch(environment: [String: String], expected: CLISpecHarness.RecordDecision) {
+        #expect(CLISpecHarness.recordDecision(environment) == expected)
+    }
+
+    @Test("the CI refusal message names CI and the only recording path")
+    func ciRefusalMessage() {
+        let message = CLISpecHarness.ciRefusalMessage
+        #expect(message.contains("CI"))
+        #expect(message.contains("MACDOC_RECORD_CLI_SPEC"))
+        #expect(message.contains("make cli-spec"))
     }
 
     @Test("a stale line is reported with its number, both contents and the fix")
