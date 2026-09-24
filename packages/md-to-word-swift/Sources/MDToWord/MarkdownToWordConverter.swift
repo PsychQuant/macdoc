@@ -221,6 +221,38 @@ public struct MarkdownToWordConverter: DocumentConverter {
         return document
     }
 
+    /// Same as `convertMarkdown(_:metadata:baseURL:sourceName:options:)`
+    /// but also returns the `Tier3RestorationReport` describing which
+    /// sidecar paragraph entries were applied vs. skipped (and why)
+    /// instead of discarding that information (PsychQuant/macdoc#220 item 5
+    /// — "不再默默套錯"). Use this overload when the caller wants to know
+    /// about mismatched/out-of-range Tier 3 entries; the base overload
+    /// still applies (or skips) every entry identically, it just does not
+    /// surface the report.
+    ///
+    /// `metadata: nil` returns an empty report (`appliedCount == 0`,
+    /// `skipped == []`) and behaves identically to the base overload's
+    /// `metadata: nil` case.
+    public func convertMarkdownReportingTier3Restoration(
+        _ source: String,
+        metadata: DocumentMetadata?,
+        baseURL: URL? = nil,
+        sourceName: String? = nil,
+        options: ConversionOptions = .default
+    ) throws -> (document: WordDocument, report: Tier3RestorationReport) {
+        var document = try convertMarkdown(
+            source,
+            baseURL: baseURL,
+            sourceName: sourceName,
+            options: options
+        )
+        var report = Tier3RestorationReport()
+        if let metadata {
+            report = Tier3MetadataRestorer.restore(metadata, onto: &document)
+        }
+        return (document, report)
+    }
+
     private func renderDocumentXML(_ document: WordDocument) -> String {
         var bodyXML = ""
 
