@@ -96,6 +96,84 @@ final class PDFOCRHostModelResolutionTests: XCTestCase {
             MacDoc.PDF.OCRPages.defaultLocalModel
         )
     }
+
+    // MARK: - resolveRunSettings (Codex round-1 finding #3)
+
+    private struct Boom: Error {}
+
+    func testLocalModeNeverLoadsConfig() throws {
+        // --mode local (the default) must not depend on `config ocr` at
+        // all: it neither reads a host profile nor the default model, so
+        // loading the config file at all — let alone one that happens to be
+        // unreadable or malformed — must not be able to break it. Proven
+        // here by making the loader throw if it's ever called; before this
+        // was fixed, `run()` called `configOptions.load()` unconditionally,
+        // so this would have failed with `Boom` even for --mode local.
+        var loadWasCalled = false
+        let (runnerMode, model) = try MacDoc.PDF.OCRPages.resolveRunSettings(
+            mode: "local", host: nil, model: nil,
+            loadConfig: { loadWasCalled = true; throw Boom() }
+        )
+        XCTAssertFalse(loadWasCalled, "--mode local must never call the config loader")
+        XCTAssertEqual(model, MacDoc.PDF.OCRPages.defaultLocalModel)
+        guard case .local = runnerMode else {
+            XCTFail("expected .local, got \(runnerMode)")
+            return
+        }
+    }
+
+    func testLocalModeWithExplicitModelStillNeverLoadsConfig() throws {
+        var loadWasCalled = false
+        let (_, model) = try MacDoc.PDF.OCRPages.resolveRunSettings(
+            mode: "local", host: nil, model: "my-explicit-repo",
+            loadConfig: { loadWasCalled = true; throw Boom() }
+        )
+        XCTAssertFalse(loadWasCalled)
+        XCTAssertEqual(model, "my-explicit-repo")
+    }
+
+    func testOllamaModePropagatesAConfigLoadFailure() {
+        // The flip side of the two tests above: --mode ollama genuinely
+        // needs the config (for the default host profile and default
+        // model), so a load failure there SHOULD surface as an error
+        // rather than being silently swallowed or defaulted around.
+        XCTAssertThrowsError(try MacDoc.PDF.OCRPages.resolveRunSettings(
+            mode: "ollama", host: nil, model: nil,
+            loadConfig: { throw Boom() }
+        )) { error in
+            XCTAssertTrue(error is Boom, "expected the load failure to propagate, got \(error)")
+        }
+    }
+
+    func testOllamaModeLoadsConfigAndAppliesItsSettings() throws {
+        var loadWasCalled = false
+        let cfg = config(ocrHosts: ["kyle": "10.0.0.5:11434"], ocrDefaultHost: "kyle", ocrDefaultModel: "my-ollama-tag")
+        let (runnerMode, model) = MacDoc.PDF.OCRPages.resolveRunSettings(
+            mode: "ollama", host: nil, model: nil,
+            loadConfig: { loadWasCalled = true; return cfg }
+        )
+        XCTAssertTrue(loadWasCalled)
+        XCTAssertEqual(model, "my-ollama-tag")
+        guard case .ollama(let host) = runnerMode else {
+            XCTFail("expected .ollama, got \(runnerMode)")
+            return
+        }
+        XCTAssertEqual(host, "10.0.0.5:11434")
+    }
+}
+
+/// Coverage for PsychQuant/macdoc#218 Codex round-1 finding #5a:
+/// `PageOCRRunner` used to hardcode `OllamaBackend(host:model:)`'s model to
+/// `"glm-ocr"` regardless of `self.model`, so wiring `--model`/`config ocr`
+/// into `PageOCRRunner`'s own `model` property would have had no observable
+/// effect at all. `makeOllamaBackend` is a plain struct construction (no
+/// I/O), so this can be pinned directly without a reachable Ollama server.
+final class PageOCRRunnerBackendTests: XCTestCase {
+    func testOllamaBackendUsesTheGivenModelNotAHardcodedOne() {
+        let backend = PageOCRRunner.makeOllamaBackend(host: "h:1234", model: "my-custom-tag")
+        XCTAssertEqual(backend.host, "h:1234")
+        XCTAssertEqual(backend.model, "my-custom-tag", "must not silently fall back to a hardcoded model")
+    }
 }
 
 /// CLI-level coverage: `config ocr` subcommands' `--config` redirection
