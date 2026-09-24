@@ -211,7 +211,24 @@ enum CLITestHelper {
             drainGroup.leave()
         }
 
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            // The readers above are already blocked waiting for EOF, but if
+            // the process never started (bad executable path, no exec
+            // permission, …) nothing will ever close the pipes' write ends
+            // to deliver that EOF — the two background threads, and the
+            // file descriptors they're blocked on, would otherwise leak for
+            // the lifetime of the process. Closing our own write-end handles
+            // is enough: the read ends then see EOF on their own and the
+            // readers return normally, so this doesn't need to touch the
+            // read ends (which a background thread may still be inside a
+            // syscall on) at all.
+            try? stdoutPipe.fileHandleForWriting.close()
+            try? stderrPipe.fileHandleForWriting.close()
+            drainGroup.wait()
+            throw error
+        }
 
         // Timeout 保護
         let deadline = Date().addingTimeInterval(timeout)
