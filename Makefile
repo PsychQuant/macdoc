@@ -1,4 +1,4 @@
-.PHONY: release debug install clean metallib check-bib-fixtures
+.PHONY: release debug install clean metallib check-bib-fixtures test-release
 
 # Build release binary + Metal shaders
 release:
@@ -18,6 +18,23 @@ install: release
 # Build metallib only (after swift build)
 metallib:
 	./scripts/build-metallib.sh .build/release
+
+# Run CLI integration tests against the release binary.
+#
+# Works around a confirmed SwiftPM/Swift Testing release-mode limitation
+# (#188): a native `swift test -c release` mixed XCTest/Swift Testing run
+# passes `--test-bundle-path` to the *product* macdoc executable instead of
+# the test host, so the Swift Testing phase fails with
+# "Unknown option '--test-bundle-path'" and OMath/route tests never run.
+# See Tests/MacDocCLITests/README.md for the full writeup. This target
+# builds release, then runs the default *debug* XCTest bundle with
+# MACDOC_TEST_BINARY pointed at the release product and Swift Testing
+# disabled — the documented working alternative. Regression coverage:
+# scripts/tests/make-test-release.sh.
+test-release: release
+	@BIN_DIR=$$(swift build -c release --show-bin-path) && \
+	MACDOC_TEST_BINARY="$$BIN_DIR/macdoc" \
+	  swift test --disable-swift-testing
 
 # Clean build artifacts
 clean:
