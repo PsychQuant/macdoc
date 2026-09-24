@@ -686,8 +686,18 @@ commands:
     subcommands: [detect, list, set]
   - path: "macdoc config ai detect"
     abstract: "自動偵測已安裝的 AI CLI 工具，寫入設定檔。"
+    options:
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "設定檔路徑（預設 ~/.config/macdoc/config.json）"
   - path: "macdoc config ai list"
     abstract: "顯示目前的 AI 設定。"
+    options:
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "設定檔路徑（預設 ~/.config/macdoc/config.json）"
   - path: "macdoc config ai set"
     abstract: "設定 AI 參數（如 transcription、agent）。"
     arguments:
@@ -697,6 +707,11 @@ commands:
       - name: value
         required: true
         help: "設定值（codex、claude 或 gemini）。"
+    options:
+      - names: ["--config"]
+        value_name: config
+        required: false
+        help: "設定檔路徑（預設 ~/.config/macdoc/config.json）"
   - path: "macdoc config ocr"
     abstract: "OCR Ollama host 與模型設定"
     subcommands: [list, add-host, remove-host, set-default, set-model, set-backend]
