@@ -289,6 +289,7 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 ### 表格（v3.11.0+ 強化，#49）
 
 - 基礎：`insert_table`, `get_tables` ⚡, `update_cell`, `delete_table`
+- 多段落儲存格（4.2.0+）：`get_cell_paragraphs` ⚡（列出 `[k] 文字`）、`update_cell_paragraph`（只改第 k 段，其餘不動）
 - 結構：`merge_cells`, `set_table_style`, `set_table_alignment`
 - 行列：`add_row_to_table`, `add_column_to_table`, `delete_row_from_table`, `delete_column_from_table`
 - 尺寸：`set_cell_width`, `set_row_height`, `set_cell_vertical_alignment`, `set_header_row`

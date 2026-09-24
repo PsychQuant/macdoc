@@ -19,7 +19,7 @@ Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift). **版本以
 | Styles (v3.10) | `list_styles`, `apply_style`, `create_style`, `update_style`, `delete_style` |
 | Numbering / lists (v3.10) | `insert_bullet_list`, `insert_numbered_list`, `set_list_level`, `set_outline_level` |
 | Sections / page setup (v3.10) | `get_section_properties`, `insert_section_break`, `set_page_size`, `set_page_margins`, `set_page_orientation`, `set_columns`, `set_line_numbers` |
-| Tables (v3.11) | `insert_table`, `update_cell`, `add_row_to_table`, `merge_cells`, `set_cell_vertical_alignment`, `set_table_style`, `set_header_row`, `set_table_alignment` |
+| Tables (v3.11；cell 段落 4.2.0) | `insert_table`, `update_cell`, `get_cell_paragraphs`, `update_cell_paragraph`, `add_row_to_table`, `merge_cells`, `set_cell_vertical_alignment`, `set_table_style`, `set_header_row`, `set_table_alignment` |
 | Hyperlinks (v3.11) | `insert_hyperlink`, `update_hyperlink`, `list_hyperlinks`, `insert_internal_link`, `insert_cross_reference` |
 | Headers / footers (v3.11) | `add_header`, `update_header`, `list_headers`, `add_footer`, `insert_page_number` (even/odd + section header map) |
 | Comments | `insert_comment`, `update_comment`, `reply_to_comment`, `resolve_comment`, `list_comment_threads`, `sync_extended_comments`, `add_person`, `list_people` |
