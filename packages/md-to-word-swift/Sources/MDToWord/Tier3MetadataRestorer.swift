@@ -1,3 +1,4 @@
+import CommonConverterSwift
 import Foundation
 import OOXMLSwift
 
@@ -40,7 +41,10 @@ import OOXMLSwift
 ///
 /// ## Two fingerprint gates for two different guarantees (PsychQuant/macdoc#220
 /// item 5, extended by a follow-up finding during item 4's implementation —
-/// see `ParagraphFingerprint`'s doc comment for the full rationale)
+/// see `ParagraphFingerprint`'s doc comment, in `CommonConverterSwift`, for
+/// the full rationale — this type used to carry its own local copy of that
+/// algorithm until it was consolidated into the shared package to stop the
+/// two hand-duplicated copies from drifting apart)
 ///
 /// A `ParagraphMeta` entry MAY carry `textFingerprint` (loose,
 /// whitespace/typography-tolerant) and/or `exactTextFingerprint`
@@ -168,7 +172,7 @@ enum Tier3MetadataRestorer {
             let rawRunsText = paragraph.runs.map(\.text).joined()
 
             if let expectedLooseFingerprint = meta.textFingerprint {
-                guard ParagraphFingerprint.compute(rawRunsText) == expectedLooseFingerprint else {
+                guard ParagraphFingerprint.loose(rawRunsText) == expectedLooseFingerprint else {
                     report.skipped.append(Tier3RestorationReport.SkippedEntry(index: meta.index, reason: .fingerprintMismatch))
                     continue
                 }
@@ -184,7 +188,7 @@ enum Tier3MetadataRestorer {
                 // fingerprint's normalization cannot guarantee
                 // `RunMeta.range` offsets are still valid.
                 if let expectedExactFingerprint = meta.exactTextFingerprint,
-                   ParagraphFingerprint.computeExact(rawRunsText) == expectedExactFingerprint {
+                   ParagraphFingerprint.exact(rawRunsText) == expectedExactFingerprint {
                     applyRunFormatting(meta.runs, to: &paragraph.runs)
                 } else {
                     report.runsSkipped.append(Tier3RestorationReport.RunsSkippedEntry(

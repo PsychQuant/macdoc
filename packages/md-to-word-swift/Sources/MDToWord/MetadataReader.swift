@@ -194,7 +194,8 @@ public struct ParagraphMeta {
     /// `exactTextFingerprint` for what gates `runs`.
     public var textFingerprint: String?
     /// PsychQuant/macdoc#220 item 4 follow-up: byte-exact fingerprint of the
-    /// same run text (see `ParagraphFingerprint.computeExact`).
+    /// same run text (see `ParagraphFingerprint.exact(_:)`, in
+    /// `CommonConverterSwift`).
     /// `Tier3MetadataRestorer` gates `RunMeta` per-run restoration on THIS
     /// fingerprint, never on `textFingerprint` — the loose fingerprint's
     /// normalization is length-changing and cannot guarantee

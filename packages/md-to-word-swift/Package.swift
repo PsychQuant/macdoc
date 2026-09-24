@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
-        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.4.0"),
+        .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.5.0"),
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", "2.0.0"..<"4.0.0"),
         .package(url: "https://github.com/PsychQuant/latex-math-swift.git", from: "0.2.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
