@@ -20,7 +20,7 @@ The ArgumentParser declarations of the `macdoc` executable SHALL be the only aut
 
 ### Requirement: Dump-help input is isolated behind a versioned decoder
 
-The generator SHALL read the command surface from the JSON printed by `macdoc --experimental-dump-help` and the tool version from the trimmed output of `macdoc --version`. It SHALL accept only `serializationVersion` 0, SHALL ignore JSON fields it does not use, and SHALL fail with a `CLISpecError` naming the problem when the version differs, when the JSON does not decode, when an argument `kind`, name kind or `parsingStrategy` is not one it knows, or when the version output is empty. The YAML `schema_version` SHALL be owned by the project and SHALL NOT change when only the dump format changes.
+The generator SHALL read the command surface from the JSON printed by `macdoc --experimental-dump-help` and the tool version from the trimmed output of `macdoc --version`. It SHALL accept only `serializationVersion` 0, SHALL ignore JSON fields it does not use, and SHALL fail with a `CLISpecError` naming the problem when the version differs, when the JSON does not decode, when an argument `kind`, name kind or `parsingStrategy` is not one it knows, or when the version output is empty. Fields the schema needs SHALL be validated per kind, and a field that is absent or empty SHALL fail with `missingRequiredField(command:element:field:)` naming the command path, the element (`<kind> argument #<n>` by 1-based position in the command's argument list, or `subcommand #<n>`) and the field: every command needs a non-empty `commandName`; a positional needs a non-empty `valueName`; an option needs non-empty `names` with every name non-empty, and a non-empty `valueName`; a flag needs non-empty `names` with every name non-empty. Structural fields that the decoder requires (`kind`, `isOptional`, `isRepeating`, `parsingStrategy`, `shouldDisplay`) fail as `malformedDump` when absent. Unknown extra fields remain tolerated. The YAML `schema_version` SHALL be owned by the project and SHALL NOT change when only the dump format changes.
 
 #### Scenario: Unsupported serialization version
 
@@ -46,6 +46,12 @@ The generator SHALL read the command surface from the JSON printed by `macdoc --
 | `parsingStrategy: "somethingNew"` | decoding fails (`malformedDump`) |
 | `macdoc --version` prints `"0.9.0\n"` | `tool.version: "0.9.0"` |
 | `macdoc --version` prints `"\n"` | `emptyVersionOutput` |
+| option `names` renamed to `spellings` | `missingRequiredField(command: "tool alpha", element: "option argument #2", field: "names")` |
+| option `"names": []` | `missingRequiredField(…, field: "names")` |
+| positional without `valueName` | `missingRequiredField(…, element: "positional argument #1", field: "valueName")` |
+| flag name `""` | `missingRequiredField(…, field: "names")` |
+| subcommand `"commandName": ""` | `missingRequiredField(command: "tool group", element: "subcommand #1", field: "commandName")` |
+| flag without `isOptional` | `malformedDump` |
 
 ### Requirement: Derived command surface and ordering
 
@@ -175,7 +181,13 @@ The builder SHALL reject the overlay with a `CLISpecError` whose description nam
 
 ### Requirement: Deterministic YAML serialization
 
-For the same dump JSON, version output and overlay, the generator SHALL return byte-identical text, independent of JSON object key order. Serialization SHALL follow these rules: two-space indentation; mapping keys in the orders fixed by this specification; sequences whose elements are mappings, and `notes`, in block style with `- ` items indented two spaces under their key; sequences of scalars other than `notes` in flow style `[a, b]`; a string is written plain only when it starts with an ASCII letter or `_`, contains only ASCII letters, digits, `_`, `.` and `-`, and is not (case-insensitively) `true`, `false`, `yes`, `no`, `on`, `off`, `null`, `y` or `n`, and otherwise in double quotes with `\\`, `\"`, `\n`, `\r`, `\t` escapes and `\uXXXX` for every other character YAML forbids unescaped (C0 controls, DEL, the C1 controls U+0080–U+009F, U+2028, U+2029, U+FFFE, U+FFFF); booleans as `true` / `false`; integers in decimal; non-ASCII characters written as UTF-8; LF line endings; no trailing whitespace; exactly one newline at end of file.
+For the same dump JSON, version output and overlay, the generator SHALL return byte-identical text, independent of JSON object key order. Serialization SHALL follow these rules: two-space indentation; mapping keys in the orders fixed by this specification; sequences whose elements are mappings, and `notes`, in block style with `- ` items indented two spaces under their key; sequences of scalars other than `notes` in flow style `[a, b]`; a string is written plain only when it starts with an ASCII letter or `_`, contains only ASCII letters, digits, `_`, `.` and `-`, and is not (case-insensitively) `true`, `false`, `yes`, `no`, `on`, `off`, `null`, `y` or `n`, and otherwise in double quotes with `\\`, `\"`, `\n`, `\r`, `\t` escapes and `\uXXXX` for every other character YAML forbids unescaped (C0 controls, DEL, the C1 controls U+0080–U+009F, U+2028, U+2029, U+FFFE, U+FFFF); booleans as `true` / `false`; integers in decimal; non-ASCII characters written as UTF-8; LF line endings; no trailing whitespace; exactly one newline at end of file. Header comment text SHALL be split at line breaks (LF, CR, CRLF, U+0085, U+2028, U+2029) into physical lines, each written as `# ` followed by the line with trailing spaces and tabs removed, or as `#` when that leaves it empty; within a comment line, every character YAML forbids other than tab (C0 controls, DEL, C1 controls, U+FFFE, U+FFFF) SHALL be written as the visible text `\uXXXX`.
+
+#### Scenario: Multi-line header comment
+
+- **GIVEN** a header comment `a` + LF + `b` + CRLF + `c` + U+0001
+- **WHEN** the document is emitted
+- **THEN** the header lines are `# a`, `# b` and `# c\u0001`
 
 #### Scenario: Repeated generation is byte-identical
 
@@ -202,7 +214,7 @@ For the same dump JSON, version output and overlay, the generator SHALL return b
 
 ### Requirement: Drift contract for the committed specification
 
-The test suite SHALL regenerate the specification from the freshly built binary and compare it byte-for-byte with the committed `cli-spec.yaml`. On mismatch the test SHALL fail with a message naming the first differing line number and both line contents, and stating `make cli-spec` as the fix. When the environment variable `MACDOC_RECORD_CLI_SPEC` equals exactly `1`, the same test SHALL instead write the generated text to `cli-spec.yaml` and pass. `make cli-spec` SHALL run `swift build` and then that test in record mode.
+The test suite SHALL regenerate the specification from the freshly built binary and compare it byte-for-byte with the committed `cli-spec.yaml`. On mismatch the test SHALL fail with a message naming the first differing line number and both line contents, and stating `make cli-spec` as the fix. `make cli-spec` SHALL be the only documented way to rewrite the file: it runs `swift build` and then that test with `MACDOC_RECORD_CLI_SPEC=1` set for that one invocation, and in that mode the test SHALL write the generated text to `cli-spec.yaml` and pass. Record mode SHALL require the exact value `1`, and SHALL be refused whenever the environment variable `CI` is present (with any value, including empty): the test SHALL then fail without writing, with a message naming `CI`, `MACDOC_RECORD_CLI_SPEC` and `make cli-spec`.
 
 #### Scenario: Stale committed file
 
@@ -212,34 +224,51 @@ The test suite SHALL regenerate the specification from the freshly built binary 
 
 #### Scenario: Record mode
 
-- **WHEN** `MACDOC_RECORD_CLI_SPEC=1 swift test --filter CLISpecDriftTests` runs
-- **THEN** `cli-spec.yaml` contains exactly the generated text and a subsequent run without the variable passes
+- **WHEN** `make cli-spec` runs outside CI
+- **THEN** `cli-spec.yaml` contains exactly the generated text and a subsequent `swift test --filter CLISpecDriftTests` passes
+
+#### Scenario: Record mode refused under CI
+
+- **GIVEN** `CI=true` and an inherited `MACDOC_RECORD_CLI_SPEC=1`
+- **WHEN** the drift test runs
+- **THEN** it fails without writing `cli-spec.yaml`, and its message names `CI`, `MACDOC_RECORD_CLI_SPEC` and `make cli-spec`
 
 ##### Example: Record-mode switch values
 
-| MACDOC_RECORD_CLI_SPEC | Behavior |
-| ---------------------- | -------- |
-| unset | compare |
-| `1` | write and pass |
-| `true` | compare |
-| `0` | compare |
+| MACDOC_RECORD_CLI_SPEC | CI | Behavior |
+| ---------------------- | -- | -------- |
+| unset | unset | compare |
+| `1` | unset | write and pass |
+| `true` | unset | compare |
+| `0` | unset | compare |
+| unset | `true` | compare |
+| `1` | `true` | refuse: fail without writing |
+| `1` | empty | refuse: fail without writing |
 
 ### Requirement: Convert routes match the binary's dispatch
 
-For the conversions whose `command` is `macdoc convert` and whose `from` is not `"*"`, let E be the union of their source extensions with the probe vocabulary's extensions, and T the union of their targets with the probe vocabulary's targets. The probe vocabulary is a fixed list kept in the route-probe test; it SHALL contain every source extension and target used by those conversions (so removing a conversion from the overlay while the binary still dispatches it is detected) plus candidate formats (sources `txt`, `rtf`, `odt`, `epub`, `pptx`, `xlsx`, `csv`, `typ`, `ipynb`, `mdocx`; targets `txt`, `rtf`, `epub`, `tex`, `pptx`, `srt`). For every pair (e, t) in E × T, running `macdoc convert --to t --output <temp path> <temp dir>/probe.e` on an empty file with `PATH=/usr/bin:/bin` SHALL NOT produce the diagnostic `不支援從` when (e, t) belongs to a listed conversion, and SHALL exit non-zero with stderr containing `不支援從 .e 轉換到 t` when it does not.
+For the conversions whose `command` is `macdoc convert` and whose `from` is not `"*"`, let E be the union of their source extensions with the probe vocabulary's extensions, and T the union of their targets with the probe vocabulary's targets. The probe vocabulary is a fixed list kept in the route-probe test; it SHALL contain every source extension and target used by those conversions (so removing a conversion from the overlay while the binary still dispatches it is detected) plus candidate formats (sources `txt`, `rtf`, `odt`, `epub`, `pptx`, `xlsx`, `csv`, `typ`, `ipynb`, `mdocx`; targets `txt`, `rtf`, `epub`, `tex`, `pptx`, `srt`). For every pair (e, t) in E × T the probe SHALL run `macdoc convert --to t --output <temp path> [--css <first style of the conversion>] <temp dir>/probe.e` with `PATH=/usr/bin:/bin`. When (e, t) belongs to a listed conversion, the input SHALL be a real fixture of that format (a valid document the route can convert) and the probe SHALL require positive evidence that the route itself ran: exit status 0 and a non-empty output file or non-empty output directory at the `--output` path, or — only for the conversions in the closed in-route diagnostics table of the probe test, which contains exactly `HTML → PDF` with `需要 playwright CLI` — a non-zero exit with that route's own diagnostic. The mere absence of `不支援從` SHALL NOT count as evidence. When (e, t) is not listed, the input SHALL be an empty file and the probe SHALL require a non-zero exit with stderr containing `不支援從 .e 轉換到 t`.
 
 #### Scenario: Listed and unlisted pairs
 
 - **WHEN** the route probe runs against the current binary and overlay
-- **THEN** every listed pair is accepted by dispatch and every unlisted pair is rejected with the named diagnostic
+- **THEN** every listed pair converts its fixture successfully (or, for HTML → PDF, prints `需要 playwright CLI`) and every unlisted pair is rejected with the named diagnostic
+
+#### Scenario: A route blocked before its converter is detected
+
+- **GIVEN** a binary whose `(tex, docx)` dispatch case throws a validation error before calling its converter
+- **WHEN** the route probe runs
+- **THEN** the `(tex, docx)` probe fails, although stderr does not contain `不支援從`
 
 ##### Example: Probe expectations
 
 | Pair | Expected |
 | ---- | -------- |
-| (docx, md) | no `不支援從` |
-| (htm, pdf) | no `不支援從` (fails later: playwright not on PATH) |
-| (ntb, pdf) | no `不支援從` |
+| (docx, md) | exit 0, non-empty output file |
+| (docx, marker) | exit 0, non-empty output directory |
+| (srt, html) with `--css dark` | exit 0, non-empty output file |
+| (htm, pdf) | non-zero exit, `需要 playwright CLI` (playwright kept off PATH) |
+| (ntb, pdf) | exit 0 on a legacy `.note` container named `.ntb` |
 | (srt, md) | `不支援從 .srt 轉換到 md` |
 | (tex, html) | `不支援從 .tex 轉換到 html` |
 | (bib, docx) | `不支援從 .bib 轉換到 docx` |
