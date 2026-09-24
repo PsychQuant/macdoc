@@ -91,4 +91,31 @@ final class NoteHTMLConvertTests: XCTestCase {
             "index.html SHALL contain an <html tag"
         )
     }
+
+    /// Regression test for macdoc#216: the global `--css` default used to be
+    /// `web`, which this route rejects (only dark/light are valid), so the
+    /// most basic invocation — converting a `.note` without `--css` at all —
+    /// always failed with exit 64.
+    func testNoteToHTMLWithoutCSSSucceeds() throws {
+        let fixture = try CLITestHelper.noteFixture()
+
+        let outputDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macdoc-note-html-nocss-\(UUID().uuidString).html")
+        defer { try? FileManager.default.removeItem(at: outputDir) }
+
+        let result = try CLITestHelper.convert(
+            to: "html",
+            input: fixture.path,
+            flags: ["--output", outputDir.path]
+        )
+
+        XCTAssertEqual(
+            result.exitCode, 0,
+            "macdoc convert --to html without --css SHALL exit 0\nstderr: \(result.stderr)"
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: outputDir.appendingPathComponent("index.html").path),
+            "output SHALL include index.html"
+        )
+    }
 }

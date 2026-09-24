@@ -23,6 +23,25 @@ struct ConvertFlagTests {
                 "should contain dark theme elements")
     }
 
+    @Test("srt → html without --css succeeds using the route's own default style (#216)")
+    func srtToHtmlWithoutCSSSucceeds() throws {
+        // Global --css default used to be `web`, which this route rejects
+        // (only dark/light are valid), so converting an .srt without an
+        // explicit --css always failed with exit 64.
+        //
+        // --output (not the no-flags/no-output stdout path) is deliberate:
+        // that stdout path goes through SRTConverter.convertToStdout, which
+        // has its own pre-existing, unrelated bug ("Error: The file
+        // couldn't be saved.", already called out in cssDarkSrtToHtml
+        // above) that would make this test fail for a reason that has
+        // nothing to do with #216.
+        let input = FixtureManager.srtFile()
+        let outputPath = FixtureManager.outputPath("srt-no-css-output.html")
+        let result = try CLITestHelper.convert(to: "html", input: input, flags: ["--output", outputPath])
+        #expect(result.succeeded, "should succeed without --css\nstderr: \(result.stderr)")
+        #expect(FileManager.default.fileExists(atPath: outputPath), "output file should exist")
+    }
+
     @Test("--frontmatter on docx → md produces YAML")
     func frontmatterDocxToMd() throws {
         let input = FixtureManager.docxFile()
