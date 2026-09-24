@@ -44,6 +44,11 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.9.0"),
     ],
     targets: [
+        // cli-spec.yaml generator (#72): dump-help decoder, project schema
+        // builder, metadata overlay and deterministic YAML emitter. Linked
+        // only by the test target — the macdoc executable does not depend on
+        // it, so generating the spec never changes CLI behavior.
+        .target(name: "CLISpec"),
         .target(
             name: "NotabilityContainerDetection",
             dependencies: [
@@ -84,6 +89,7 @@ let package = Package(
             dependencies: [
                 "MacDocCLI",
                 "NotabilityContainerDetection",
+                "CLISpec",
                 .product(name: "NoteCore", package: "note-core-swift"),
                 // Authoring API for building synthetic docx fixtures in tests
                 // (WordReverseCoverageTests → emptyAuthoringDocument).
