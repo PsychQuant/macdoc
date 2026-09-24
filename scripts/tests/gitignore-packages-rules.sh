@@ -93,6 +93,22 @@ for pkg in "${INTENDED_PACKAGES[@]}"; do
 done
 
 # --- (c) non-intended packages MUST stay fully ignored ---
+# (b2) A library package's Package.resolved is written by every local
+# `swift test` inside the package. Un-ignoring the package directory must not
+# turn it into an untracked file. A package that deliberately tracks one
+# (token-counter-swift pins a third-party fork) is skipped: git ignores
+# tracked files' ignore status anyway, and the exception is explicit in
+# .gitignore.
+for pkg in "${INTENDED_PACKAGES[@]}"; do
+    probe="packages/$pkg/Package.resolved"
+    if git ls-files --error-unmatch "$probe" >/dev/null 2>&1; then
+        continue
+    fi
+    if ! is_ignored "$probe"; then
+        fail "(b2) generated Package.resolved under intended package '$pkg' is NOT ignored: $probe"
+    fi
+done
+
 brand_new_probe="packages/__gitignore_probe_new_pkg__/Sources/Foo.swift"
 if ! is_ignored "$brand_new_probe"; then
     fail "(c) brand-new, never-opened package directory is NOT ignored: $brand_new_probe"
