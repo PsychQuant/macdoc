@@ -32,4 +32,25 @@ final class CLITestHelperTimeoutTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0)
         XCTAssertEqual(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "ok")
     }
+
+    /// Regression test for macdoc#219: `runProcess` used to wait for the
+    /// child to exit *before* draining its stdout/stderr pipes. A pipe's
+    /// kernel buffer is far smaller than 256 KB (~64 KB on macOS), so any
+    /// child writing more than that blocks on `write(2)` waiting for a
+    /// reader that never comes until the process is reaped — deadlock,
+    /// broken only by the timeout killing the child mid-write. `yes | head
+    /// -c 300000` produces just over 256 KB of stdout, comfortably past one
+    /// pipe buffer, and should complete well inside a generous timeout once
+    /// the pipes are drained concurrently with the process running.
+    func testLargeOutputDoesNotDeadlock() throws {
+        let result = try CLITestHelper.runProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "yes | head -c 300000"],
+            currentDirectory: nil,
+            timeout: 10)
+        XCTAssertEqual(result.exitCode, 0, "should exit cleanly, not be killed by the timeout")
+        XCTAssertGreaterThanOrEqual(
+            result.stdout.utf8.count, 256 * 1024,
+            "stdout should be captured in full, past one pipe buffer")
+    }
 }

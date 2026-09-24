@@ -182,6 +182,35 @@ enum CLITestHelper {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        // macdoc#219: a pipe's kernel buffer (~64 KB on macOS) is far
+        // smaller than plenty of real command output (e.g. `macdoc
+        // --experimental-dump-help`, ~180 KB). Reading *after* the process
+        // exits — the previous approach — deadlocks the moment a child
+        // fills that buffer: the child blocks in write(2) waiting for a
+        // reader, while this function blocks waiting for the child to exit,
+        // and nobody drains the pipe until the timeout kills the child
+        // mid-write. Draining both pipes continuously on background queues,
+        // started before the process even runs, means neither pipe can ever
+        // fill up, so the child is never blocked on write(2) regardless of
+        // output size.
+        final class OutputBox: @unchecked Sendable {
+            var data = Data()
+        }
+        let stdoutBox = OutputBox()
+        let stderrBox = OutputBox()
+        let drainGroup = DispatchGroup()
+
+        drainGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stdoutBox.data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            drainGroup.leave()
+        }
+        drainGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stderrBox.data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            drainGroup.leave()
+        }
+
         try process.run()
 
         // Timeout 保護
@@ -193,16 +222,6 @@ enum CLITestHelper {
             process.terminate()
         }
 
-        // Drain the pipes first (readDataToEndOfFile blocks until the write
-        // ends close on process death), THEN reap the child. Draining before
-        // waitUntilExit avoids the classic deadlock where the child blocks on
-        // a full pipe while we block on wait — though it is not absolute: a
-        // child that ignores SIGTERM, or grandchildren inheriting the pipe
-        // FDs, can still keep it open (a general pipe-capture limitation, not
-        // specific to the timeout path).
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-
         // macdoc#133: terminate() only sends SIGTERM (async). Reading
         // terminationStatus before the process is reaped throws
         // NSInvalidArgumentException ("task still running") and crashes the
@@ -210,10 +229,16 @@ enum CLITestHelper {
         // normal-exit and the timeout-terminate paths.
         process.waitUntilExit()
 
+        // Each background read reaches EOF (and `drainGroup.leave()`) once
+        // the pipe's write end closes, which happens once the process (and
+        // anything else holding the fd open) has exited — already true by
+        // this point, so this returns promptly rather than blocking further.
+        drainGroup.wait()
+
         return CLIResult(
             exitCode: process.terminationStatus,
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? ""
+            stdout: String(data: stdoutBox.data, encoding: .utf8) ?? "",
+            stderr: String(data: stderrBox.data, encoding: .utf8) ?? ""
         )
     }
 
