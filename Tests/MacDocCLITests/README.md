@@ -59,11 +59,68 @@ MACDOC_TEST_BINARY="$BIN_DIR/macdoc" \
 因 fixture 缺少而 skip，也可能直接執行工作目錄中較舊的 debug binary，而不是 skip。不要以該組
 測試的綠燈推論 scratch path 或 release 的產品 binary 已受測。
 
+這個獨立 resolver 的邏輯（cwd-relative、忽略環境變數）自 [#192](https://github.com/PsychQuant/macdoc/issues/192)
+起抽成 `DocxIntegrationBinaryResolver`，有自己的單元測試（`DocxIntegrationBinaryResolverTests`）
+覆蓋「binary 存在」「binary 缺席」「即使注入 `MACDOC_TEST_BINARY` 也不受影響」三種情境。這不是
+把它併進 `CLITestHelper` 變成統一 resolver——兩者刻意保持獨立，見該型別的文件註解。
+
 `MACDOC_TEST_BINARY` 必須是非空、絕對且可執行的路徑。設定無效時測試會直接失敗，不會 fallback；
 但已 export 的有效路徑只表示檔案可執行，不保證它對應目前組態或現行原始碼，也不保證新鮮度。
 `CLITestHelper.run`（以及透過它呼叫的 `convert`）會把實際 binary path 記錄到測試 runner 的
 stderr；直接呼叫 `binaryPath` 或 `runProcess` 不會記錄。這項日誌不含 mtime，也不會混入受測
 CLI 的 `CLIResult.stdout` 或 `CLIResult.stderr`。
 
+若 `MACDOC_TEST_BINARY` 指向一個目錄（例如不小心少打了 `/macdoc` 這段檔名），`binaryPath`
+現在會乾淨地擲出 `BinarySelectionError.unavailable`，訊息明確指出「這是一個目錄，不是可執行
+檔」；先前 `FileManager.isExecutableFile(atPath:)` 對有執行位元的目錄一律回傳 `true`（幾乎所有
+目錄都符合，那個位元就是讓目錄可以被 `cd` 進去的），guard 會誤判通過，一路傳到
+`Process.run()` 才丟出難以辨識的底層錯誤。`unavailable` 與 `invalidOverride` 兩個 case 現在都
+conform `CustomStringConvertible`，依「目錄／無執行權限／不存在」三種情況給出不同措辭（見
+`BinarySelectionError.description`），但 `Equatable` 比較的仍是原始關聯值，不受此影響。
+
 使用 `swift test --skip-build` 前，呼叫者必須先確保目前測試組態或 override 指向的 binary 已由
 現行原始碼建置。`--skip-build` 只省略建置；即使已 export override，也無法證明既有產物是最新版本。
+
+## `[macdoc-test] binary=...` 診斷寫入的已知風險（評估，未修復）
+
+`CLITestHelper.run` 目前用未包裝的 `FileHandle.standardError.write(Data(...))` 把實際 binary
+path 寫到 stderr。這支 API 在寫入端遇到已關閉的 pipe（fd 失效）時，Apple 文件記載會丟出
+`NSFileHandleOperationException`——一個 Objective-C exception，Swift 的 `do/catch` 攔截不到，
+會讓整個測試 process 異常終止。
+
+[#192](https://github.com/PsychQuant/macdoc/issues/192) 要求評估改用會拋出 Swift `Error` 的
+`try? FileHandle.standardError.write(contentsOf:)`。已用一支獨立 spike（在 `Pipe` 上關閉讀取端
+模擬壞掉的管線，不動到真實 stderr）驗證兩支 API 在兩種情境下的行為：
+
+| SIGPIPE 處置 | `write(_:)`（現行） | `write(contentsOf:)` |
+|---|---|---|
+| 預設（未忽略，XCTest/Swift Testing process 的正常狀態）| write(2) syscall 本身觸發 SIGPIPE，**整個 process 直接被訊號終止**，Foundation 根本沒機會處理 | **同樣被訊號直接終止**——`try?` 攔截不到訊號 |
+| 已明確 `signal(SIGPIPE, SIG_IGN)` | 丟出不可攔截的 `NSFileHandleOperationException`（process 仍會 crash）| 丟出可 `try?` 吞掉的 Swift `Error`（不會 crash）|
+
+結論：`write(contentsOf:)` 只在「SIGPIPE 已被整個 process 忽略」這個前提下才比 `write(_:)` 安全；
+在 XCTest/Swift Testing process 預設的訊號處置下，兩者在遇到已關閉的 stderr pipe 時都會讓整個
+測試 process 被 SIGPIPE 直接終止，與呼叫哪支 API 無關。要真正堵住這個缺口，需要在測試 process
+啟動時就 `signal(SIGPIPE, SIG_IGN)`——但那是影響整個共用 XCTest process、所有測試都會遭殃的
+全域改動，超出這行診斷寫入的合理範圍，因此**未採用**，現行程式碼維持 `write(_:)` 不變。若未來
+真的要處理「stderr fd 在測試期間被關閉」這個場景，正確的修法是在測試 process 入口處全域忽略
+SIGPIPE，而不是逐一替換每個 `FileHandle.write` 呼叫。
+
+## Xcode Test Navigator 與 SwiftPM `.build` 的差異
+
+本文件其餘部分的所有指令（`swift build` / `swift test --filter ...`）都假設從命令列以 SwiftPM
+驅動，binary 固定落在 `.build/<configuration>/macdoc`——`CLITestHelper.binaryPath` 的預設路徑正
+是照這個假設寫的。
+
+若改用 Xcode 的 Test Navigator（開啟 `Package.swift` 後以 ⌘U 執行、或點測試左側的菱形圖示執行
+單一測試），Xcode 會改用自己的 **DerivedData**（預設在
+`~/Library/Developer/Xcode/DerivedData/<ProjectName>-<hash>/Build/Products/<Configuration>/`）建置
+與快取產物，**不會**寫到這個 repo 的 `.build/` 目錄。`CLITestHelper` 完全不知道 DerivedData 的存
+在——它的預設路徑只認 `.build/debug` 或 `.build/release`，在 Xcode 驅動的測試執行中永遠找不到
+對應的 `macdoc` binary，導致 `resolveBinaryURL` 擲出 `unavailable`（而不是 fallback 到
+DerivedData）。
+
+要在 Xcode 裡跑這些測試，必須先在命令列跑過一次對應組態的 `swift build`，讓 `.build/<configuration>/macdoc`
+存在；或明確在 Xcode 的 scheme／測試計畫環境變數裡設定 `MACDOC_TEST_BINARY` 指向想要驗證的實際
+binary 路徑（例如某次命令列 `swift build --scratch-path ...` 產出的 binary）。單純從 Xcode 內部
+建置並不會讓這些測試自動找到 Xcode 自己編譯出的 binary——`.build` 與 DerivedData 是兩套互不相通
+的產物目錄。
