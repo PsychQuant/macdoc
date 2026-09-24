@@ -77,6 +77,16 @@ import Foundation
 /// 4. Trim leading/trailing whitespace.
 /// 5. Hash the normalized text with FNV-1a (64-bit), rendered as 16
 ///    lowercase hex digits.
+///
+/// ## Hash collisions (Codex round 2 NEW-3)
+///
+/// FNV-1a 64-bit is not a cryptographic hash and is not injective: two
+/// different texts could, in principle, hash to the same digest. A match on
+/// either `compute(_:)` or `computeExact(_:)` is strong practical evidence
+/// of equality, not a mathematical proof — acceptable for a
+/// misalignment/offset-safety check (not a security boundary), but doc
+/// comments elsewhere that say a match "guarantees" equality should be read
+/// with this caveat in mind.
 enum ParagraphFingerprint {
     /// Unicode "smart punctuation" scalar → canonical ASCII replacement.
     /// Must exactly mirror word-to-md-swift's copy — see that file's doc
@@ -94,9 +104,9 @@ enum ParagraphFingerprint {
     }
 
     /// Byte-exact fingerprint — hashes `runsText` with NO normalization at
-    /// all. Two texts sharing this fingerprint are guaranteed
-    /// character-for-character identical, which is the guarantee
-    /// `RunMeta.range` character offsets need to remain valid.
+    /// all. A match is strong practical evidence (see the "Hash collisions"
+    /// note above) the two texts are scalar-for-scalar identical, which is
+    /// what `RunMeta.range` scalar offsets need to remain valid.
     ///
     /// Concretely: original text `"a---bc"` with a `RunMeta.range` of
     /// `[4, 5)` (targeting `"b"`) round-trips through markdown to `"a—bc"`

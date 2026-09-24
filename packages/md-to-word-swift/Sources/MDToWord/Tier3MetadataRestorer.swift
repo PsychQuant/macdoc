@@ -259,35 +259,59 @@ enum Tier3MetadataRestorer {
 
     // MARK: - Per-run formatting (PsychQuant/macdoc#220 item 4)
 
-    /// Splits `runs` at every `runMetas` entry's `[start, end)` character
-    /// boundary and applies that entry's formatting to every resulting
-    /// segment fully contained within its range.
+    /// Splits `runs` at every `runMetas` entry's `[start, end)` boundary —
+    /// measured in **Unicode scalars**, matching `RunMeta.range`'s
+    /// definition on the forward side (word-to-md-swift's
+    /// `MetadataCollector`) — and applies that entry's formatting to every
+    /// resulting segment fully contained within its range.
+    ///
+    /// ## Why Unicode scalars, not Swift `Character`s (Codex round 2 NEW-1)
+    ///
+    /// Swift `Character` (extended grapheme cluster) counts are NOT
+    /// additive across a string boundary: a combining-character sequence
+    /// (base + combining mark) split across two separately-formatted runs
+    /// counts as 2 `Character`s when each run's text is measured in
+    /// isolation, but merges into a single `Character` if those runs are
+    /// later coalesced into one (e.g. by this restorer's own markdown-based
+    /// reconstruction, which segments runs independently of the original
+    /// document). Offsets computed by summing per-run `Character` counts on
+    /// the forward side can therefore silently disagree with a `Character`
+    /// count taken against the current, differently-segmented `runs` — even
+    /// when the paragraph's exact-fingerprint-verified text is
+    /// byte-identical. Unicode scalars have no such merging behavior:
+    /// concatenating scalar sequences and counting scalars always equals
+    /// the sum of the pieces' own scalar counts, independent of where run
+    /// boundaries fall on either side. Using scalar-based offsets
+    /// throughout (forward computation AND this splitting algorithm)
+    /// eliminates the whole class of drift, rather than only detecting it.
     ///
     /// ## Algorithm
     ///
-    /// 1. Collect every entry's `start`/`end` offset (clamped to the
-    ///    paragraph's total run-text length) into a sorted, deduplicated
-    ///    boundary set.
+    /// 1. Collect every entry's `start`/`end` scalar offset (clamped to the
+    ///    paragraph's total run-text scalar count) into a sorted,
+    ///    deduplicated boundary set.
     /// 2. Walk `runs` in order, splitting each run's `.text` at any
-    ///    boundary that falls strictly inside it, producing a flat list of
-    ///    `(characterRange, Run)` segments — each segment initially a copy
-    ///    of its parent run (same properties, sliced text). A run carrying
-    ///    a `drawing` (image) is passed through as a single un-split
-    ///    segment regardless of boundaries landing inside its (zero-length
-    ///    text) span, since mutating an image run's `rPr` is not a
-    ///    meaningful operation here.
+    ///    boundary that falls strictly inside it (via
+    ///    `String.unicodeScalars`, reassembled through
+    ///    `String.UnicodeScalarView`), producing a flat list of
+    ///    `(scalarRange, Run)` segments — each segment initially a copy of
+    ///    its parent run (same properties, sliced text). A run carrying a
+    ///    `drawing` (image) is passed through as a single un-split segment
+    ///    regardless of boundaries landing inside its (zero-length text)
+    ///    span, since mutating an image run's `rPr` is not a meaningful
+    ///    operation here.
     /// 3. For each `runMetas` entry, apply its formatting to every segment
-    ///    whose character range is fully contained in `[start, end)`.
+    ///    whose scalar range is fully contained in `[start, end)`.
     ///
     /// Callers (`restore(_:onto:)`) only invoke this after confirming the
-    /// paragraph's text-fingerprint matches, so the offsets are guaranteed
-    /// valid against `runs`' own concatenated text — this function does not
-    /// re-verify that itself, only clamps individual out-of-bounds ranges
-    /// defensively.
+    /// paragraph's *byte-exact* fingerprint matches, so the offsets are
+    /// guaranteed valid against `runs`' own concatenated text — this
+    /// function does not re-verify that itself, only clamps individual
+    /// out-of-bounds ranges defensively.
     private static func applyRunFormatting(_ runMetas: [RunMeta], to runs: inout [Run]) {
         guard !runMetas.isEmpty, !runs.isEmpty else { return }
 
-        let totalLength = runs.reduce(0) { $0 + $1.text.count }
+        let totalLength = runs.reduce(0) { $0 + $1.text.unicodeScalars.count }
         guard totalLength > 0 else { return }
 
         var boundaries = Set<Int>([0, totalLength])
@@ -308,7 +332,8 @@ enum Tier3MetadataRestorer {
         var cursor = 0
         for run in runs {
             let runStart = cursor
-            let runEnd = cursor + run.text.count
+            let runScalars = Array(run.text.unicodeScalars)
+            let runEnd = cursor + runScalars.count
             cursor = runEnd
 
             guard run.drawing == nil, runStart < runEnd else {
@@ -327,16 +352,15 @@ enum Tier3MetadataRestorer {
                 continue
             }
 
-            let characters = Array(run.text)
             var pieceStart = runStart
             for boundary in innerBoundaries {
                 var piece = run
-                piece.text = String(characters[(pieceStart - runStart)..<(boundary - runStart)])
+                piece.text = String(String.UnicodeScalarView(runScalars[(pieceStart - runStart)..<(boundary - runStart)]))
                 segments.append((pieceStart..<boundary, piece))
                 pieceStart = boundary
             }
             var lastPiece = run
-            lastPiece.text = String(characters[(pieceStart - runStart)..<(runEnd - runStart)])
+            lastPiece.text = String(String.UnicodeScalarView(runScalars[(pieceStart - runStart)..<(runEnd - runStart)]))
             segments.append((pieceStart..<runEnd, lastPiece))
         }
 
