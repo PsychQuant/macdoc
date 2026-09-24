@@ -145,6 +145,7 @@ swift run macdoc convert --to json file.bib          # Bib → JSON
 # 執行 CLI — PDF pipeline（OCR + Phase 2 consolidation）
 swift run macdoc pdf ocr --project /path/to/project              # 整頁 GLM-OCR（預設 local MLX）
 swift run macdoc pdf ocr --project /path/to/project --mode ollama # 透過 Ollama HTTP API
+swift run macdoc pdf migrate-figures --project /path/to/project   # 0.4.0 前的舊專案：重新裁切成帶頁碼的圖檔名（不呼叫 AI，#222）
 swift run macdoc pdf normalize --project /path/to/project
 swift run macdoc pdf fix-envs --project /path/to/project [--fix]
 swift run macdoc pdf compile-check --project /path/to/project
@@ -168,13 +169,11 @@ swift run macdoc config ai set agent claude
 swift run macdoc config ocr list
 swift run macdoc config ocr add-host kyle localhost:11435  # 例：SSH tunnel 到遠端 Ollama
 swift run macdoc config ocr set-default kyle
-# pdf ocr 的 --host／--model 優先序：明確給的 flag > 這裡的設定 > 內建預設（#218）。
-# --mode（local／ollama）不受影響、不讀這裡的 backend 設定：--mode 仍照舊維持
-# 自己內建的預設值 local，要用 Ollama 得自己傳 --mode ollama，不會從
-# config ocr set-backend 推斷——ocrDefaultBackend 這個欄位在設定檔結構本身的
-# 預設值就是 "ollama"，沒辦法跟「使用者真的執行過 config ocr set-backend」
-# 區分，貿然接上會讓完全沒碰過 OCR 設定的人，pdf ocr 的預設模式從本機 local
-# 被靜默換成需要外部服務的 ollama。
+swift run macdoc config ocr set-backend ollama             # pdf ocr 沒給 --mode 時的預設（mlx 即 local）
+# pdf ocr 的優先序一律是：明確給的 flag > 這裡的設定 > 內建預設。
+# --mode 看 set-backend 設定的值（pdf-to-latex-swift#11），都沒設時用 local；只認經由
+# set-backend 設定的值，設定檔裡舊的 ocrDefaultBackend 欄位（預設值 "ollama"）不算。
+# --host／--model 只在 --mode ollama 時讀這裡的設定（#218）；明確給 --mode local 時完全不讀設定檔。
 # 通用文字辨識入口 `macdoc ocr` 已移除（#145），改用 bestocr。
 
 # 建構個別套件

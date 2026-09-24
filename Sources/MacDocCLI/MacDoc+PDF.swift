@@ -15,6 +15,7 @@ extension MacDoc {
                 Segment.self,
                 Render.self,
                 OCRPages.self,
+                MigrateFigures.self,
                 Blocks.self,
                 Transcribe.self,
                 TranscribePages.self,
@@ -109,6 +110,78 @@ extension MacDoc {
         }
 
         // MARK: macdoc pdf render
+        // MARK: pdf migrate-figures (#222)
+
+        /// 把 pdf-to-latex 0.4.0 之前轉寫的專案，依 responses 的 figure bbox 重新裁切成
+        /// 帶頁碼的圖檔名並改寫 `tex/page-*.tex` 的引用（不呼叫 AI）。實作在
+        /// pdf-to-latex-swift 0.5.0 的 `PageTranscriber.migrateFigureCrops`；流程冪等，可重跑。
+        struct MigrateFigures: AsyncParsableCommand {
+            static let configuration = CommandConfiguration(
+                commandName: "migrate-figures",
+                abstract: "把 0.4.0 之前轉寫的專案重新裁切成帶頁碼的圖檔名，並改寫 LaTeX 引用（不呼叫 AI）。"
+            )
+
+            @Option(name: .long, help: "專案資料夾。")
+            var project: String = "."
+
+            @Option(name: .long, help: "起始頁碼。")
+            var firstPage: Int?
+
+            @Option(name: .long, help: "結束頁碼。")
+            var lastPage: Int?
+
+            mutating func run() throws {
+                let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                let resolved = try ProjectResolver().resolve(project: project, pdf: nil, output: nil, cwd: cwd)
+                let pageNumbers = try BlockSegmentationPipeline().resolvePageNumbers(
+                    total: resolved.manifest.pages.count, firstPage: firstPage, lastPage: lastPage
+                )
+
+                let outcomes: [FigureMigrationOutcome]
+                do {
+                    outcomes = try PageTranscriber().migrateFigureCrops(project: resolved, pageNumbers: pageNumbers)
+                } catch {
+                    throw ValidationError(
+                        "遷移中止：\(error.localizedDescription)。accumulated.tex 沒有被覆寫；已處理頁面的 tex 與圖檔可能已更新，排除問題後重跑即可（流程冪等）。"
+                    )
+                }
+
+                Self.summary(outcomes).forEach { print($0) }
+                if outcomes.contains(where: { if case .writeFailed = $0.kind { return true } else { return false } }) {
+                    throw ExitCode.failure
+                }
+            }
+
+            /// 例行結果（已遷移、未變動、沒有 figure 資料）只計數；需要處理的逐頁列出，
+            /// 連同每頁的 note。
+            static func summary(_ outcomes: [FigureMigrationOutcome]) -> [String] {
+                var migratedPages = 0, figures = 0, unchanged = 0, noFigureData = 0
+                var lines: [String] = []
+                for outcome in outcomes {
+                    let page = outcome.page
+                    switch outcome.kind {
+                    case .migrated(let processed):
+                        migratedPages += 1
+                        figures += processed
+                    case .unchanged:
+                        unchanged += 1
+                    case .noFigureData:
+                        noFigureData += 1
+                    case .noPageTexFile:
+                        lines.append(String(format: "  ⚠ 第 %d 頁：找不到 tex/page-%04d.tex（這一頁還沒轉寫？）", page, page))
+                    case .noPageImage:
+                        lines.append("  ⚠ 第 \(page) 頁：manifest 沒有這一頁的渲染圖，請先執行 macdoc pdf render")
+                    case .writeFailed(let reason):
+                        lines.append("  ✗ 第 \(page) 頁：寫入失敗（\(reason)）")
+                    }
+                    for note in outcome.notes {
+                        lines.append("  ⚠ 第 \(page) 頁：\(note)")
+                    }
+                }
+                return ["figure 遷移：已遷移 \(migratedPages) 頁（\(figures) 張圖），未變動 \(unchanged) 頁，沒有 figure 資料 \(noFigureData) 頁"] + lines
+            }
+        }
+
         struct Render: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "render",
