@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.9.0] - 2026-09-24
+
+### Changed
+
+- CLI binary **0.11.0 → 0.12.0**：
+  - `convert` 的文字輸出在 stdout 是 pipe 時不再以「The file couldn't be saved」exit 1（PsychQuant/macdoc#223，common-converter-swift 0.5.0）。
+  - `pdf ocr` 沒給 `--mode` 時採用 `config ocr set-backend` 明確設定的值（mlx 即 local），都沒設時 local；不合法的 `--mode` 值改為報錯（PsychQuant/pdf-to-latex-swift#11）。`config ocr list` 未設定 backend 時顯示「未設定」。
+  - `config ai detect` 只覆寫偵測欄位，不再把 `config ocr` 的 host／model 打回預設值；`config ai` 三個子命令支援 `--config`（#226）。
+  - 新增 `pdf migrate-figures`：把 pdf-to-latex 0.4.0 之前轉寫的專案重新裁切成帶頁碼的圖檔名並改寫引用，不呼叫 AI（#222）。
+  - 依賴 pdf-to-latex-swift 0.5.0：旋轉 90／270 度的頁面渲染修正（#222）、轉寫時只在本批次內查頁面圖（#221）、貨幣 `$` 跳脫冪等（PsychQuant/pdf-to-latex-swift#4）。
+  - 測試基礎設施：`runProcess` 的 pipe FD 繼承（#224）、OCR backend 建構可注入（#225）。
+- skill：`config ai detect` 的保留行為與 `--config`、`pdf ocr --mode` 讀取 `set-backend` 的優先序、1.9.0 版本紀錄。
+
 ## [1.8.0] - 2026-09-24
 
 ### Changed
