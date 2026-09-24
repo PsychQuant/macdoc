@@ -2,14 +2,19 @@ import Testing
 import Foundation
 
 /// E2E 測試：所有 convert 路由
-///
-/// NOTE: 部分使用 common-converter-swift 的 convertToStdout 路由有已知 bug —
-/// 轉換成功（stdout 有正確輸出）但 exit code 為 1。
-/// 這些 test 用 assertOutputContains 驗證輸出內容而非 exit code。
 struct ConvertRouteTests {
 
-    /// 驗證 stdout 包含預期內容（不檢查 exit code，因為已知 converter bug）
+    /// 驗證 stdout 包含預期內容，並檢查 exit code。
+    ///
+    /// PsychQuant/macdoc#223：這裡曾經只驗證內容、不驗證 exit code，因為
+    /// `common-converter-swift` 的 `convertToStdout` 路由（`docx → md`、
+    /// `docx → html`、`html → md`、`srt → html` 都走這條）在 stdout 是 pipe
+    /// 時——而 `CLITestHelper.run` 底下正是用 `Pipe()` 接 stdout——即使內容
+    /// 完全正確也會以 exit 1 結束。那個 bug 已在 common-converter-swift
+    /// 修好（`FileHandleOutput.flush()` 不再對 pipe 做 fsync），這裡改回
+    /// 檢查 exit code，不然這個測試本身就是 bug 被掩蓋掉的原因。
     func assertOutputContains(_ result: CLIResult, _ substring: String, message: String) {
+        #expect(result.succeeded, "\(message) — exit code 應為 0\nstderr: \(result.stderr)")
         #expect(result.stdout.contains(substring), "\(message). stdout was: \(result.stdout.prefix(200))")
     }
 
@@ -133,5 +138,30 @@ struct ConvertRouteTests {
         let result = try CLITestHelper.convert(to: "docx", input: input, flags: ["--output", outputPath])
         #expect(result.succeeded, "tex → docx should succeed")
         #expect(FileManager.default.fileExists(atPath: outputPath), "output file should exist")
+    }
+
+    // MARK: - #223: stdout as a real OS pipe
+
+    /// Literal reproduction of #223's repro line
+    /// (`macdoc convert --to html a.srt | cat`): a *real* shell pipeline
+    /// with macdoc's stdout connected to another process's stdin, not just
+    /// `CLITestHelper`'s own `Pipe()`-backed capture (every other test in
+    /// this file already runs through that pipe — restoring the exit-code
+    /// checks above is itself a regression test — but this one pins the
+    /// exact user-facing scenario the issue reported, independent of how
+    /// `CLITestHelper` happens to capture output). `set -o pipefail` makes
+    /// the shell's own exit code reflect macdoc's, not `cat`'s.
+    @Test("stdout piped through another process exits 0 (macdoc#223)")
+    func stdoutThroughARealPipeExitsZero() throws {
+        let binary = try CLITestHelper.binaryPath
+        let input = FixtureManager.srtFile()
+        let shellCommand = "set -o pipefail; '\(binary)' convert --to html --css dark '\(input)' | cat > /dev/null"
+        let result = try CLITestHelper.runProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", shellCommand],
+            currentDirectory: CLITestHelper.repoRoot,
+            timeout: 30)
+        #expect(result.succeeded,
+                "macdoc convert piped to another process should exit 0, not fail with \"couldn't be saved\"\nstderr: \(result.stderr)")
     }
 }

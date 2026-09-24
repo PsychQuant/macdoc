@@ -17,7 +17,11 @@ struct ConvertFlagTests {
     func cssDarkSrtToHtml() throws {
         let input = FixtureManager.srtFile()
         let result = try CLITestHelper.convert(to: "html", input: input, flags: ["--full", "--css", "dark"])
-        // 驗證有 dark 相關 CSS（不管 exit code，因為 convertToStdout bug）
+        // PsychQuant/macdoc#223：這個 route 帶 `--full`，走的是
+        // writeStringOutput/print，本來就不受 convertToStdout 那個 fsync
+        // bug 影響（見下面 srtToHtmlWithoutCSSSucceeds 的說明）；exit code
+        // 之前沒檢查只是寫測試時過度保守，現在補回來。
+        #expect(result.succeeded, "should succeed\nstderr: \(result.stderr)")
         let output = result.stdout.lowercased()
         #expect(output.contains("dark") || output.contains("#1a1a2e") || output.contains("background"),
                 "should contain dark theme elements")
