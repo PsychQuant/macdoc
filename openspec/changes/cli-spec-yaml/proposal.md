@@ -30,6 +30,6 @@ Recorded in design.md (Goals / Non-Goals): no spec-first generation of Swift rou
 
 - Affected specs: `cli-spec` (new)
 - Affected code:
-  - New: Sources/CLISpec/DumpHelp.swift, Sources/CLISpec/CLISpecModel.swift, Sources/CLISpec/CLISpecBuilder.swift, Sources/CLISpec/YAMLEmitter.swift, Sources/CLISpec/CLISpecGenerator.swift, Sources/CLISpec/MacDocCLIMetadata.swift, Tests/MacDocCLITests/CLISpecHarness.swift, Tests/MacDocCLITests/CLISpecEmitterTests.swift, Tests/MacDocCLITests/CLISpecBuilderTests.swift, Tests/MacDocCLITests/CLISpecContractTests.swift, Tests/MacDocCLITests/CLISpecDriftTests.swift, Tests/MacDocCLITests/CLISpecRouteProbeTests.swift, Tests/MacDocCLITests/CLISpecConversionsDocTests.swift, cli-spec.yaml
+  - New: Sources/CLISpec/DumpHelp.swift, Sources/CLISpec/CLISpecMetadata.swift, Sources/CLISpec/CLISpecModel.swift, Sources/CLISpec/CLISpecError.swift, Sources/CLISpec/CLISpecBuilder.swift, Sources/CLISpec/YAMLEmitter.swift, Sources/CLISpec/CLISpecGenerator.swift, Sources/CLISpec/MacDocCLIMetadata.swift, Tests/MacDocCLITests/CLISpecHarness.swift, Tests/MacDocCLITests/CLISpecEmitterTests.swift, Tests/MacDocCLITests/CLISpecBuilderTests.swift, Tests/MacDocCLITests/CLISpecContractTests.swift, Tests/MacDocCLITests/CLISpecDriftTests.swift, Tests/MacDocCLITests/CLISpecRouteProbeTests.swift, Tests/MacDocCLITests/CLISpecConversionsDocTests.swift, cli-spec.yaml
   - Modified: Package.swift, Makefile, CLAUDE.md, CONVERSIONS.md
   - Removed: (none)
