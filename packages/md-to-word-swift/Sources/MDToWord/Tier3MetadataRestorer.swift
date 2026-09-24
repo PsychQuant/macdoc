@@ -79,8 +79,10 @@ import OOXMLSwift
 /// and never had an established "trust the index blindly" behavior to
 /// preserve):
 /// - **Present and matching** → `applyRunFormatting` runs; the current
-///   paragraph's run text is proven byte-identical to what `RunMeta.range`
-///   was captured against, so the offsets are safe.
+///   paragraph's run text has strong practical evidence of being
+///   byte-identical to what `RunMeta.range` was captured against (subject
+///   to `ParagraphFingerprint`'s documented hash-collision caveat — not a
+///   security boundary), so the offsets are safe to apply.
 /// - **Absent, or present but not matching** → `runs` are left untouched,
 ///   recorded in the report as `.exactFingerprintMismatchOrAbsent`. This
 ///   still leaves the entry's paragraph-level fields applied (if the loose
@@ -310,10 +312,11 @@ enum Tier3MetadataRestorer {
     ///    whose scalar range is fully contained in `[start, end)`.
     ///
     /// Callers (`restore(_:onto:)`) only invoke this after confirming the
-    /// paragraph's *byte-exact* fingerprint matches, so the offsets are
-    /// guaranteed valid against `runs`' own concatenated text — this
-    /// function does not re-verify that itself, only clamps individual
-    /// out-of-bounds ranges defensively.
+    /// paragraph's *byte-exact* fingerprint matches, so the offsets have
+    /// strong practical evidence of being valid against `runs`' own
+    /// concatenated text (subject to `ParagraphFingerprint`'s documented
+    /// hash-collision caveat) — this function does not re-verify that
+    /// itself, only clamps individual out-of-bounds ranges defensively.
     private static func applyRunFormatting(_ runMetas: [RunMeta], to runs: inout [Run]) {
         guard !runMetas.isEmpty, !runs.isEmpty else { return }
 
