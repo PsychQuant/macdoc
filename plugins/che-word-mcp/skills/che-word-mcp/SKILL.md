@@ -226,11 +226,11 @@ export_all_images(doc_id, output_dir)
 
 #### 產物可讀嗎？先看 coverage
 
-腳本有兩條 channel：typed DSL（可讀）與 raw（整個 XML part 逐字塞進一行）。**DSL 升級是 per-part 全有全無**——文件含任一表格，整個 `word/document.xml` 就整份掉到 raw。
+腳本有兩條 channel：typed DSL（可讀）與 raw（整個 XML part 逐字塞進一行）。**DSL 升級是 per-part 全有全無**——canonical minimal table 可用 typed `appendTable` 升級；只要 part 內任何一處（含不支援的 rich／foreign-form 表格、或缺 `w14:paraId` 的段落）無法以 typed 形式試重建 byte-equal，整個 part 才會落到 raw。判準細節與各原因的對應策略見 macdoc plugin 的 `swiftify` skill，不在此重複。
 
-實測真實官方表單（`REC-O-01`）：`0.0% DSL (0 / 190479 XML bytes across 16 parts)`，產出 24 行 / 212 KB，其中 document.xml 那行約 118 KB。**可完美重播，但不可讀、不可手改、無法有意義 diff。**
+實測真實官方表單（`REC-O-01`）：`0.0% DSL (0 / 190479 XML bytes across 16 parts)`，產出 24 行 / 212 KB，其中 document.xml 那行約 118 KB。**可完美重播，但不可讀、不可手改、無法有意義 diff。**這是這一份文件的量測結果，不是「含表格就必然 0% DSL」的通則——`swiftify` skill 有 canonical table 成功升級的對照案例。
 
-所以先跑 `get_script_coverage` 再決定期待值。完整工作流見 macdoc plugin 的 `swiftify` skill。
+所以先跑 `get_script_coverage` 再決定期待值。**已知缺口**：`get_script_coverage` 的回應只有 `channel`／`bytes`／`dsl_ratio`（見上表），不像 macdoc CLI 0.9.0+ 的 `word reverse` stderr 那樣具名 part 落 raw 的根因（`table`／`paragraph-no-paraId`／…）；`export_script` 的回應同樣沒有對應的提示欄位。純走 MCP、看不到 CLI stderr 的呼叫端目前**無法**從這兩個工具的回應本身分辨「這份文件缺 paraId、可以改用 paragraphs-only」還是別的原因，而且 che-word-mcp **目前沒有** CLI `--paragraphs-only` 的對應工具或參數——判定原因與改走段落 DSL 這條備援路徑目前只能透過 macdoc CLI 本身完成。完整工作流見 macdoc plugin 的 `swiftify` skill。
 
 ## Tips
 
