@@ -4,6 +4,19 @@ All notable changes to the che-pptx-mcp plugin shell will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-09-25
+
+### Changed
+
+- `binary_version` 0.4.0 → **0.5.0**（依賴 pptx-swift 0.6.0）：
+  - 旋轉與翻轉（`rot`／`flipH`／`flipV`）存檔後保留（PsychQuant/pptx-swift#7）。
+  - 連接線（`p:cxnSp`）存檔後不再消失，`delete_shape` 會解除黏在被刪形狀上的連接線；其他未建模的投影片子元素以原始 XML 保留，`get_slide_shapes` 列為 `Raw(...)`（PsychQuant/pptx-swift#9）。
+  - 表格儲存格改寫 `a:txBody`，修正 LibreOffice 從該表格起整張投影片後續內容不渲染（PsychQuant/pptx-swift#10）。
+  - 形狀的主題樣式參照（`p:style`）與未建模的形狀屬性（自訂幾何、清單外的預設形狀與調整值、效果、3D、外框的虛線與主題色等）存檔後保留（PsychQuant/pptx-swift#11、PsychQuant/pptx-swift#12）；`set_shape_fill` 對讀進來的漸層與圖片填色形狀真的生效。
+  - 含圖表、SmartArt、OLE 物件、圖片填色形狀等內容的簡報改為拒絕存檔，不再靜默刪除或寫壞（PsychQuant/pptx-swift#15）；`open_presentation` 開檔時列出擋住存檔的元素與走得通的補救方式。
+- skill 的誠實邊界同步更新：拿掉「旋轉／翻轉未建模」，補上上述保留範圍、拒絕存檔的情形與補救方式，並列出仍會遺失或改變的內容（PsychQuant/pptx-swift#13、PsychQuant/pptx-swift#14、PsychQuant/pptx-swift#16、PsychQuant/pptx-swift#17）與搜尋範圍限制（PsychQuant/che-pptx-mcp#13）。
+- gitlink `mcp/che-pptx-mcp` 指向 v0.5.0 的 release commit。
+
 ## [0.4.0] - 2026-09-24
 
 ### Changed
