@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.10.0] - 2026-09-25
+
+### Changed
+
+- CLI binary **0.12.0 → 0.13.0**（依賴 ooxml-swift 3.12.0）：
+  - `word reverse --paragraphs-only` 改呼叫 `ReverseExtractor.paragraphsOnly`，與 che-word-mcp 的 `export_script(paragraphs_only:)` 共用同一份實作（PsychQuant/ooxml-swift#172）；兩份真實範本新舊輸出逐位元組相同。略過區塊的 stderr 訊息改由封閉列舉產生；格式錯誤的 `--slot` 在只印 coverage 時也會報錯。
+  - typed 編輯不再讓未被編輯的段落遺失未建模的 `w:pPr` 子元素（PsychQuant/ooxml-swift#168）。
+  - 讀取 Word 文件時所有 part 一致解碼，非 UTF-8 宣告依宣告轉碼（PsychQuant/ooxml-swift#171）；依 relationship 解析格式 part 與主 part（PsychQuant/ooxml-swift#173）。
+- skill：1.10.0 版本紀錄。
+
 ## [1.9.0] - 2026-09-24
 
 ### Changed

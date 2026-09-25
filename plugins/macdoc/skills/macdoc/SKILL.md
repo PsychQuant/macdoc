@@ -258,6 +258,7 @@ macdoc config document gc --force                             # 實際刪除；�
 
 ## 版本紀錄
 
+- **1.10.0**：`word reverse --paragraphs-only` 改用 ooxml-swift 的共用實作（與 che-word-mcp 一致）；讀寫 Word 文件時保留未建模的段落屬性（`w:kinsoku`、`w:snapToGrid` 等）、非 UTF-8 宣告的 part 正確轉碼、依 relationship 找格式 part（需要 CLI 0.13.0）
 - **1.9.0**：`convert` 的輸出接 pipe 時不再 exit 1；`pdf ocr` 沒給 `--mode` 時採用 `config ocr set-backend` 的值；`config ai detect` 不再洗掉 OCR 設定；新增 `pdf migrate-figures`（0.4.0 前的舊專案重新裁切成帶頁碼的圖檔名，不呼叫 AI）；旋轉頁的渲染修正（需要 CLI 0.12.0）
 - **1.8.0**：`pdf ocr --mode ollama` 會讀 `config ocr` 的 host／model；SRT／note 轉 HTML 不帶 `--css` 時預設 `dark`；`pdf normalize` 會依 PDF 的 page labels 還原頁碼、為偶數頁起始的章節加 `openany`、圖寬改為原書絕對尺寸（需要 CLI 0.11.0）
 - **1.7.0**：新增 `config document gc`（清理未被引用的格式快照）；`pdf normalize` 會還原原書頁碼與圖片比例並印出摘要（需要 CLI 0.10.0）
