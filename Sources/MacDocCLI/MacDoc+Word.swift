@@ -89,6 +89,26 @@ extension MacDoc.Word {
             let log: OperationLog
             var dslParts: Set<String> = []
             var rawReasons: [String: String] = [:]
+
+            // Parse --slot name=paraId designations (strict: malformed
+            // designations fail loudly, never degrade silently). Parsed up
+            // front because the paragraphs-only path needs them when it
+            // builds the script.
+            var designations: [SlotDesignation] = []
+            for raw in slots {
+                let pieces = raw.split(separator: "=", maxSplits: 1)
+                guard pieces.count == 2, !pieces[0].isEmpty, !pieces[1].isEmpty else {
+                    throw ValidationError("無效的 slot 指定: \(raw)（格式為 <name>=<paragraph-id>）")
+                }
+                designations.append(SlotDesignation(
+                    name: String(pieces[0]), paraId: String(pieces[1])))
+            }
+
+            // The paragraphs-only reverse lives in ooxml-swift (#172 there),
+            // shared with che-word-mcp's export_script(paragraphs_only:), so
+            // the two surfaces cannot drift apart. It returns the finished
+            // script, not a log.
+            var paragraphsOnlyScript: String?
             if let sidecarLog = try SidecarStore.loadLog(alongside: inputURL) {
                 log = sidecarLog
                 FileHandle.standardError.write(Data(
@@ -97,7 +117,19 @@ extension MacDoc.Word {
                 throw ValidationError(
                     "找不到 oplog sidecar: \(SidecarStore.oplogURL(for: inputURL).path)")
             } else if paragraphsOnly {
-                log = try Self.reverseEngineer(from: inputURL)
+                let result: (script: String, omittedBlocks: [ReverseExtractor.OmittedBodyBlock])
+                do {
+                    result = try ReverseExtractor.paragraphsOnly(url: inputURL, slots: designations)
+                } catch let TranscodeError.slotDesignationFailure(name, reason) {
+                    throw ValidationError("slot「\(name)」無法建立: \(reason)")
+                }
+                paragraphsOnlyScript = result.script
+                log = OperationLog()  // 不會用到：腳本已由 paragraphsOnly 產生
+                if !result.omittedBlocks.isEmpty {
+                    let labels = result.omittedBlocks.map { Self.label(for: $0.reason) }
+                    FileHandle.standardError.write(Data(
+                        "警告: 以下 block 內容尚無反向工程通道，已略過: \(labels.joined(separator: ", "))\n".utf8))
+                }
             } else {
                 // Full-fidelity default (Phase C): all parts ride the script —
                 // raw channel floor + typed DSL upgrades where byte-equal
@@ -125,23 +157,15 @@ extension MacDoc.Word {
             // Coverage-only: report printed, nothing to write.
             guard let outputURL, let toMdocx else { return }
 
-            // Parse --slot name=paraId designations (strict: malformed
-            // designations fail loudly, never degrade silently).
-            var designations: [SlotDesignation] = []
-            for raw in slots {
-                let pieces = raw.split(separator: "=", maxSplits: 1)
-                guard pieces.count == 2, !pieces[0].isEmpty, !pieces[1].isEmpty else {
-                    throw ValidationError("無效的 slot 指定: \(raw)（格式為 <name>=<paragraph-id>）")
-                }
-                designations.append(SlotDesignation(
-                    name: String(pieces[0]), paraId: String(pieces[1])))
-            }
-
             let source: String
-            do {
-                source = try ScriptExporter.exportSwift(log: log, slots: designations)
-            } catch let TranscodeError.slotDesignationFailure(name, reason) {
-                throw ValidationError("slot「\(name)」無法建立: \(reason)")
+            if let paragraphsOnlyScript {
+                source = paragraphsOnlyScript
+            } else {
+                do {
+                    source = try ScriptExporter.exportSwift(log: log, slots: designations)
+                } catch let TranscodeError.slotDesignationFailure(name, reason) {
+                    throw ValidationError("slot「\(name)」無法建立: \(reason)")
+                }
             }
             try source.write(to: outputURL, atomically: true, encoding: .utf8)
             FileHandle.standardError.write(Data("已寫入: \(toMdocx)\n".utf8))
@@ -201,44 +225,15 @@ extension MacDoc.Word {
             ]
         }
 
-        /// Builds an authoring log from the docx typed views (no oplog input).
-        static func reverseEngineer(from url: URL) throws -> OperationLog {
-            let document = try DocxReader.read(from: url, wireTreeBackedViews: true)
-            var log = OperationLog()
-            var skipped: [String] = []
-
-            var paragraphIndex = 0
-            for child in document.body.children {
-                switch child {
-                case .paragraph(let paragraph):
-                    paragraphIndex += 1
-                    var paraId: String?
-                    if let raw = paragraph.elementID?.raw,
-                       raw.hasPrefix("w14:paraId=") {
-                        paraId = String(raw.dropFirst("w14:paraId=".count))
-                    }
-                    // Paragraphs without a w14:paraId (docx from Word or
-                    // other converters) get a synthesized sequential id so
-                    // the emitted source uses DSL-form Paragraph blocks —
-                    // the whole point of reverse-engineering. Re-execution
-                    // stamps these ids into the rebuilt docx (content-
-                    // equivalent, not byte-equal to a paraId-less input).
-                    log.append(.appendParagraph(in: nil, paragraph: ParagraphPayload(
-                        text: paragraph.text,
-                        styleId: paragraph.properties.style,
-                        paraId: paraId ?? "p\(paragraphIndex)")), source: .swift)
-                case .table:
-                    skipped.append("table")
-                default:
-                    skipped.append(String(describing: child).prefix(30).description)
-                }
+        /// 略過區塊的顯示名稱。`OmittedBodyBlockReason` 是封閉列舉，這裡不寫 `default`，
+        /// 上游新增 case 時會在編譯期發現。
+        static func label(for reason: ReverseExtractor.OmittedBodyBlockReason) -> String {
+            switch reason {
+            case .table: return "table"
+            case .contentControl: return "content control"
+            case .bookmarkMarker: return "bookmark"
+            case .rawBlockElement(let name): return name
             }
-
-            if !skipped.isEmpty {
-                FileHandle.standardError.write(Data(
-                    "警告: 以下 block 內容尚無反向工程通道，已略過: \(skipped.joined(separator: ", "))\n".utf8))
-            }
-            return log
         }
     }
 }
