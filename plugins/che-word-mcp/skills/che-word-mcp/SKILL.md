@@ -243,6 +243,8 @@ export_all_images(doc_id, output_dir)
 5. **Check structure first** — `get_document_info` / `get_paragraphs` before editing.
 6. **Export for AI processing** — `export_markdown` for easier text analysis.
 7. **Direct Mode for read-only inspection** — pass `source_path`, skip the open/close lifecycle.
+8. **Pass integers, booleans and numbers as JSON types (binary 4.4.0+).** `"row_index": "3"` or `"bold": "true"` is now rejected with `Invalid parameter '<name>'`; before 4.4.0 such values were silently treated as absent and the default was applied. A parameter is validated whenever it is present, even when another argument means it would not be used. Whole-valued decimals (`3.0`) are accepted; `null` still means "not provided". String parameters are not yet checked this way: a wrongly typed or unknown enum value (e.g. `wrap_type: "bogus"`) still falls back to the default (PsychQuant/che-word-mcp#240).
+9. **Out-of-range values are rejected instead of crashing the server (binary 4.4.0+).** Font sizes, spacing, margins, image sizes, list levels, table dimensions (≤ 63 columns, `rows × cols` ≤ 65,536) and similar values are checked against Word's limits. Before 4.4.0 an extreme value could terminate the server process and lose every open document's unsaved changes. `insert_floating_image` takes an integer EMU offset in `horizontal_position`／`vertical_position` and an alignment keyword in `horizontal_align`／`vertical_align`.
 
 ## Examples
 
