@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.10.1] - 2026-09-25
+
+### Changed
+
+- CLI binary **0.13.0 → 0.13.1**（依賴 ooxml-swift 3.13.0，與 che-word-mcp 4.4.0 同一版）：
+  - typed 編輯後重新序列化的 `w:pPr` 子元素依 schema（`CT_PPr`）順序寫出（PsychQuant/ooxml-swift#175）。
+  - 段落框線 `w:pBdr` 與網底 `w:shd` 在 typed 編輯後不再從整份文件消失；改動框線或網底時，theme 色等 typed 模型表達不了的屬性仍會遺失（PsychQuant/ooxml-swift#176、PsychQuant/ooxml-swift#179）。
+  - CLI 與 che-word-mcp 用同一版 ooxml-swift，`word render`／`execute_script` 與兩邊的 paragraphs-only 反向回到由共用程式碼保證一致。
+
 ## [1.10.0] - 2026-09-25
 
 ### Changed
