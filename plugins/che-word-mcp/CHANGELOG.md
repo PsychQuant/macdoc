@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.4.0] - 2026-09-25
+
+### Changed
+
+- `binary_version` **4.3.0 → 4.4.0**：
+  - **BREAKING（輸入驗證收緊）**：整數、布林、number 參數只接受 JSON 型別；型別錯的值過去被當成沒給、套用預設值後回報成功，現在回 `Invalid parameter`。參數只要出現就驗證，不論這次呼叫會不會用到（PsychQuant/che-word-mcp#232）。
+  - 單一參數能讓 server 行程當掉的輸入（字級、間距、邊界、圖片尺寸、編號層級、表格大小、目錄層級等的極端值）改為回報錯誤（PsychQuant/che-word-mcp#234）。
+  - `set_header_row` 只保留一個註冊，`row_count` 真正生效（PsychQuant/che-word-mcp#230）。
+  - `insert_floating_image` 的位置改為 `*_position`（整數 EMU 偏移）與 `*_align`（對齊關鍵字）兩組參數。
+  - ooxml-swift 3.13.0：typed 編輯後段落框線與網底不再消失、`w:pPr` 子元素依 schema 順序寫出（PsychQuant/ooxml-swift#175、PsychQuant/ooxml-swift#176）；`export_script(paragraphs_only: true)` 改用與 macdoc CLI 共用的實作（PsychQuant/ooxml-swift#172）。
+- skill 的 Tips 補上參數型別與範圍檢查兩條，並寫明字串參數尚未套用同樣規則（PsychQuant/che-word-mcp#240）。
+- gitlink `mcp/che-word-mcp` 指向 4.4.0 的 release commit。
+
 ## [4.3.0] - 2026-09-24
 
 ### Added
