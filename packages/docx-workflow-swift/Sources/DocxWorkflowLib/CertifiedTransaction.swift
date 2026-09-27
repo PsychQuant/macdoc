@@ -111,6 +111,7 @@ public struct CertifiedTransaction {
         // manifest or the baseline's content, so all run before step 1's
         // read.
         try Self.validateOutputIsNotDirectory(outputURL)
+        try Self.validateOutputIsNotSymlink(outputURL) { nil }
         if let certificateURL {
             try Self.validateCertificateDestination(certificateURL, outputURL: outputURL, baselineURL: baselineURL)
         }
@@ -186,6 +187,48 @@ public struct CertifiedTransaction {
 
         // 5. Only if everything passed, atomically rename the candidate.
         if overallPassed {
+            // (R4 review Finding E) Re-check immediately before the rename:
+            // the pre-flight check at step 0 cannot see a symlink that
+            // appeared at the output path during the window between it and
+            // this commit (baseline read, `Executor.apply`, the Layer 1
+            // gate, `Verifier.verify`, and the baseline re-hash all run in
+            // between). This narrows that window without closing it —
+            // design.md and CHANGELOG.md record the remaining race
+            // honestly, the same way the R3 Finding B decision does for its
+            // own narrowed-not-closed window.
+            try Self.validateOutputIsNotSymlink(outputURL) {
+                let rejectedURL = Self.rejectedURL(for: outputURL)
+                do {
+                    try Self.commit(from: candidateURL, to: rejectedURL)
+                    return rejectedURL.path
+                } catch {
+                    candidateCleanupSuppressed = true
+                    return candidateURL.path
+                }
+            }
+
+            // (R4 review Finding F) `rename(2)` does not preserve a
+            // replaced file's permissions/ACL/xattrs the way `FileManager
+            // .replaceItemAt` did; restore them explicitly before the
+            // commit, but only when there is an existing output to inherit
+            // them from.
+            do {
+                try Self.preserveMetadataIfOverwriting(candidateURL: candidateURL, outputURL: outputURL)
+            } catch let failure as MetadataPreservationFailure {
+                let rejectedURL = Self.rejectedURL(for: outputURL)
+                var preservedAt: String?
+                do {
+                    try Self.commit(from: candidateURL, to: rejectedURL)
+                    preservedAt = rejectedURL.path
+                } catch {
+                    candidateCleanupSuppressed = true
+                    preservedAt = candidateURL.path
+                }
+                throw CertificationError.metadataPreservationFailed(
+                    path: outputURL.path, reason: failure.message, rejectedCandidatePath: preservedAt
+                )
+            }
+
             do {
                 try Self.commit(from: candidateURL, to: outputURL)
             } catch let failure as RenameFailure {
@@ -331,6 +374,125 @@ public struct CertifiedTransaction {
 
     private static func removeIfExists(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Output-path-is-a-symlink guard (R4 review Finding E)
+
+    /// True when `url`'s own directory entry — without following it — is a
+    /// symbolic link. Uses `lstat(2)`, not `stat(2)` (which follows the
+    /// link): a dangling symlink (target missing) must still be reported
+    /// as a symlink, and `stat(2)` would instead report "does not exist".
+    private static func isSymlink(_ url: URL) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return false }
+        return (info.st_mode & S_IFMT) == S_IFLNK
+    }
+
+    /// Rejects an output path that is itself a symbolic link (R4 review
+    /// Finding E). POSIX `rename(2)` — the primitive `commit` uses since
+    /// the R3 review's Finding B fix — replaces the symlink's directory
+    /// entry, not the file it points to; before that change,
+    /// `FileManager.replaceItemAt` threw for this same case and touched
+    /// neither the symlink nor its target. Rejecting it here keeps that
+    /// same "safe failure" shape rather than letting `rename(2)`'s
+    /// standard (and, for this caller, surprising) behavior sever an alias
+    /// relationship the caller had deliberately set up.
+    ///
+    /// Called twice: once at Step 0 pre-flight (before any candidate
+    /// exists — `preserveCandidate` returns `nil` there, since there is
+    /// nothing yet to preserve), and once again immediately before the
+    /// commit rename (closing most, but not all, of the TOCTOU window a
+    /// single check would leave open — see the honest note in design.md).
+    /// At the second call site `preserveCandidate` renames the candidate to
+    /// the rejected-candidate path (or reports its own temporary path if
+    /// even that rename fails) and returns wherever it ended up.
+    private static func validateOutputIsNotSymlink(_ outputURL: URL, preserveCandidate: () -> String?) throws {
+        guard isSymlink(outputURL) else { return }
+        let target = (try? FileManager.default.destinationOfSymbolicLink(atPath: outputURL.path)) ?? "（無法讀取連結目標）"
+        throw CertificationError.outputPathIsSymlink(
+            path: outputURL.path, linkTarget: target, rejectedCandidatePath: preserveCandidate()
+        )
+    }
+
+    // MARK: - Overwrite metadata preservation (R4 review Finding F)
+
+    /// A `copyfile(3)` failure while restoring a replaced output's
+    /// permissions/ACL/xattrs onto the candidate.
+    private struct MetadataPreservationFailure: Error {
+        let errnoValue: Int32
+        var message: String { String(cString: strerror(errnoValue)) }
+    }
+
+    /// Restores an existing output's permissions, ACL and extended
+    /// attributes onto the candidate before it is renamed into place (R4
+    /// review Finding F). `FileManager.replaceItemAt` (used before the R3
+    /// review's Finding B fix switched `commit` to plain `rename(2)`)
+    /// preserved these automatically, as Apple documents; `rename(2)` has
+    /// no such feature — the destination's directory entry simply now
+    /// points at the candidate's own inode, carrying whatever permissions
+    /// `Executor`/`DocxWriter` gave it under the process's default umask.
+    /// Without this step, re-running `apply` against an output the caller
+    /// had deliberately locked down (e.g. `chmod 640` on a file containing
+    /// unpublished research) would silently widen it back to the default
+    /// on every successful rerun.
+    ///
+    /// A no-op when `outputURL` does not exist yet: a brand-new output
+    /// keeps the candidate's own default permissions, exactly as before
+    /// this fix. Also a no-op when `outputURL` is a directory — that is
+    /// Finding B's territory (the R3 review), not this one: `copyfile(3)`
+    /// on a directory source without `COPYFILE_RECURSIVE` fails with
+    /// `EINVAL`, which would misreport a directory-appeared-mid-transaction
+    /// race as a metadata-copy failure instead of the `commitFailed`
+    /// (`EISDIR`, from `rename(2)` itself) that case already has dedicated
+    /// handling for, immediately after this function returns.
+    ///
+    /// Uses `copyfile(3)` with `COPYFILE_SECURITY | COPYFILE_XATTR`
+    /// (mode + ACL + extended attributes; ownership too, subject to the
+    /// same-user case this transaction always runs under — `copyfile`
+    /// cannot `chown` across users without root, and neither could a
+    /// caller of this CLI). `COPYFILE_STAT` — part of `COPYFILE_SECURITY`
+    /// — also copies modification time, which is NOT wanted here: the
+    /// candidate's content genuinely changed, so its own modification time
+    /// (captured before the `copyfile` call) is restored immediately
+    /// after. Creation time is the opposite case — it is carried over
+    /// deliberately, via `FileManager` rather than relying on `copyfile`'s
+    /// own handling of it, so the file's birth date survives edits made
+    /// through this transaction the same way it would survive an edit made
+    /// directly in Word.
+    ///
+    /// Throws (never lets the candidate land with wider-than-intended
+    /// permissions) if the underlying `copyfile(3)` call itself fails —
+    /// e.g. the existing output became unreadable between pre-flight and
+    /// here. The caller rejects the commit outright in that case rather
+    /// than risk landing looser access than the file being replaced had.
+    private static func preserveMetadataIfOverwriting(candidateURL: URL, outputURL: URL) throws {
+        let fm = FileManager.default
+        var outputIsDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: outputURL.path, isDirectory: &outputIsDirectory) else { return }
+        guard !outputIsDirectory.boolValue else { return }
+
+        let candidateAttributesBefore = try fm.attributesOfItem(atPath: candidateURL.path)
+        let candidateModificationDateBefore = candidateAttributesBefore[.modificationDate] as? Date
+
+        let oldOutputAttributes = try fm.attributesOfItem(atPath: outputURL.path)
+        let oldOutputCreationDate = oldOutputAttributes[.creationDate] as? Date
+
+        let flags = copyfile_flags_t(COPYFILE_SECURITY | COPYFILE_XATTR)
+        let result = outputURL.path.withCString { oldOutputPath in
+            candidateURL.path.withCString { candidatePath in
+                copyfile(oldOutputPath, candidatePath, nil, flags)
+            }
+        }
+        guard result == 0 else {
+            throw MetadataPreservationFailure(errnoValue: errno)
+        }
+
+        var restore: [FileAttributeKey: Any] = [:]
+        if let candidateModificationDateBefore { restore[.modificationDate] = candidateModificationDateBefore }
+        if let oldOutputCreationDate { restore[.creationDate] = oldOutputCreationDate }
+        if !restore.isEmpty {
+            try fm.setAttributes(restore, ofItemAtPath: candidateURL.path)
+        }
     }
 
     // MARK: - Same-file identity (R3 review Finding A)

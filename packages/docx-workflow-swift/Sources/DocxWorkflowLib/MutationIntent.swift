@@ -65,6 +65,34 @@ public enum CertificationError: Error {
     /// fallback rename succeeds; it is `nil` only if even that failed (the
     /// candidate then remains at its own temporary path, not deleted).
     case commitFailed(path: String, reason: String, rejectedCandidatePath: String?)
+    /// The output path is itself a symbolic link (R4 review Finding E).
+    /// POSIX `rename(2)` — unlike `FileManager.replaceItemAt`, which threw
+    /// and touched nothing for this same case — replaces the SYMLINK
+    /// itself when its destination names one, not the file the symlink
+    /// points to: the alias relationship the caller set up would be
+    /// silently severed, and whatever the link used to point to is left
+    /// untouched and now out of sync with the new output. Rejected instead,
+    /// before any candidate is written, if the symlink was already there
+    /// at the pre-flight check; or with the candidate preserved at
+    /// `rejectedCandidatePath` (non-`nil`), if the symlink appeared only in
+    /// the narrow window between pre-flight and the commit rename (checked
+    /// again immediately before that rename). `linkTarget` is the raw
+    /// value the symlink points to, for the error message to suggest using
+    /// the real path instead.
+    case outputPathIsSymlink(path: String, linkTarget: String, rejectedCandidatePath: String?)
+    /// The output path already exists, so its permissions, ACL and
+    /// extended attributes must be carried over onto the candidate before
+    /// the commit (R4 review Finding F) — `rename(2)`, unlike the
+    /// `FileManager.replaceItemAt` this replaced, does not do this itself,
+    /// so without this step a caller's tighter permissions on an existing
+    /// output would be silently widened back to the process's default
+    /// umask on every rerun. This case is thrown if that copy itself fails
+    /// (`copyfile(3)`, e.g. the existing output became unreadable) — the
+    /// commit is rejected outright rather than land with looser access
+    /// than the file being replaced had. The candidate is preserved at
+    /// `rejectedCandidatePath` when the fallback rename succeeds; `nil`
+    /// only if even that failed.
+    case metadataPreservationFailed(path: String, reason: String, rejectedCandidatePath: String?)
 }
 
 /// The set of package parts a manifest is allowed to change, derived from
