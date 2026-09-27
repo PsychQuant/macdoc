@@ -874,7 +874,7 @@ commands:
     abstract: "Manifest-driven .docx edit workflows."
     subcommands: [apply, plan, verify, diff]
   - path: "macdoc docx apply"
-    abstract: "Apply a manifest to a baseline .docx and write the result."
+    abstract: "Apply a manifest to a baseline .docx and write the result through the certified transaction."
     arguments:
       - name: manifest-path
         required: true
@@ -888,6 +888,10 @@ commands:
         value_name: output
         required: true
         help: "Output .docx path."
+      - names: ["--certificate"]
+        value_name: certificate
+        required: false
+        help: "Optional path to write the Layer 1 certification certificate (JSON), on success and on failure."
   - path: "macdoc docx plan"
     abstract: "Resolve anchors and print the planned Edit sequence without writing output."
     arguments:

@@ -30,7 +30,7 @@ extension MacDoc.Docx {
     struct Apply: ParsableCommand {
         static var configuration = CommandConfiguration(
             commandName: "apply",
-            abstract: "Apply a manifest to a baseline .docx and write the result."
+            abstract: "Apply a manifest to a baseline .docx and write the result through the certified transaction."
         )
 
         @Argument(help: "Path to the manifest JSON file.")
@@ -42,6 +42,17 @@ extension MacDoc.Docx {
         @Option(name: [.long, .customShort("o")], help: "Output .docx path.")
         var output: String
 
+        @Option(name: [.long], help: "Optional path to write the Layer 1 certification certificate (JSON), on success and on failure.")
+        var certificate: String?
+
+        // macdoc#137 Layer 1 (docx-mutation-certification-layer1): `apply`
+        // commits its output only through `CertifiedTransaction`, never by
+        // any other route. A gate/verify/baseline-changed/intent failure
+        // leaves the output path exactly as it was; the failure kind and
+        // (when there is one) the rejected-candidate path are reported on
+        // stderr per the repo's error-and-output convention (Traditional
+        // Chinese status/error text). This is presentation glue, not
+        // business logic — the transaction itself lives in DocxWorkflowLib.
         func run() throws {
             let manifestURL = URL(fileURLWithPath: manifestPath)
             let manifest = try JSONDecoder().decode(
@@ -51,29 +62,53 @@ extension MacDoc.Docx {
 
             let baselineURL = URL(fileURLWithPath: input)
             let outputURL = URL(fileURLWithPath: output)
+            let certificateURL = certificate.map { URL(fileURLWithPath: $0) }
 
             let stderr = FileHandle.standardError
             let warnHandler: (String) -> Void = { msg in
                 stderr.write(Data((msg + "\n").utf8))
             }
 
-            let result = try Executor().apply(
-                manifest: manifest,
-                baselineURL: baselineURL,
-                outputURL: outputURL,
-                warnHandler: warnHandler
-            )
-
-            // Run verify chain if manifest declared post-conditions.
-            if let assertions = manifest.verify {
-                try Verifier().verify(assertions, baselineURL: baselineURL, outputURL: outputURL)
+            do {
+                _ = try CertifiedTransaction().apply(
+                    manifest: manifest,
+                    baselineURL: baselineURL,
+                    outputURL: outputURL,
+                    certificateURL: certificateURL,
+                    warnHandler: warnHandler
+                )
+                stderr.write(Data("已寫入: \(output)\n".utf8))
+            } catch let error as CertificationError {
+                Self.reportCertificationFailure(error, to: stderr)
+                throw ExitCode.failure
             }
+        }
 
-            print("Applied: \(result.appliedStepCount), skipped (pending): \(result.skippedPendingStepCount)")
-            if !result.skippedStepTypes.isEmpty {
-                print("Skipped step types: \(result.skippedStepTypes.joined(separator: ", "))")
+        private static func reportCertificationFailure(_ error: CertificationError, to stderr: FileHandle) {
+            func writeLine(_ line: String) {
+                stderr.write(Data((line + "\n").utf8))
             }
-            print("Wrote: \(output)")
+            func reportRejectedCandidate(_ certificate: CertificationCertificate) {
+                if let rejected = certificate.rejectedCandidateURL {
+                    writeLine("已保留候選檔（供診斷）: \(rejected)")
+                }
+            }
+            switch error {
+            case .intentUnavailable(let stepType):
+                writeLine("錯誤：manifest 內的 step type「\(stepType)」不在允許變更 part 的封閉對照表中，交易已中止（未建立候選檔）。")
+            case .gateFailed(let certificate):
+                writeLine("錯誤：Layer 1 驗證失敗（package 完整性或位元組保留檢查未通過），輸出檔未變更：")
+                for violation in certificate.layer1.violations {
+                    writeLine("  - \(violation)")
+                }
+                reportRejectedCandidate(certificate)
+            case .verifyFailed(let verifyError, let certificate):
+                writeLine("錯誤：manifest 的 verify 斷言驗證失敗，輸出檔未變更：\(verifyError)")
+                reportRejectedCandidate(certificate)
+            case .baselineChanged(let certificate):
+                writeLine("錯誤：baseline 檔案在交易過程中被改動，已中止（TOCTOU 防護），輸出檔未變更。")
+                reportRejectedCandidate(certificate)
+            }
         }
     }
 }
