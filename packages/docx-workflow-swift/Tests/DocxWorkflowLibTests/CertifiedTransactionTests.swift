@@ -457,4 +457,211 @@ final class CertifiedTransactionTests: XCTestCase {
         XCTAssertNotNil(certificateWarning, "expected a certificate-write warning")
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
+
+    // MARK: - R3 CRITICAL (Finding A): certificate destination must not
+    // collide with another path this transaction uses
+    //
+    // R2's `validateCertificateDestination` checked only that the
+    // certificate destination was writable on its own — never that it was
+    // a DIFFERENT file from the output, the baseline, or the
+    // rejected-candidate path. Because the certificate write happens AFTER
+    // the commit, a colliding path let the certificate JSON silently
+    // overwrite the just-verified output (or the caller's own baseline),
+    // while `apply` still returned success. These tests cover the three
+    // paths `CertifiedTransaction` itself knows about; the fourth
+    // (the manifest's own file path) is checked by the CLI layer, which is
+    // the only layer that has that path at all — see
+    // `MacDocDocxIntegrationTests`.
+
+    func testCertificateDestinationConflictingWithOutputThrowsBeforeAnyWrite() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let originalBaselineBytes = try Data(contentsOf: baseline)
+        defer { cleanup(baseline, output) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: output)
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .certificateDestinationConflictsWithOtherPath(let certificatePath, let role, let conflictingPath) = certError else {
+                XCTFail("Expected .certificateDestinationConflictsWithOtherPath, got \(error)")
+                return
+            }
+            XCTAssertEqual(certificatePath, output.path)
+            XCTAssertEqual(conflictingPath, output.path)
+            XCTAssertTrue(role.contains("輸出"), role)
+        }
+
+        // Nothing was written at all — the output the review's repro
+        // showed silently overwritten with certificate JSON must simply
+        // not exist, and the baseline must be untouched.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+        XCTAssertEqual(try Data(contentsOf: baseline), originalBaselineBytes)
+        let dirEntries = try FileManager.default.contentsOfDirectory(atPath: output.deletingLastPathComponent().path)
+        let stem = output.deletingPathExtension().lastPathComponent
+        XCTAssertTrue(dirEntries.filter { $0.hasPrefix(stem) }.isEmpty)
+    }
+
+    func testCertificateDestinationConflictingWithBaselinePreservesBaselineBytes() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let originalBaselineBytes = try Data(contentsOf: baseline)
+        defer { cleanup(baseline, output) }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: baseline)
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .certificateDestinationConflictsWithOtherPath(_, let role, _) = certError else {
+                XCTFail("Expected .certificateDestinationConflictsWithOtherPath, got \(error)")
+                return
+            }
+            XCTAssertTrue(role.contains("baseline"), role)
+        }
+
+        // The user's own source file must survive byte-for-byte — this is
+        // the review's second repro variant (source file silently
+        // destroyed, no warning).
+        XCTAssertEqual(try Data(contentsOf: baseline), originalBaselineBytes)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testCertificateDestinationConflictingWithRejectedCandidatePathThrows() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let rejected = rejectedURL(for: output)
+        defer { cleanup(baseline, output, rejected) }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: rejected)
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .certificateDestinationConflictsWithOtherPath(_, let role, _) = certError else {
+                XCTFail("Expected .certificateDestinationConflictsWithOtherPath, got \(error)")
+                return
+            }
+            XCTAssertTrue(role.contains("rejected"), role)
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: rejected.path))
+    }
+
+    /// The string-normalization tier (`resolvingSymlinksInPath` +
+    /// `standardizedFileURL`) cannot catch two DIFFERENT path strings
+    /// that happen to name the same inode — a hard link is the
+    /// deterministic, filesystem-case-sensitivity-independent way to prove
+    /// the device+inode fallback tier actually runs (as opposed to the
+    /// string tier alone, which the two tests above already exercise).
+    func testCertificateDestinationConflictingWithBaselineViaHardLinkIsDetected() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let hardLinkToBaseline = makeTempURL(prefix: "ct-baseline-hardlink")
+        try FileManager.default.linkItem(at: baseline, to: hardLinkToBaseline)
+        let originalBaselineBytes = try Data(contentsOf: baseline)
+        defer { cleanup(baseline, output, hardLinkToBaseline) }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: hardLinkToBaseline
+            )
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .certificateDestinationConflictsWithOtherPath = certError else {
+                XCTFail("Expected .certificateDestinationConflictsWithOtherPath, got \(error)")
+                return
+            }
+        }
+
+        XCTAssertEqual(try Data(contentsOf: baseline), originalBaselineBytes)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    // MARK: - R3 MEDIUM (Finding B): output-is-directory TOCTOU between
+    // pre-flight and commit is closed by rename(2)'s own EISDIR refusal
+    //
+    // Reproduces the review's own probe: inject a directory at `outputURL`
+    // in the window AFTER pre-flight validation ran (which saw no
+    // directory there) but BEFORE the final commit. `FileManager
+    // .replaceItemAt` silently deleted such a directory; POSIX `rename(2)`
+    // refuses it with `EISDIR`, and the candidate — which passed every
+    // gate — is preserved at the rejected-candidate path instead of lost.
+
+    func testDirectoryAppearingBetweenPreFlightAndCommitDoesNotGetDeleted() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let rejected = rejectedURL(for: output)
+        let importantFile = output.appendingPathComponent("important-file.txt")
+        defer {
+            cleanup(baseline, rejected)
+            try? FileManager.default.removeItem(at: output)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output,
+                certificateURL: nil, warnHandler: { _ in },
+                testHookAfterCandidateWritten: nil,
+                testHookBeforeBaselineRecheck: {
+                    // Pre-flight already ran (step 0) and saw no directory
+                    // here. This is the window between it and the commit.
+                    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+                    try Data("important data".utf8).write(to: importantFile)
+                }
+            )
+        ) { error in
+            guard let certError = error as? CertificationError, case .commitFailed(let path, let reason, let rejectedCandidatePath) = certError else {
+                XCTFail("Expected .commitFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, output.path)
+            XCTAssertFalse(reason.isEmpty)
+            XCTAssertEqual(rejectedCandidatePath, rejected.path)
+        }
+
+        // The directory and its contents must survive — this is the
+        // review's exact failure mode, now refused instead of silently
+        // destroyed.
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: output.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue, "the output path must still be a directory")
+        XCTAssertEqual(try String(contentsOf: importantFile, encoding: .utf8), "important data")
+
+        // The candidate — which passed every gate — is preserved at the
+        // rejected path, not lost.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rejected.path))
+        let rejectedDoc = try DocxReader.read(from: rejected, wireTreeBackedViews: false)
+        var foundInserted = false
+        for child in rejectedDoc.body.children {
+            if case .paragraph(let p) = child, p.text.contains("inserted") { foundInserted = true }
+        }
+        XCTAssertTrue(foundInserted, "the rejected candidate should carry the applied change")
+    }
 }

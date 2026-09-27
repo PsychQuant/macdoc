@@ -378,4 +378,62 @@ final class Layer1GateTests: XCTestCase {
     private static let chartRelsXML = #"""
     <?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdChartImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>
     """#
+
+    // MARK: - R3 review LOW items (review-c137-r2.md Finding C, Finding D)
+
+    /// Finding C: R2 made the Content Types stream's `Default` element's
+    /// `Extension` attribute comparison case-insensitive but left the
+    /// `Override` element's `PartName` attribute comparison (a different
+    /// lookup in the same function) case-sensitive, even though OPC's part
+    /// name comparison is the same ASCII case-insensitive rule either way.
+    /// The generic `Default Extension="xml"` fallback masks this in every
+    /// fixture that carries one, so this test removes it first — exactly
+    /// how the review's own probe exposed the gap.
+    func testContentTypeOverridePartNameMatchIsCaseInsensitive() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            try self.replace(
+                #"<Default Extension="xml" ContentType="application/xml"/>"#,
+                with: "",
+                in: dir.appendingPathComponent("[Content_Types].xml"))
+            try self.replace(
+                #"<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>"#,
+                with: #"<Override PartName="/Word/Styles.XML" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>"#,
+                in: dir.appendingPathComponent("[Content_Types].xml"))
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(allowedParts: ["word/document.xml", "[Content_Types].xml"], stepSummary: ["insert_paragraph"])
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertFalse(result.violations.contains { violation in
+            if case .missingContentType(let part) = violation { return part == "word/styles.xml" }
+            return false
+        }, "\(result.violations)")
+    }
+
+    /// Finding D: `testContentTypeDefaultExtensionMatchIsCaseInsensitive`
+    /// only changed the `Default` element's own `Extension` attribute's
+    /// case — every fixture part's actual on-disk extension is already
+    /// lowercase, so the READ side's `.lowercased()` call in
+    /// `hasContentType` was never actually exercised by it (removing that
+    /// one line left all 72 tests passing). This test adds a part whose
+    /// own extension is uppercase, so the query side's case must be folded
+    /// too, not just the stored `Default`'s.
+    func testContentTypeDefaultExtensionMatchIsCaseInsensitiveOnTheQuerySide() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            let extra = dir.appendingPathComponent("word/extra.XML")
+            try Data(#"<?xml version="1.0" encoding="UTF-8"?><root/>"#.utf8).write(to: extra)
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(allowedParts: ["word/document.xml"], stepSummary: ["insert_paragraph"])
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertFalse(result.violations.contains { violation in
+            if case .missingContentType(let part) = violation { return part == "word/extra.XML" }
+            return false
+        }, "\(result.violations)")
+    }
 }
