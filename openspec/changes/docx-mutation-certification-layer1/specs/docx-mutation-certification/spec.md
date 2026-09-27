@@ -90,6 +90,7 @@ The result SHALL list `changedParts`, the parts whose bytes differ, whether or n
 Before `CertifiedTransaction.apply` reads the baseline, it SHALL reject these destinations without creating, truncating or replacing anything:
 
 - The output path, if it already exists and is a directory, SHALL cause `apply` to throw `CertificationError.outputPathIsDirectory(path:)`.
+- The output path, if it already exists and is a symbolic link (via `lstat(2)`, not `stat(2)`), SHALL cause `apply` to throw `CertificationError.outputPathIsSymlink(path:linkTarget:rejectedCandidatePath:)` with `rejectedCandidatePath` `nil`.
 - When a certificate URL is given, its destination SHALL be validated: the parent directory SHALL exist and be writable, and the destination itself, if something already exists there, SHALL NOT be a directory. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationInvalid(path:reason:)`.
 - When a certificate URL is given, it SHALL NOT refer to the same file — per `CertifiedTransaction.filesAreIdentical(_:_:)` — as the output path, the baseline path, or the rejected-candidate path this same call would use. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationConflictsWithOtherPath(certificatePath:conflictingRole:conflictingPath:)`.
 
@@ -102,6 +103,14 @@ None of these cases SHALL produce a `CertificationCertificate`; like `intentUnav
 - **WHEN** the output path already exists and is a directory
 - **THEN** `apply` throws `CertificationError.outputPathIsDirectory`
 - **AND** the directory and everything in it are unchanged
+- **AND** the baseline is unchanged
+
+#### Scenario: Output path is an existing symbolic link
+
+- **WHEN** the output path already exists and is a symbolic link to an unrelated file
+- **THEN** `apply` throws `CertificationError.outputPathIsSymlink` naming the path and its link target, with `rejectedCandidatePath` `nil`
+- **AND** the symlink itself still resolves to the same target
+- **AND** the target file's bytes are unchanged
 - **AND** the baseline is unchanged
 
 #### Scenario: Certificate destination is invalid
@@ -173,11 +182,18 @@ AND `certificateWarnHandler` receives exactly one message naming `out.docx` and 
 4. Evaluate the Layer 1 gate.
 5. Evaluate the manifest's `verify` assertions against the candidate.
 6. Recompute the baseline SHA-256.
-7. Only if everything passed, atomically rename the candidate onto the output path via POSIX `rename(2)`, which SHALL refuse a directory destination (`EISDIR`) rather than delete it.
+7. Only if everything passed:
+   a. Re-check that the output path is not a symbolic link (narrowing, though not eliminating, the window between the pre-flight check and this point).
+   b. When the output path already exists and is not a directory, copy its POSIX permissions, ACL and extended attributes onto the candidate (`copyfile(3)`, `COPYFILE_SECURITY | COPYFILE_XATTR`), then restore the candidate's own modification time (captured before that copy) so the content's genuine change is not misrepresented, and set the candidate's creation date to the old output's.
+   c. Atomically rename the candidate onto the output path via POSIX `rename(2)`, which SHALL refuse a directory destination (`EISDIR`) rather than delete it.
 
 On any failure, the output path SHALL remain exactly as it was before the call. Nothing SHALL be created, truncated or replaced there. The candidate SHALL be renamed to `<output-stem>.rejected.docx` beside the output, replacing any previous rejected file, and its URL SHALL be recorded in the certificate.
 
-If step 7's rename itself fails — for example because something occupied the output path with a directory after pre-flight validation ran — `apply` SHALL throw `CertificationError.commitFailed(path:reason:rejectedCandidatePath:)` instead of committing. It SHALL first attempt to preserve the candidate at the rejected-candidate path; `rejectedCandidatePath` SHALL be that path when this attempt succeeds, and `nil` only when it also fails, in which case the candidate SHALL remain at its own temporary path rather than be deleted.
+If step 7a finds a symbolic link at the output path, `apply` SHALL throw `CertificationError.outputPathIsSymlink(path:linkTarget:rejectedCandidatePath:)`, preserving the candidate at the rejected-candidate path (or, if that rename also fails, at its own temporary path, with `rejectedCandidatePath` `nil`). This check does NOT eliminate the window between it and step 7c's rename — a symlink installed in that narrower gap SHALL NOT be caught by this step.
+
+If step 7b's `copyfile(3)` call itself fails, `apply` SHALL throw `CertificationError.metadataPreservationFailed(path:reason:rejectedCandidatePath:)` rather than proceed with the rename, following the same candidate-preservation convention as `commitFailed` below. Step 7b SHALL be skipped (a no-op) when the output path does not exist yet, or when it is a directory (that case is step 7c's `EISDIR` territory, not this one's).
+
+If step 7c's rename itself fails — for example because something occupied the output path with a directory after pre-flight validation ran — `apply` SHALL throw `CertificationError.commitFailed(path:reason:rejectedCandidatePath:)` instead of committing. It SHALL first attempt to preserve the candidate at the rejected-candidate path; `rejectedCandidatePath` SHALL be that path when this attempt succeeds, and `nil` only when it also fails, in which case the candidate SHALL remain at its own temporary path rather than be deleted.
 
 #### Scenario: Successful apply writes the output
 
@@ -205,6 +221,43 @@ If step 7's rename itself fails — for example because something occupied the o
 - **WHEN** every gate and every `verify` assertion passes, but something creates a directory at the output path after the pre-flight check ran and before the commit rename
 - **THEN** the transaction throws `CertificationError.commitFailed`
 - **AND** the directory and its contents are unchanged (not deleted)
+- **AND** the candidate is preserved at the rejected-candidate path, carrying the applied change
+
+#### Scenario: A symbolic link appears at the output path between pre-flight and commit
+
+- **WHEN** every gate and every `verify` assertion passes, but something replaces the output path with a symbolic link to an unrelated file after the pre-flight check ran and before the commit rename
+- **THEN** the transaction throws `CertificationError.outputPathIsSymlink`, with `rejectedCandidatePath` naming where the candidate ended up
+- **AND** the symlink is unchanged (still a symlink, still pointing at the same target)
+- **AND** the target file's bytes are unchanged
+- **AND** the candidate is preserved at the rejected-candidate path, carrying the applied change
+
+#### Scenario: Overwriting an existing output preserves its permissions, extended attributes and creation date
+
+- **WHEN** the output path already exists, holding a file with non-default POSIX permissions, at least one custom extended attribute, and a creation date, and every gate and every `verify` assertion passes
+- **THEN** the new output's POSIX permissions equal the old file's
+- **AND** the new output's extended attributes include the old file's
+- **AND** the new output's creation date equals the old file's
+- **AND** the new output's modification date does NOT equal the old file's (the content changed, so its own modification time — not the replaced file's — is what is reported)
+
+##### Example: `0640` output with a custom extended attribute survives an overwrite
+
+GIVEN an existing output file with POSIX permissions `0640` and an extended attribute `com.example.marker` set to `hello`
+WHEN a manifest that changes only `word/document.xml` is applied successfully against it
+THEN the resulting output's POSIX permissions are still `0640`
+AND `com.example.marker` still reads back as `hello`
+AND the output's creation date is unchanged from before the call
+
+#### Scenario: A new output is unaffected by metadata preservation
+
+- **WHEN** the output path does not exist before the call, and every gate and every `verify` assertion passes
+- **THEN** step 7b is skipped (there is nothing existing to copy metadata from)
+- **AND** the new output's permissions come only from however `Executor`/`DocxWriter` created the candidate (the process's default umask), exactly as before this fix existed
+
+#### Scenario: Metadata-copy failure rejects the commit rather than land with widened permissions
+
+- **WHEN** the output path already exists but becomes unreadable to `copyfile(3)` (for example its permissions were set to `0` between pre-flight and commit) while every gate and every `verify` assertion still passes
+- **THEN** the transaction throws `CertificationError.metadataPreservationFailed` naming the output path and a reason
+- **AND** the old output's bytes are byte-for-byte unchanged
 - **AND** the candidate is preserved at the rejected-candidate path, carrying the applied change
 
 ### Requirement: Certificate claims only evaluated layers

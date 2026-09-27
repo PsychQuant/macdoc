@@ -10,8 +10,10 @@ On success, it SHALL exit 0 and report the output path on stderr.
 
 On failure, it SHALL exit non-zero, leave the output path exactly as it was before the call, and report on stderr:
 
-- the failure kind: gate violation, verify failure, baseline changed, intent unavailable, output path is a directory, certificate destination invalid, certificate destination conflicts with another path (the output, the baseline, the rejected-candidate path, or the manifest), or commit failed;
+- the failure kind: gate violation, verify failure, baseline changed, intent unavailable, output path is a directory, output path is a symbolic link, certificate destination invalid, certificate destination conflicts with another path (the output, the baseline, the rejected-candidate path, or the manifest), metadata-preservation failure, or commit failed;
 - the rejected-candidate path, when there is one.
+
+When the output path already exists (and is not a directory) at commit time, its POSIX permissions, ACL and extended attributes SHALL be carried over onto the newly-written output — but NOT its modification time, since the content changed — so re-running `apply` against an output the caller had deliberately restricted does not silently widen it back to the process's default. A brand-new output SHALL be unaffected by this and keep its own default permissions.
 
 Any thrown error that is not a `CertificationError` (for example a missing or malformed manifest file, or an existing Executor failure unrelated to certification) SHALL also be reported on stderr with the same Traditional Chinese `錯誤：` prefix, and SHALL exit non-zero. This does not change the underlying error's cause — only the CLI's presentation of it.
 
@@ -87,3 +89,49 @@ The optional `--certificate <path>` flag SHALL write the certificate JSON to tha
 | THEN | the exit code is non-zero |
 | AND | stderr contains `已寫入` naming `Out.docx` |
 | AND | `Out.docx`'s first four bytes are the ZIP signature `PK\x03\x04`, not certificate JSON |
+
+#### Scenario: Output path that is a symbolic link is rejected without touching its target
+
+- **WHEN** `--output` names a path that is itself a symbolic link to an unrelated file
+- **THEN** the exit code is non-zero, stderr names the symlink case (`符號連結`) and suggests using the real path instead
+- **AND** the symlink itself still resolves to the same target afterward
+- **AND** the target file's bytes are unchanged
+- **AND** stderr does not report the output as written
+
+##### Example: `--output` aliases an unrelated file via symlink
+
+| Step | Detail |
+|---|---|
+| GIVEN | `real-target.docx` holding arbitrary content, and `out-symlink.docx` a symbolic link pointing at it |
+| GIVEN | `macdoc docx apply manifest.json --input baseline.docx --output out-symlink.docx`, and the manifest would otherwise apply successfully |
+| WHEN | `apply` runs |
+| THEN | the exit code is non-zero |
+| AND | `out-symlink.docx` is still a symbolic link, still pointing at `real-target.docx` |
+| AND | `real-target.docx`'s bytes are exactly what they were before the call |
+
+#### Scenario: Overwriting an existing output at the CLI preserves its permissions, extended attributes and creation date
+
+- **WHEN** `--output` names an existing file with non-default POSIX permissions and a custom extended attribute, and `apply` succeeds
+- **THEN** the exit code is 0
+- **AND** the resulting file's POSIX permissions equal the pre-existing file's
+- **AND** the custom extended attribute still reads back with its original value
+- **AND** the file's creation date is unchanged
+
+##### Example: `0640` output with a custom extended attribute survives `apply`
+
+| Step | Detail |
+|---|---|
+| GIVEN | an existing `out.docx` with POSIX permissions `0640`, a custom extended attribute, and a fixed creation date |
+| GIVEN | `macdoc docx apply manifest.json --input baseline.docx --output out.docx`, and the manifest would otherwise apply successfully |
+| WHEN | `apply` runs |
+| THEN | the exit code is 0 |
+| AND | `out.docx`'s POSIX permissions are still `0640` |
+| AND | the custom extended attribute is still present with its original value |
+| AND | `out.docx`'s creation date is unchanged |
+
+#### Scenario: A metadata-copy failure at the CLI rejects the commit rather than widen permissions
+
+- **WHEN** `--output` names an existing file that becomes unreadable to `copyfile(3)` (for example its permissions are `0`) before `apply`'s commit step, while the manifest would otherwise apply successfully
+- **THEN** the exit code is non-zero
+- **AND** stderr does not report the output as written
+- **AND** the old output's bytes are byte-for-byte unchanged (once read access is restored to check)
