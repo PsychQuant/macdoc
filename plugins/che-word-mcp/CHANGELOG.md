@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.6.0] - 2026-09-27
+
+### Changed
+
+- `binary_version` **4.5.0 → 4.6.0**：
+  - `insert_equation`：`latex`／`components` 的 `null` 視為未提供；有給但型別錯一律報錯並指名參數；錯誤訊息回顯收到的值（PsychQuant/che-word-mcp#122、#125、#129）。
+  - comment 工具：`list_comments` 等三個工具加上 `limit`／`offset` 分頁並標示截斷；`bulk_resolve_comments` 去重並設上限；拒絕回覆一則回覆；回傳補上 `parent_id`（PsychQuant/che-word-mcp#131–#137）。**JSON 輸出形狀改變**，見 che-word-mcp 的 CHANGELOG「升級注意」。
+  - `insert_text`、`set_paragraph_border` 家族的邊界檢查改用與實際修改一致的段落清單；5 個數值參數依 OOXML 型別驗證範圍（PsychQuant/che-word-mcp#139、#140、#235）。
+  - ooxml-swift 3.15.0：`update_cell` 對多段落儲存格只改第一段、其餘保留；typed 重寫時多項格式不再遺失。
+- gitlink `mcp/che-word-mcp` 指向 4.6.0 的 release commit。
+
 ## [4.5.0] - 2026-09-27
 
 ### Changed
