@@ -1,8 +1,10 @@
 // Manifest.swift — §2.1 of macdoc-docx-workflow-cli.
 //
-// Root manifest type plus the tagged-by-`type` Step enum. All Phase 1
-// runtime-functional step types plus Phase 2c-pending cases compile here;
-// runtime gap-handling (warn-and-skip for pending cases) lives in
+// Root manifest type plus the tagged-by-`type` Step enum. Every case below
+// compiles (decodes) here regardless of runtime support; which ones
+// actually reach a functional `Edit` at runtime is decided elsewhere, not
+// by this file's grouping (see the note on the `Step` enum's comment
+// below) — runtime gap-handling (warn-and-skip for pending cases) lives in
 // EditPlanner + Executor (§4.1, §4.2).
 
 import Foundation
@@ -29,7 +31,8 @@ public struct Manifest: Codable, Equatable {
 // MARK: - Step (tagged enum by `type`)
 
 public enum Step: Codable, Equatable {
-    // Phase 1 runtime-functional cases
+    // Phase 1 step types (decode/compile here — NOT all of these are
+    // actually runtime-functional; see the correction below).
     case replaceText(ReplaceTextStep)
     case insertParagraph(InsertParagraphStep)
     case setParagraphStyle(SetParagraphStyleStep)
@@ -44,6 +47,22 @@ public enum Step: Codable, Equatable {
     case insertTable(InsertTableStep)
     case setCellText(SetCellTextStep)
     case insertEquation(InsertEquationStep)
+
+    // R2 review (docx-mutation-certification-layer1) Finding L1: the
+    // "Phase 1 runtime-functional cases" heading above this enum's first
+    // group is stale — it groups 8 cases as if all were functional at
+    // runtime, but `EditPlanner.compile` and `MutationIntent
+    // .isRuntimeFunctional` both, consistently, treat only 4 of those 8
+    // (`insertParagraph`, `removeParagraph`, `setBold`, `wrapLink`) as
+    // actually reaching a functional `Edit`. The other 4 in that group
+    // (`replaceText`, `setParagraphStyle`, `setItalic`, `setUnderline`) are
+    // Reducer-pending (ooxml-swift#71) — see `EditPlanner.swift`'s own
+    // header comment for the authoritative split, which this file's
+    // grouping does not mirror. Left un-reordered here (reordering cases
+    // in a `Codable` enum with a custom `init(from:)`/`encode(to:)` below
+    // is a no-op change unrelated to this fix, and would widen the diff
+    // for no behavioral reason); the heading text above is what was wrong,
+    // and is now corrected rather than the case order.
 
     private enum DiscriminatorKey: String, CodingKey {
         case type
