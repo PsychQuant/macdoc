@@ -29,7 +29,93 @@ final class ExecutorTests: XCTestCase {
         return url
     }
 
+    /// PsychQuant/macdoc#231 — a baseline that carries parts the typed model
+    /// never produces, the way a document saved by Word does: a theme reached
+    /// through a relationship, plus a custom XML part. A fixture written by
+    /// `makeBaseline` alone cannot catch part loss, because it only contains
+    /// what the writer itself emits.
+    private func makeBaselineWithUnmodeledParts(texts: [String]) throws -> URL {
+        let plain = try makeBaseline(texts: texts)
+        defer { try? FileManager.default.removeItem(at: plain) }
+        let dir = try ZipHelper.unzip(plain)
+        defer { ZipHelper.cleanup(dir) }
+
+        let theme = dir.appendingPathComponent("word/theme/theme1.xml")
+        try FileManager.default.createDirectory(
+            at: theme.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Issue231"><a:themeElements/></a:theme>"#.utf8)
+            .write(to: theme)
+        let custom = dir.appendingPathComponent("customXml/item1.xml")
+        try FileManager.default.createDirectory(
+            at: custom.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"<?xml version="1.0" encoding="UTF-8"?><issue231 keep="me"/>"#.utf8).write(to: custom)
+
+        func insert(_ snippet: String, before closing: String, in relativePath: String) throws {
+            let url = dir.appendingPathComponent(relativePath)
+            let text = try String(contentsOf: url, encoding: .utf8)
+            guard let range = text.range(of: closing, options: .backwards) else {
+                throw NSError(domain: "ExecutorTests", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "\(closing) not found in \(relativePath)"])
+            }
+            try Data(text.replacingCharacters(in: range, with: snippet + closing).utf8).write(to: url)
+        }
+        try insert(
+            #"<Relationship Id="rIdIssue231Theme" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>"#,
+            before: "</Relationships>", in: "word/_rels/document.xml.rels")
+        try insert(
+            #"<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/customXml/item1.xml" ContentType="application/xml"/>"#,
+            before: "</Types>", in: "[Content_Types].xml")
+
+        let url = makeTempURL(prefix: "baseline-unmodeled")
+        try ZipHelper.zip(dir, to: url)
+        return url
+    }
+
+    private func partBytes(of docx: URL) throws -> [String: Data] {
+        let dir = try ZipHelper.unzip(docx)
+        defer { ZipHelper.cleanup(dir) }
+        var parts: [String: Data] = [:]
+        let files = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey])
+        while let file = files?.nextObject() as? URL {
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            let name = file.standardizedFileURL.path
+                .replacingOccurrences(of: dir.standardizedFileURL.path + "/", with: "")
+            parts[name] = try Data(contentsOf: file)
+        }
+        return parts
+    }
+
     // MARK: - Spec scenarios
+
+    /// PsychQuant/macdoc#231: applying a step must leave every part the step
+    /// does not touch byte-identical, and must not drop parts.
+    func testApplyPreservesPartsTheStepDoesNotTouch() throws {
+        let baseline = try makeBaselineWithUnmodeledParts(texts: ["intro", "body"])
+        let output = makeTempURL(prefix: "out-231")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: output)
+        }
+
+        let manifest = Manifest(
+            baseline: baseline.path,
+            output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(
+                anchor: .afterText("intro"), content: "inserted by 231"))]
+        )
+        let result = try Executor().apply(manifest: manifest, baselineURL: baseline, outputURL: output)
+        XCTAssertEqual(result.appliedStepCount, 1)
+
+        let before = try partBytes(of: baseline)
+        let after = try partBytes(of: output)
+        XCTAssertEqual(Set(after.keys), Set(before.keys),
+                       "parts were added or dropped: missing \(Set(before.keys).subtracting(after.keys).sorted()), extra \(Set(after.keys).subtracting(before.keys).sorted())")
+        for (name, bytes) in before where name != "word/document.xml" {
+            XCTAssertEqual(after[name], bytes, "\(name) changed although the step only edits word/document.xml")
+        }
+        let document = try XCTUnwrap(after["word/document.xml"])
+        XCTAssertTrue(String(decoding: document, as: UTF8.self).contains("inserted by 231"))
+    }
 
     func testInsertImageStepEmitsWarningAndSkips() throws {
         // Spec: "insert_image step is decoded but skipped with warning"
