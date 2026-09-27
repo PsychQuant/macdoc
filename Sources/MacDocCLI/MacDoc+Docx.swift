@@ -84,6 +84,20 @@ extension MacDoc.Docx {
                 let outputURL = URL(fileURLWithPath: output)
                 let certificateURL = certificate.map { URL(fileURLWithPath: $0) }
 
+                // R3 review Finding A (CRITICAL): the manifest's own file
+                // path is the one path involved in this command that
+                // `CertifiedTransaction` itself never sees — checked here,
+                // before the transaction starts, using the identical
+                // same-file rule (`filesAreIdentical`) the library applies
+                // to the output/baseline/rejected-candidate paths.
+                if let certificateURL, CertifiedTransaction.filesAreIdentical(certificateURL, manifestURL) {
+                    throw CertificationError.certificateDestinationConflictsWithOtherPath(
+                        certificatePath: certificateURL.path,
+                        conflictingRole: "manifest 路徑",
+                        conflictingPath: manifestURL.path
+                    )
+                }
+
                 _ = try CertifiedTransaction().apply(
                     manifest: manifest,
                     baselineURL: baselineURL,
@@ -146,6 +160,15 @@ extension MacDoc.Docx {
                 writeLine("錯誤：輸出路徑「\(path)」已經是一個既有目錄，拒絕覆寫；未做任何寫入。")
             case .certificateDestinationInvalid(let path, let reason):
                 writeLine("錯誤：--certificate 指定的路徑「\(path)」無效（\(reason)），交易未開始，輸出檔與 baseline 皆未變更。")
+            case .certificateDestinationConflictsWithOtherPath(let certificatePath, let role, let conflictingPath):
+                writeLine("錯誤：--certificate 指定的路徑「\(certificatePath)」與\(role)「\(conflictingPath)」相同，寫入憑證會覆蓋剛驗證過的內容或來源檔案，交易未開始，任何檔案皆未變更。")
+            case .commitFailed(let path, let reason, let rejectedCandidatePath):
+                writeLine("錯誤：交易已通過所有檢查，但最後改名到「\(path)」失敗（\(reason)）。")
+                if let rejectedCandidatePath {
+                    writeLine("已保留候選檔（供診斷）: \(rejectedCandidatePath)")
+                } else {
+                    writeLine("候選檔也未能保留，請檢查磁碟狀態。")
+                }
             }
         }
     }

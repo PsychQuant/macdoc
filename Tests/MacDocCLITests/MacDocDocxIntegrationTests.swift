@@ -366,6 +366,187 @@ final class MacDocDocxIntegrationTests: XCTestCase {
         XCTAssertTrue(stderr.contains("錯誤："), "non-CertificationError failures should still use the Chinese error prefix: \(stderr)")
     }
 
+    // MARK: - R3 adversarial-review fixes (review-c137-r2.md Finding A CRITICAL, Finding D(b))
+
+    func testCertificateEqualToOutputPathFailsBeforeAnyWrite() throws {
+        // review-c137-r2.md Finding A, repro #E: --certificate pointed at
+        // the same path as --output used to succeed (exit 0, "已寫入"
+        // printed) while silently overwriting the just-verified .docx
+        // with the certificate JSON.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", outputURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path),
+                        "nothing must be written — the output must not exist, not exist-as-JSON")
+        XCTAssertTrue(stderr.contains("錯誤"), "stderr should use the Chinese error convention: \(stderr)")
+        XCTAssertFalse(stderr.contains("已寫入"), "success must not be reported when the destinations conflict: \(stderr)")
+    }
+
+    func testCertificateEqualToBaselinePathPreservesBaselineBytes() throws {
+        // review-c137-r2.md Finding A, repro #F: the user's own source
+        // file was silently overwritten with certificate JSON, no warning.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let originalBaselineBytes = try Data(contentsOf: baseline)
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", baseline.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertEqual(try Data(contentsOf: baseline), originalBaselineBytes,
+                        "the user's own source file must survive byte-for-byte")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+    }
+
+    func testCertificateEqualToManifestPathPreservesManifestBytes() throws {
+        // The manifest's own file path is the one conflict
+        // `CertifiedTransaction` itself never sees — checked by the CLI
+        // layer only.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+        let originalManifestBytes = try Data(contentsOf: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", manifestURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertEqual(try Data(contentsOf: manifestURL), originalManifestBytes,
+                        "the manifest file itself must survive byte-for-byte")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertTrue(stderr.contains("manifest"), "stderr should name the manifest-path conflict: \(stderr)")
+    }
+
+    func testCertificateWriteFailureAfterSuccessfulCommitStillExitsNonZero() throws {
+        // Finding D: spec.md's docx-workflow-cli Scenario "Certificate
+        // write failing after a successful commit still exits non-zero"
+        // had no CLI-level automated coverage (mutation M6 survived).
+        // A directory with rw------- (0600, no execute/search bit) passes
+        // `FileManager.isWritableFile` (pre-flight's own check — verified
+        // empirically: `access(2)`'s W_OK bit is satisfied) but any actual
+        // attempt to create a file inside it fails with EACCES — a
+        // deterministic, non-racy way to reproduce "pre-flight passed, the
+        // real write still failed" without timing-dependent concurrency.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        let certDir = temp.appendingPathComponent("cert-noexec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: certDir, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: certDir.path)
+        let certificateURL = certDir.appendingPathComponent("cert.json")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: certDir.path)
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: certDir)
+        }
+        XCTAssertTrue(FileManager.default.isWritableFile(atPath: certDir.path),
+                       "the point of this fixture is that pre-flight's own writability check passes")
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", certificateURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path),
+                       "the transaction itself succeeded and must still be committed")
+        XCTAssertTrue(stderr.contains("已寫入"), "the success must still be reported: \(stderr)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
+    }
+
     func testPlanDoesNotWriteOutput() throws {
         // Spec: "plan does not write output"
         guard let binary = macdocBinary else {
