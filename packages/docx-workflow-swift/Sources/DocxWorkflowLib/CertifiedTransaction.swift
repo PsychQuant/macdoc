@@ -229,7 +229,7 @@ public struct CertifiedTransaction {
             // validated the destination) and must not turn this success
             // into a throw — see `writeCertificateIfRequested`.
             try testHookAfterCommitBeforeCertificateWrite?()
-            Self.writeCertificateIfRequested(certificate, to: certificateURL, certificateWarnHandler: certificateWarnHandler)
+            Self.writeCertificateIfRequested(certificate, to: certificateURL, outputURL: outputURL, baselineURL: baselineURL, certificateWarnHandler: certificateWarnHandler)
             return certificate
         }
 
@@ -263,7 +263,7 @@ public struct CertifiedTransaction {
             rejectedCandidateURL: rejectedURL.path
         )
         try testHookAfterCommitBeforeCertificateWrite?()
-        Self.writeCertificateIfRequested(certificate, to: certificateURL, certificateWarnHandler: certificateWarnHandler)
+        Self.writeCertificateIfRequested(certificate, to: certificateURL, outputURL: outputURL, baselineURL: baselineURL, certificateWarnHandler: certificateWarnHandler)
 
         if !layer1.passed {
             throw CertificationError.gateFailed(certificate)
@@ -437,12 +437,44 @@ public struct CertifiedTransaction {
     /// passed — is reported only through `certificateWarnHandler`. This is
     /// what keeps a certificate-write failure from overwriting the
     /// transaction's own already-decided result (R2 review Finding 1).
+    ///
+    /// Re-checks `filesAreIdentical` against the output, the baseline and
+    /// the rejected-candidate path ONE more time, right here, immediately
+    /// before the write (R3b review follow-up on R3 Finding A). Pre-flight
+    /// validation cannot catch a certificate path that differs from the
+    /// output only by case, on a case-insensitive filesystem, when NEITHER
+    /// file existed yet: `filesAreIdentical`'s device/inode tier needs at
+    /// least one of them to exist, and at pre-flight time the output
+    /// usually does not (it is the first thing this call ever creates).
+    /// By the time this function runs, the commit has already happened —
+    /// the output (or, on the rejected path, the just-preserved candidate)
+    /// now exists, so the identical `filesAreIdentical` call that could
+    /// not see the collision before now can. On a hit, the certificate is
+    /// NOT written at all — the collision is reported exactly like any
+    /// other post-commit certificate-write failure, through
+    /// `certificateWarnHandler`, never by changing the transaction's own
+    /// already-decided result.
     private static func writeCertificateIfRequested(
         _ certificate: CertificationCertificate,
         to certificateURL: URL?,
+        outputURL: URL,
+        baselineURL: URL,
         certificateWarnHandler: (String) -> Void
     ) {
         guard let certificateURL else { return }
+
+        let postCommitPaths: [(URL, String)] = [
+            (outputURL, "輸出路徑（--output）"),
+            (baselineURL, "baseline 路徑（--input）"),
+            (rejectedURL(for: outputURL), "rejected 候選檔路徑"),
+        ]
+        for (other, role) in postCommitPaths where filesAreIdentical(certificateURL, other) {
+            certificateWarnHandler(
+                "憑證寫入已取消：--certificate 指定的路徑（\(certificateURL.path)）在 commit 之後與\(role)「\(other.path)」是同一個檔案（可能是大小寫不敏感檔案系統上的碰撞），寫入會覆蓋剛驗證過的內容或來源檔案。"
+            )
+            return
+        }
+
         do {
             try certificate.encoded().write(to: certificateURL, options: .atomic)
         } catch {

@@ -664,4 +664,76 @@ final class CertifiedTransactionTests: XCTestCase {
         }
         XCTAssertTrue(foundInserted, "the rejected candidate should carry the applied change")
     }
+
+    // MARK: - R3b: post-commit re-check catches a same-file collision that
+    // pre-flight cannot (review-c137-r2.md's follow-up on Finding A)
+    //
+    // `--output Out.docx --certificate out.docx`, NEITHER existing before
+    // the call: pre-flight's `filesAreIdentical` cannot fold the case
+    // difference in a leaf component that has not been created yet (there
+    // is nothing on disk to ask "what case do you actually have"), and its
+    // device/inode tier needs at least one file to exist. Once the commit
+    // creates `Out.docx`, a case-insensitive filesystem's directory lookup
+    // means `out.docx` names the SAME entry — so the certificate write,
+    // unchecked, would silently overwrite the just-committed output.
+
+    /// True when `directory`'s filesystem folds case for lookups (APFS's
+    /// default). Probes empirically — creates a file under a name with a
+    /// guaranteed-different-case counterpart and checks whether the
+    /// lowercased spelling resolves to it — rather than querying volume
+    /// attributes, per the coordinator's explicit instruction that this
+    /// follow-up should not need to.
+    private func directoryIsCaseInsensitive(_ directory: URL) -> Bool {
+        let name = "CASEPROBE-\(UUID().uuidString)"
+        let mixedCase = directory.appendingPathComponent(name)
+        let lowered = directory.appendingPathComponent(name.lowercased())
+        FileManager.default.createFile(atPath: mixedCase.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: mixedCase) }
+        return FileManager.default.fileExists(atPath: lowered.path)
+    }
+
+    func testCertificateDestinationCollidingWithOutputOnlyByCaseIsCaughtAfterCommit() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("ct-case-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        guard directoryIsCaseInsensitive(tempDir) else {
+            throw XCTSkip("this filesystem is case-sensitive — the R3b collision needs a case-insensitive volume (APFS's default)")
+        }
+
+        let baseline = try makeBaseline(texts: ["intro"])
+        let outputURL = tempDir.appendingPathComponent("Out.docx")
+        let certificateURL = tempDir.appendingPathComponent("out.docx")   // same file once created, different case
+        defer { try? FileManager.default.removeItem(at: baseline) }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path), "the point of this test is that neither path exists before the call")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: outputURL.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        var certificateWarning: String?
+        let certificate = try CertifiedTransaction().apply(
+            manifest: manifest, baselineURL: baseline, outputURL: outputURL,
+            certificateURL: certificateURL, warnHandler: { _ in },
+            certificateWarnHandler: { msg in certificateWarning = msg }
+        )
+
+        // The transaction itself succeeded — that result is reported as-is.
+        XCTAssertEqual(certificate.status, .layer1Verified)
+        XCTAssertNotNil(certificateWarning, "expected a certificate-write warning naming the post-commit collision")
+
+        // The output must still be the committed, valid .docx — not
+        // overwritten by certificate JSON that a case-insensitive
+        // collision would otherwise have routed to the exact same
+        // directory entry.
+        let doc = try DocxReader.read(from: outputURL, wireTreeBackedViews: false)
+        var foundInserted = false
+        for child in doc.body.children {
+            if case .paragraph(let p) = child, p.text.contains("inserted") { foundInserted = true }
+        }
+        XCTAssertTrue(foundInserted, "output must still be the committed .docx, not certificate JSON")
+    }
 }
