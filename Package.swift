@@ -41,7 +41,9 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/ocr-swift.git", from: "0.1.0"),
         // Direct dependency for `macdoc word reverse` (script transcoder:
         // ScriptExporter / SidecarStore / DocxReader live in OOXMLSwift).
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.13.0"),
+        // 3.16.0 (macdoc#232): OOXMLEdit.setBoldInRange(target:substring:
+        // value:instance:) + ReducerError: LocalizedError.
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.16.0"),
     ],
     targets: [
         // cli-spec.yaml generator (#72): dump-help decoder, project schema
