@@ -24,9 +24,9 @@
 ## 6. Documentation and regression
 
 - [ ] 6.1 Record the behavior change and the assumptions:
-  - `packages/docx-workflow-swift/CHANGELOG.md` gains an entry marking as **BREAKING** that the output is no longer written when a gate or `verify` fails.
-  - The design decision "Assumptions recorded for macdoc#137's open decisions (unattended run)" is restated in a comment on macdoc#137, so the owner can overturn any assumption.
-  Verified by content review of the CHANGELOG entry and the posted comment URL.
+  - `packages/docx-workflow-swift/CHANGELOG.md` gains an entry marking as **BREAKING** that the output is no longer written when a gate or `verify` fails. **Done** — see the `### Added` entry under `## Unreleased`, beside the #231 entry.
+  - The design decision "Assumptions recorded for macdoc#137's open decisions (unattended run)" is restated in a comment on macdoc#137, so the owner can overturn any assumption. **Comment 草稿已寫**（`/Users/che/.claude/jobs/b84d123c/tmp/post/c137-assumptions.md`），**待協調者發文** — 依工作指示本次執行者不得在 GitHub 留言或改 issue，草稿留待協調者（或擁有者本人）審閱後手動貼上。
+  Verified by content review of the CHANGELOG entry and the posted comment URL. CHANGELOG 半段已核可；comment 半段待貼文後再核可、再打勾。
 - [ ] 6.2 Full regression. Run:
   - `swift test` in `packages/docx-workflow-swift`, which must include the macdoc#231 regression test `ExecutorTests.testApplyPreservesPartsTheStepDoesNotTouch`;
   - `swift test` at the macdoc root;
