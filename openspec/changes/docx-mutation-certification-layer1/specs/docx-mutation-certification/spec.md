@@ -45,7 +45,7 @@ A runtime-functional step whose type has no row SHALL cause `derive(from:)` to t
 - Every part outside the intent's allowed set is byte-identical between baseline and candidate. A breach yields `unexpectedChange`, carrying both sizes and the first differing byte offset.
 - The candidate re-opens through `DocxReader`. Otherwise the result is `unreadablePackage`.
 - Every part whose name ends in `.xml` or `.rels` parses as well-formed XML. Otherwise the result is `malformedXML`.
-- `[Content_Types].xml` assigns a content type to every part, by `Override` or by extension `Default`. The `Default` `Extension` comparison SHALL be case-insensitive, per OPC (ECMA-376 Part 2, the Content Types stream's `Default` element). Otherwise the result is `missingContentType`.
+- `[Content_Types].xml` assigns a content type to every part, by `Override` or by extension `Default`. Both the `Override` element's `PartName` attribute and the `Default` element's `Extension` attribute comparisons SHALL be case-insensitive, per OPC (ECMA-376 Part 2): the Content Types stream compares part names and extensions the same way regardless of which element carries them. Otherwise the result is `missingContentType`.
 - Every internal relationship target, percent-decoded first, resolves to an existing part. Otherwise the result is `danglingRelationship`, naming the target as it was written (not decoded).
 
 The result SHALL list `changedParts`, the parts whose bytes differ, whether or not they were allowed.
@@ -75,6 +75,11 @@ The result SHALL list `changedParts`, the parts whose bytes differ, whether or n
 - **WHEN** `[Content_Types].xml`'s `Default` for a part's extension is written in a different case than the part's own extension (for example `Extension="RELS"` covering a part ending in `.rels`)
 - **THEN** the gate does not report `missingContentType` for that part
 
+#### Scenario: Content-type Override part-name match is case-insensitive
+
+- **WHEN** `[Content_Types].xml`'s `Override` for a part is written with a `PartName` in a different case than the part's own name, and no generic `Default` for that extension covers it
+- **THEN** the gate does not report `missingContentType` for that part
+
 #### Scenario: Relationship target is percent-decoded before resolution
 
 - **WHEN** a relationship's `Target` is percent-encoded (for example a space written as `%20`) and the decoded path resolves to a part that exists
@@ -82,12 +87,15 @@ The result SHALL list `changedParts`, the parts whose bytes differ, whether or n
 
 ### Requirement: Pre-flight destination checks reject an unwritable output or certificate path before any write
 
-Before `CertifiedTransaction.apply` reads the baseline, it SHALL reject two destinations without creating, truncating or replacing anything:
+Before `CertifiedTransaction.apply` reads the baseline, it SHALL reject these destinations without creating, truncating or replacing anything:
 
 - The output path, if it already exists and is a directory, SHALL cause `apply` to throw `CertificationError.outputPathIsDirectory(path:)`.
 - When a certificate URL is given, its destination SHALL be validated: the parent directory SHALL exist and be writable, and the destination itself, if something already exists there, SHALL NOT be a directory. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationInvalid(path:reason:)`.
+- When a certificate URL is given, it SHALL NOT refer to the same file — per `CertifiedTransaction.filesAreIdentical(_:_:)` — as the output path, the baseline path, or the rejected-candidate path this same call would use. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationConflictsWithOtherPath(certificatePath:conflictingRole:conflictingPath:)`.
 
-Neither case SHALL produce a `CertificationCertificate`; like `intentUnavailable`, both fail before any candidate exists. This check SHALL run regardless of whether the manifest's steps and `verify` block would otherwise have succeeded or failed.
+`filesAreIdentical(_:_:)` SHALL consider two paths the same file when either their symlink-resolved, standardized paths are textually equal, or — when both actually exist — they share the same device and inode.
+
+None of these cases SHALL produce a `CertificationCertificate`; like `intentUnavailable`, all fail before any candidate exists. These checks SHALL run regardless of whether the manifest's steps and `verify` block would otherwise have succeeded or failed.
 
 #### Scenario: Output path is an existing directory
 
@@ -102,6 +110,19 @@ Neither case SHALL produce a `CertificationCertificate`; like `intentUnavailable
 - **THEN** `apply` throws `CertificationError.certificateDestinationInvalid` naming the path and a reason
 - **AND** neither the output, the certificate, nor any candidate file is created
 - **AND** this holds whether the manifest's steps and `verify` block would otherwise have caused a successful or a rejected transaction
+
+#### Scenario: Certificate destination equals the output or the baseline path
+
+- **WHEN** the certificate URL is the same file as the output path, or the same file as the baseline path
+- **THEN** `apply` throws `CertificationError.certificateDestinationConflictsWithOtherPath`, naming which path it collided with
+- **AND** neither the output, the certificate, nor any candidate file is created
+- **AND** the baseline's bytes are unchanged
+
+#### Scenario: Certificate destination equals the baseline via a hard link
+
+- **WHEN** the certificate URL is a different path string than the baseline path, but a hard link to the same inode
+- **THEN** `apply` throws `CertificationError.certificateDestinationConflictsWithOtherPath`
+- **AND** the baseline's bytes, read through either path, are unchanged
 
 ### Requirement: A certificate write failing after pre-flight validation passed does not change the transaction's own result
 
@@ -131,9 +152,11 @@ After the certificate destination has passed the pre-flight check above, `Certif
 4. Evaluate the Layer 1 gate.
 5. Evaluate the manifest's `verify` assertions against the candidate.
 6. Recompute the baseline SHA-256.
-7. Only if everything passed, atomically rename the candidate onto the output path.
+7. Only if everything passed, atomically rename the candidate onto the output path via POSIX `rename(2)`, which SHALL refuse a directory destination (`EISDIR`) rather than delete it.
 
 On any failure, the output path SHALL remain exactly as it was before the call. Nothing SHALL be created, truncated or replaced there. The candidate SHALL be renamed to `<output-stem>.rejected.docx` beside the output, replacing any previous rejected file, and its URL SHALL be recorded in the certificate.
+
+If step 7's rename itself fails — for example because something occupied the output path with a directory after pre-flight validation ran — `apply` SHALL throw `CertificationError.commitFailed(path:reason:rejectedCandidatePath:)` instead of committing. It SHALL first attempt to preserve the candidate at the rejected-candidate path; `rejectedCandidatePath` SHALL be that path when this attempt succeeds, and `nil` only when it also fails, in which case the candidate SHALL remain at its own temporary path rather than be deleted.
 
 #### Scenario: Successful apply writes the output
 
@@ -155,6 +178,13 @@ On any failure, the output path SHALL remain exactly as it was before the call. 
 
 - **WHEN** the baseline file's bytes change after it was read and before the commit
 - **THEN** the transaction throws `CertificationError.baselineChanged` and the output path is untouched
+
+#### Scenario: A directory appears at the output path between pre-flight and commit
+
+- **WHEN** every gate and every `verify` assertion passes, but something creates a directory at the output path after the pre-flight check ran and before the commit rename
+- **THEN** the transaction throws `CertificationError.commitFailed`
+- **AND** the directory and its contents are unchanged (not deleted)
+- **AND** the candidate is preserved at the rejected-candidate path, carrying the applied change
 
 ### Requirement: Certificate claims only evaluated layers
 
