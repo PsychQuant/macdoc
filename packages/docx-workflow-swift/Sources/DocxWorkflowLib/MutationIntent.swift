@@ -27,6 +27,21 @@ public enum CertificationError: Error {
     /// The baseline's bytes changed between the initial read and the
     /// commit-time recheck (TOCTOU guard).
     case baselineChanged(CertificationCertificate)
+    /// The output path already exists and is a directory. Thrown before
+    /// any candidate is written (R2 review Finding 2) — `FileManager
+    /// .replaceItemAt`, which `CertifiedTransaction.commit` uses, silently
+    /// deletes a directory (and everything in it) to replace it with a
+    /// file, so this is checked up front instead of discovered by data
+    /// loss.
+    case outputPathIsDirectory(path: String)
+    /// The `--certificate` destination is unwritable: its parent directory
+    /// does not exist, is not writable, or the destination path itself is
+    /// an existing directory. Thrown before any candidate is written (R2
+    /// review Finding 1, CRITICAL) — a certificate write that fails AFTER
+    /// this pre-flight check has passed is a separate, narrower case (a
+    /// race) and does NOT throw this; see `CertifiedTransaction`'s
+    /// `certificateWarnHandler`.
+    case certificateDestinationInvalid(path: String, reason: String)
 }
 
 /// The set of package parts a manifest is allowed to change, derived from

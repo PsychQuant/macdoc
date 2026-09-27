@@ -8,6 +8,9 @@
 // transaction commits only after every gate passes".
 //
 // Sequence (design.md's numbered contract):
+// 0. Pre-flight: reject an output path that is an existing directory, and
+//    a `--certificate` destination that is not writable, before anything
+//    is touched (R2 review Findings 1 CRITICAL and 2 MEDIUM).
 // 1. Read the baseline and record its SHA-256.
 // 2. Apply the manifest in memory (`Executor`) and write the candidate.
 // 3. Run the Layer 1 gate, then the manifest's `verify` assertions, both
@@ -17,7 +20,15 @@
 //    output.
 // On any failure, the output path is untouched; the candidate is renamed
 // to a rejected-candidate path instead, except for `intentUnavailable`,
-// which fails before any candidate exists.
+// `outputPathIsDirectory` and `certificateDestinationInvalid`, which fail
+// before any candidate exists.
+//
+// Certificate persistence is deliberately NOT part of the pass/fail signal
+// above (R2 review Finding 1): once the destination has passed pre-flight
+// validation, a write failure there (a race — the directory disappeared,
+// permissions changed, disk full, ...) is reported only through
+// `certificateWarnHandler`, never by changing what `apply` returns or
+// throws for the transaction itself.
 
 import Foundation
 
@@ -26,17 +37,27 @@ public struct CertifiedTransaction {
     public init() {}
 
     /// Public contract per design.md's Implementation Contract "Interface".
+    ///
+    /// `certificateWarnHandler` is called at most once, only when
+    /// `certificateURL` is non-nil and the certificate could not actually
+    /// be written even though its destination passed pre-flight validation
+    /// (a race). It never changes whether this call returns or throws —
+    /// callers that need to know a requested certificate was not persisted
+    /// must inspect this handler, not the return value.
     public func apply(
         manifest: Manifest,
         baselineURL: URL,
         outputURL: URL,
         certificateURL: URL? = nil,
-        warnHandler: (String) -> Void = { _ in }
+        warnHandler: (String) -> Void = { _ in },
+        certificateWarnHandler: (String) -> Void = { _ in }
     ) throws -> CertificationCertificate {
         try apply(
             manifest: manifest, baselineURL: baselineURL, outputURL: outputURL,
             certificateURL: certificateURL, warnHandler: warnHandler,
-            testHookAfterCandidateWritten: nil, testHookBeforeBaselineRecheck: nil
+            certificateWarnHandler: certificateWarnHandler,
+            testHookAfterCandidateWritten: nil, testHookBeforeBaselineRecheck: nil,
+            testHookAfterCommitBeforeCertificateWrite: nil
         )
     }
 
@@ -51,6 +72,12 @@ public struct CertifiedTransaction {
     /// - `testHookBeforeBaselineRecheck`: runs immediately before the
     ///   baseline's SHA-256 is recomputed, letting a test rewrite the
     ///   baseline to exercise the TOCTOU guard.
+    /// - `testHookAfterCommitBeforeCertificateWrite`: runs right after the
+    ///   candidate has been committed (to the output or to the rejected
+    ///   path), before the certificate write is attempted. Lets a test
+    ///   simulate the pre-flight-passed-but-write-still-failed race (R2
+    ///   review Finding 1) without a real, timing-dependent concurrent
+    ///   process.
     /// - `deriveIntent`: how the intent is derived from the manifest.
     ///   Defaults to `MutationIntent.derive(from:)`. `Step` is a closed
     ///   12-case enum where every runtime-functional case already has a
@@ -64,10 +91,20 @@ public struct CertifiedTransaction {
         outputURL: URL,
         certificateURL: URL?,
         warnHandler: (String) -> Void,
+        certificateWarnHandler: (String) -> Void = { _ in },
         testHookAfterCandidateWritten: ((URL) throws -> Void)?,
         testHookBeforeBaselineRecheck: (() throws -> Void)?,
+        testHookAfterCommitBeforeCertificateWrite: (() throws -> Void)? = nil,
         deriveIntent: (Manifest) throws -> MutationIntent = { try MutationIntent.derive(from: $0) }
     ) throws -> CertificationCertificate {
+
+        // 0. Pre-flight: reject an unwritable destination before anything
+        // is touched. Neither check depends on the manifest or the
+        // baseline, so both run before step 1's read.
+        try Self.validateOutputIsNotDirectory(outputURL)
+        if let certificateURL {
+            try Self.validateCertificateDestination(certificateURL)
+        }
 
         // 1. Read the baseline and record its SHA-256.
         let baselineDataAtRead = try Data(contentsOf: baselineURL)
@@ -144,7 +181,12 @@ public struct CertifiedTransaction {
                 outputURL: outputURL.path,
                 rejectedCandidateURL: nil
             )
-            try Self.writeCertificateIfRequested(certificate, to: certificateURL)
+            // The commit above already happened; a certificate write
+            // failure past this point is a race (pre-flight already
+            // validated the destination) and must not turn this success
+            // into a throw — see `writeCertificateIfRequested`.
+            try testHookAfterCommitBeforeCertificateWrite?()
+            Self.writeCertificateIfRequested(certificate, to: certificateURL, certificateWarnHandler: certificateWarnHandler)
             return certificate
         }
 
@@ -161,7 +203,8 @@ public struct CertifiedTransaction {
             outputURL: outputURL.path,
             rejectedCandidateURL: rejectedURL.path
         )
-        try Self.writeCertificateIfRequested(certificate, to: certificateURL)
+        try testHookAfterCommitBeforeCertificateWrite?()
+        Self.writeCertificateIfRequested(certificate, to: certificateURL, certificateWarnHandler: certificateWarnHandler)
 
         if !layer1.passed {
             throw CertificationError.gateFailed(certificate)
@@ -214,8 +257,65 @@ public struct CertifiedTransaction {
         try? FileManager.default.removeItem(at: url)
     }
 
-    private static func writeCertificateIfRequested(_ certificate: CertificationCertificate, to certificateURL: URL?) throws {
+    // MARK: - Pre-flight destination checks (R2 review Findings 1 CRITICAL, 2 MEDIUM)
+
+    /// `FileManager.replaceItemAt` (used by `commit`) silently deletes an
+    /// existing directory — and everything in it — to replace it with a
+    /// file. Rejecting that case here means the check happens before the
+    /// review's manual reproduction (`mkdir output.docx; echo data >
+    /// output.docx/f.txt; macdoc docx apply ... --output output.docx`)
+    /// destroys anything, not after.
+    private static func validateOutputIsNotDirectory(_ outputURL: URL) throws {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: outputURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            throw CertificationError.outputPathIsDirectory(path: outputURL.path)
+        }
+    }
+
+    /// Checked before anything is written (R2 review Finding 1, CRITICAL):
+    /// the parent directory must exist and be writable, and the
+    /// destination itself — if something is already there — must not be a
+    /// directory. A write that still fails after this check passes is a
+    /// race, handled separately by `writeCertificateIfRequested`'s
+    /// `certificateWarnHandler`, not by this function.
+    private static func validateCertificateDestination(_ certificateURL: URL) throws {
+        let fm = FileManager.default
+        let parent = certificateURL.deletingLastPathComponent()
+        var parentIsDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: parent.path, isDirectory: &parentIsDirectory), parentIsDirectory.boolValue else {
+            throw CertificationError.certificateDestinationInvalid(
+                path: certificateURL.path, reason: "上層目錄不存在：\(parent.path)"
+            )
+        }
+        guard fm.isWritableFile(atPath: parent.path) else {
+            throw CertificationError.certificateDestinationInvalid(
+                path: certificateURL.path, reason: "上層目錄不可寫：\(parent.path)"
+            )
+        }
+        var targetIsDirectory: ObjCBool = false
+        if fm.fileExists(atPath: certificateURL.path, isDirectory: &targetIsDirectory), targetIsDirectory.boolValue {
+            throw CertificationError.certificateDestinationInvalid(
+                path: certificateURL.path, reason: "目的路徑本身是既有目錄"
+            )
+        }
+    }
+
+    /// Writes the certificate atomically (temp file + rename, via
+    /// `Data.write(options: .atomic)`) and NEVER throws: a failure here —
+    /// necessarily a race, since `validateCertificateDestination` already
+    /// passed — is reported only through `certificateWarnHandler`. This is
+    /// what keeps a certificate-write failure from overwriting the
+    /// transaction's own already-decided result (R2 review Finding 1).
+    private static func writeCertificateIfRequested(
+        _ certificate: CertificationCertificate,
+        to certificateURL: URL?,
+        certificateWarnHandler: (String) -> Void
+    ) {
         guard let certificateURL else { return }
-        try certificate.encoded().write(to: certificateURL)
+        do {
+            try certificate.encoded().write(to: certificateURL, options: .atomic)
+        } catch {
+            certificateWarnHandler("憑證寫入失敗（\(certificateURL.path)）：\(error)")
+        }
     }
 }

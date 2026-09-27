@@ -259,4 +259,202 @@ final class CertifiedTransactionTests: XCTestCase {
         let stem = output.deletingPathExtension().lastPathComponent
         XCTAssertTrue(dirEntries.filter { $0.hasPrefix(stem) }.isEmpty)
     }
+
+    // MARK: - R2 CRITICAL: certificate destination pre-flight (review Finding 1)
+    //
+    // A certificate destination whose parent directory does not exist must
+    // fail BEFORE any file is written — regardless of whether the
+    // underlying transaction would otherwise have succeeded or failed. This
+    // is what turns the review's CLI reproduction ("--certificate
+    // /nonexistent-dir/cert.json on an otherwise-successful apply exits 1
+    // with an English Cocoa error") into a clean, documented, Traditional
+    // Chinese failure instead of a corrupted success signal.
+
+    func testCertificateDestinationInvalidPreventsAnyWriteEvenWhenTransactionWouldSucceed() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let certificateURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ct-nonexistent-dir-\(UUID().uuidString)")
+            .appendingPathComponent("cert.json")
+        defer { cleanup(baseline, output) }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: certificateURL
+            )
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .certificateDestinationInvalid(let path, let reason) = certError else {
+                XCTFail("Expected .certificateDestinationInvalid, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, certificateURL.path)
+            XCTAssertFalse(reason.isEmpty)
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
+        // Nothing was written at all — no stray candidate file either.
+        let dirEntries = try FileManager.default.contentsOfDirectory(atPath: output.deletingLastPathComponent().path)
+        let stem = output.deletingPathExtension().lastPathComponent
+        XCTAssertTrue(dirEntries.filter { $0.hasPrefix(stem) }.isEmpty)
+    }
+
+    func testCertificateDestinationInvalidWinsOverAnUnderlyingVerifyFailure() throws {
+        // Pre-flight runs before the transaction is even attempted, so the
+        // reported reason is the certificate problem, never the verify
+        // failure that would otherwise have occurred.
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let certificateURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ct-nonexistent-dir-\(UUID().uuidString)")
+            .appendingPathComponent("cert.json")
+        defer { cleanup(baseline, output) }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))],
+            verify: VerifyAssertions(expectedParagraphsMin: 99999)
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: certificateURL
+            )
+        ) { error in
+            guard let certError = error as? CertificationError, case .certificateDestinationInvalid = certError else {
+                XCTFail("Expected .certificateDestinationInvalid (pre-flight must win), got \(error)")
+                return
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    // MARK: - R2 MEDIUM: output-path-is-directory pre-flight (review Finding 2)
+
+    func testOutputPathIsExistingDirectoryFailsBeforeAnyWriteAndSurvivesIntact() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let outputDir = makeTempURL(prefix: "ct-outdir")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let importantFile = outputDir.appendingPathComponent("important-file.txt")
+        try Data("important data".utf8).write(to: importantFile)
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: outputDir)
+        }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: outputDir.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(manifest: manifest, baselineURL: baseline, outputURL: outputDir)
+        ) { error in
+            guard let certError = error as? CertificationError, case .outputPathIsDirectory(let path) = certError else {
+                XCTFail("Expected .outputPathIsDirectory, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, outputDir.path)
+        }
+
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputDir.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue, "the output path must still be a directory")
+        XCTAssertEqual(try String(contentsOf: importantFile, encoding: .utf8), "important data")
+    }
+
+    // MARK: - R2 CRITICAL: certificate-write race after pre-flight validation passed
+    //
+    // The destination passed pre-flight, but the write itself still fails
+    // (another process removed the directory, permissions changed, disk
+    // full, ...). This must NOT change the transaction's own result — only
+    // surface as a separate warning via `certificateWarnHandler`.
+
+    func testCertificateWriteRaceAfterSuccessDoesNotOverwriteTransactionResult() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let certificateDir = FileManager.default.temporaryDirectory.appendingPathComponent("ct-cert-race-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: certificateDir, withIntermediateDirectories: true)
+        let certificateURL = certificateDir.appendingPathComponent("cert.json")
+        defer {
+            cleanup(baseline, output)
+            try? FileManager.default.removeItem(at: certificateDir)
+        }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        var certificateWarning: String?
+        let certificate = try CertifiedTransaction().apply(
+            manifest: manifest, baselineURL: baseline, outputURL: output,
+            certificateURL: certificateURL, warnHandler: { _ in },
+            certificateWarnHandler: { msg in certificateWarning = msg },
+            testHookAfterCandidateWritten: nil, testHookBeforeBaselineRecheck: nil,
+            testHookAfterCommitBeforeCertificateWrite: {
+                // Simulate the race: the destination passed pre-flight
+                // validation, but something removed it before the write.
+                try FileManager.default.removeItem(at: certificateDir)
+            }
+        )
+
+        // The transaction's own result is unaffected by the certificate
+        // write failing.
+        XCTAssertEqual(certificate.status, .layer1Verified)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: output.path))
+        XCTAssertNotNil(certificateWarning, "expected a certificate-write warning")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
+    }
+
+    func testCertificateWriteRaceAfterRejectionKeepsOriginalFailureReason() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let certificateDir = FileManager.default.temporaryDirectory.appendingPathComponent("ct-cert-race-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: certificateDir, withIntermediateDirectories: true)
+        let certificateURL = certificateDir.appendingPathComponent("cert.json")
+        defer {
+            cleanup(baseline, output, rejectedURL(for: output))
+            try? FileManager.default.removeItem(at: certificateDir)
+        }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))],
+            verify: VerifyAssertions(expectedParagraphsMin: 5)
+        )
+
+        var certificateWarning: String?
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output,
+                certificateURL: certificateURL, warnHandler: { _ in },
+                certificateWarnHandler: { msg in certificateWarning = msg },
+                testHookAfterCandidateWritten: nil, testHookBeforeBaselineRecheck: nil,
+                testHookAfterCommitBeforeCertificateWrite: {
+                    try FileManager.default.removeItem(at: certificateDir)
+                }
+            )
+        ) { error in
+            guard let certError = error as? CertificationError, case .verifyFailed(let verifyError, let certificate) = certError else {
+                XCTFail("Expected .verifyFailed to survive the certificate-write race, got \(error)")
+                return
+            }
+            guard case .paragraphCountBelowMin(let expected, let observed) = verifyError else {
+                XCTFail("Expected .paragraphCountBelowMin, got \(verifyError)")
+                return
+            }
+            XCTAssertEqual(expected, 5)
+            XCTAssertEqual(observed, 2)
+            XCTAssertNotNil(certificate.rejectedCandidateURL)
+        }
+        XCTAssertNotNil(certificateWarning, "expected a certificate-write warning")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
 }
