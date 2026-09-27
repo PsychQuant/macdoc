@@ -207,6 +207,165 @@ final class MacDocDocxIntegrationTests: XCTestCase {
                        "stderr should name the verify failure: \(stderr)")
     }
 
+    // MARK: - R2 adversarial-review fixes (review-c137.md Findings 1 CRITICAL, 2 MEDIUM, L5)
+
+    func testCertificateDestinationInvalidFailsBeforeAnyWrite() throws {
+        // Review Finding 1 (CRITICAL) reproduction: a `--certificate`
+        // parent directory that does not exist must no longer corrupt an
+        // otherwise-successful apply into "output written but exit 1 with
+        // an English Cocoa error". It must fail before any write, in
+        // Traditional Chinese, exit non-zero.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        let certificateURL = temp.appendingPathComponent("nonexistent-dir-\(UUID().uuidString)")
+            .appendingPathComponent("cert.json")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", certificateURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path),
+                        "the output must not exist — pre-flight must fail before any write")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
+        XCTAssertTrue(stderr.contains("錯誤"), "stderr should use the Traditional Chinese error convention: \(stderr)")
+        XCTAssertFalse(stderr.contains("已寫入"), "the success message must not appear when pre-flight rejected the certificate destination")
+    }
+
+    func testCertificateDestinationInvalidWinsOverAnUnderlyingVerifyFailure() throws {
+        // Pre-flight runs before the transaction is attempted, so the
+        // reported reason names the certificate problem, not the verify
+        // failure that would otherwise have occurred.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        let certificateURL = temp.appendingPathComponent("nonexistent-dir-\(UUID().uuidString)")
+            .appendingPathComponent("cert.json")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ],
+          "verify": { "expected_paragraphs_min": 99999 }
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", certificateURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertFalse(stderr.contains("verify"), "pre-flight should win before verify is ever evaluated: \(stderr)")
+    }
+
+    func testOutputPathAsExistingDirectoryIsRejectedWithoutDeletingIt() throws {
+        // Review Finding 2 (MEDIUM) reproduction.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputDir = temp.appendingPathComponent("outdir-\(UUID().uuidString).docx")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let importantFile = outputDir.appendingPathComponent("important-file.txt")
+        try Data("important data".utf8).write(to: importantFile)
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputDir)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputDir.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputDir.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputDir.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue, "the output path must still be a directory, not replaced by a .docx")
+        XCTAssertEqual(try String(contentsOf: importantFile, encoding: .utf8), "important data")
+    }
+
+    func testNonCertificationErrorIsWrappedWithChinesePrefix() throws {
+        // Review Finding L5: a thrown error that is not a
+        // `CertificationError` (here: a missing manifest file, decoded
+        // before the transaction even starts) must still surface through
+        // the CLI's Traditional Chinese "錯誤：" convention, not swift-
+        // argument-parser's default English top-level printer.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let temp = FileManager.default.temporaryDirectory
+        let missingManifest = temp.appendingPathComponent("missing-manifest-\(UUID().uuidString).json")
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingManifest.path))
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", missingManifest.path, "--input", baseline.path, "--output", outputURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertTrue(stderr.contains("錯誤："), "non-CertificationError failures should still use the Chinese error prefix: \(stderr)")
+    }
+
     func testPlanDoesNotWriteOutput() throws {
         // Spec: "plan does not write output"
         guard let binary = macdocBinary else {
