@@ -256,7 +256,7 @@ public enum Layer1Gate {
 
     private static func hasContentType(partName: String, contentTypes: ContentTypes) -> Bool {
         if contentTypes.overrides["/" + partName] != nil { return true }
-        // R2 review Finding L2: OPC (ECMA-376 Part 2 §10.1.2.2.1) compares
+        // R2 review Finding L2: OPC (ECMA-376 Part 2, Content Types stream `Default` element) compares
         // a `Default`'s `Extension` case-insensitively. `contentTypes
         // .defaults` is stored lowercased (see `ContentTypesCollector`
         // below), so lowercase the part's own extension too.

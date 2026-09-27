@@ -276,7 +276,7 @@ final class Layer1GateTests: XCTestCase {
 
     // MARK: - R2 review LOW items (review-c137.md L2, L3, L4)
 
-    /// L2: OPC (ECMA-376 Part 2 §10.1) content-type extension matching is
+    /// L2: OPC (ECMA-376 Part 2, the Content Types stream's `Default` element) content-type extension matching is
     /// case-insensitive. Only the `Default`'s own `Extension` attribute
     /// case changes here — the two `.rels` parts on disk are unaffected
     /// and rely entirely on this one `Default` (no per-part `Override`).
