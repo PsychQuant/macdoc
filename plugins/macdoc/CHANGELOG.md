@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.11.0] - 2026-09-27
+
+### Changed
+
+- CLI binary **0.13.2 → 0.14.0**：`macdoc docx apply` 改為認證式交易（PsychQuant/macdoc#137 第一階段）。先寫候選檔，通過 Layer 1 關卡（part 集合相符、允許範圍外的 part 位元組不變、能重新開啟、XML 格式良好、Content Types 與內部關聯完整）與 `verify` 後才原子改名成輸出；新增 `--certificate <path>` 寫出證書 JSON（`status` 為 `layer1Verified` 或 `rejected`）。
+  - **BREAKING**：關卡或 `verify` 失敗時，輸出路徑不再被寫入或更動；候選檔保留為 `<stem>.rejected.<ext>`。
+  - `--certificate` 與輸出、輸入等路徑指向同一檔案時拒絕；輸出路徑是目錄或 symlink 時拒絕；覆寫既有輸出時保留權限、ACL、擴充屬性與建立時間。
+- skill：1.11.0 版本紀錄。
+
 ## [1.10.2] - 2026-09-27
 
 ### Fixed
