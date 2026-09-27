@@ -1,6 +1,6 @@
 ## 1. Mutation intent
 
-- [ ] 1.1 Mutation intent is derived from a closed step-type table. `MutationIntent.derive(from:)` returns the union of the table rows for runtime-functional steps; pending steps contribute nothing; an unlisted functional step type throws `CertificationError.intentUnavailable(stepType:)`. Implements the design decision "Derive allowed parts from step types through a closed table". Verified by `MutationIntentTests` covering every row of the spec's "Allowed-part derivation" example and the unknown-type failure, written RED first.
+- [x] 1.1 Mutation intent is derived from a closed step-type table. `MutationIntent.derive(from:)` returns the union of the table rows for runtime-functional steps; pending steps contribute nothing; an unlisted functional step type throws `CertificationError.intentUnavailable(stepType:)`. Implements the design decision "Derive allowed parts from step types through a closed table". Verified by `MutationIntentTests` covering every row of the spec's "Allowed-part derivation" example and the unknown-type failure, written RED first.
 
 ## 2. Layer 1 gate
 
