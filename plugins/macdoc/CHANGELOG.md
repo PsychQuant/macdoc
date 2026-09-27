@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.10.2] - 2026-09-27
+
+### Fixed
+
+- CLI binary **0.13.1 → 0.13.2**：`macdoc docx apply` 不再對真實 Word 文件靜默刪除主題、註腳、尾註、webSettings 等 part，也不再重寫未觸及的 part（PsychQuant/macdoc#231）。過去每次成功套用 step 都會發生，並且回報成功。以真實範本（13 個 part）與已發佈的 0.13.2 binary 實測：`insert_paragraph` 只改 `word/document.xml`，`wrap_link` 另加 `word/_rels/document.xml.rels`。
+- skill：1.10.2 版本紀錄。
+
 ## [1.10.1] - 2026-09-25
 
 ### Changed
