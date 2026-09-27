@@ -42,6 +42,29 @@ public enum CertificationError: Error {
     /// race) and does NOT throw this; see `CertifiedTransaction`'s
     /// `certificateWarnHandler`.
     case certificateDestinationInvalid(path: String, reason: String)
+    /// The `--certificate` destination refers to the same file as another
+    /// path this transaction uses — the output, the baseline, the
+    /// rejected-candidate path, or (checked by the CLI layer, which is the
+    /// only layer that knows this path) the manifest file itself. Writing
+    /// the certificate there would silently destroy content the
+    /// transaction just proved valid, or the caller's own source file.
+    /// Thrown before any candidate is written (R3 review Finding A,
+    /// CRITICAL). `conflictingRole` is a ready-to-print Traditional
+    /// Chinese phrase naming which path it collided with (e.g. "輸出路徑
+    /// （--output）"), matching the convention `certificateDestinationInvalid`
+    /// already established of composing the Chinese text at the throw site.
+    case certificateDestinationConflictsWithOtherPath(certificatePath: String, conflictingRole: String, conflictingPath: String)
+    /// Every gate and every requested `verify` assertion passed, but the
+    /// final rename — the candidate onto the output path — itself failed.
+    /// This is what closes the TOCTOU window `FileManager.replaceItemAt`
+    /// left open (R2 review Finding 2 → R3 review Finding B): the commit
+    /// now goes through POSIX `rename(2)`, which refuses a directory
+    /// destination (`EISDIR`) instead of silently deleting it, so this
+    /// case is how that refusal — or any other rename failure — surfaces.
+    /// The candidate is preserved at `rejectedCandidatePath` when that
+    /// fallback rename succeeds; it is `nil` only if even that failed (the
+    /// candidate then remains at its own temporary path, not deleted).
+    case commitFailed(path: String, reason: String, rejectedCandidatePath: String?)
 }
 
 /// The set of package parts a manifest is allowed to change, derived from
