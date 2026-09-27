@@ -8,6 +8,10 @@ All notable changes to `docx-workflow-swift` are recorded here.
 
 - **`Executor.apply` 不再刪除或重寫未被 step 觸及的 part**（macdoc#231）。過去以 `DocxWriter.writeData`（scratch 模式）產生輸出，從 typed model 重新序列化全部 part：模型不產生的 part（主題、註腳、尾註、webSettings、自訂 XML）被靜默刪除，其餘每個 part 都被重寫，卻仍回報成功。改用 overlay 模式的 `DocxWriter.write(_:to:)` 後，輸出以 baseline 的原始 archive 為底，只取代 step 實際改動的 part；寫入同時是原子的（暫存檔加改名）。以真實 Word 範本（13 個 part）實測：`insert_paragraph` 只改 `word/document.xml`，`wrap_link` 另加 `word/_rels/document.xml.rels`，無一 part 被刪。回歸測試 `ExecutorTests.testApplyPreservesPartsTheStepDoesNotTouch` 以帶 theme relationship 與自訂 part 的 baseline 逐 part 比對。
 
+### Added
+
+- **BREAKING**：新增 `CertifiedTransaction`（macdoc#137 第一階段，Word-imitation 方法論的 Layer 1：package 與位元組保留）。`CertifiedTransaction.apply` 包裝 `Executor` + `Verifier`：在記憶體套用 manifest、把候選檔寫在輸出旁、對候選檔（不是已經寫出的輸出檔）評估新的 `Layer1Gate`（part 集合是否相符、允許範圍外的 part 是否位元組相同、package 是否可重新開啟且內部一致）與 manifest 的 `verify` 斷言，全部通過才把候選檔原子改名成輸出。**任何 gate 或 verify 失敗都不再寫入或更動輸出路徑**——先前的模式（`Executor.apply` 接著另外呼叫 `Verifier.verify`，也就是這次改版之前 `macdoc docx apply` 的走法）是無條件先寫輸出、事後才檢查，所以一次失敗的 verify 仍會留下檔案。失敗時候選檔改名保留在 `<output-stem>.rejected.<ext>`（取代前一次留下的同名檔）供診斷；`intentUnavailable`（manifest 內的 step type 不在允許表中）是唯一在候選檔存在之前就失敗的例外。新增的公開型別：`MutationIntent`（由封閉的 step-type 對照表推導允許變更的 part，表中沒有的 functional step type 一律失敗閉合，不做相似性推論）、`Layer1Gate` / `Layer1Result` / `Layer1Violation`、`CertificationCertificate` / `CertificationStatus` / `VerifyOutcome` / `NotEvaluatedLayer`（JSON 證書；`status` 只有 `layer1Verified` 或 `rejected`，schema 上不可能出現 `certified`；Layer 2、Layer 3 一律 `notEvaluated` 並附 `reason`，不宣稱未量測過的東西）、`CertificationError`。`Executor` 與 `Verifier` 本身未變——沒有改用 `CertifiedTransaction` 的既有直接呼叫者不受影響。
+
 ## 0.1.0 — 2026-06-01 (in progress)
 
 Initial release — Layer 3 manifest-driven docx-edit library on top of word-builder-swift v1.0.0.
