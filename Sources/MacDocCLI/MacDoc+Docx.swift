@@ -54,32 +54,66 @@ extension MacDoc.Docx {
         // Chinese status/error text). This is presentation glue, not
         // business logic — the transaction itself lives in DocxWorkflowLib.
         func run() throws {
-            let manifestURL = URL(fileURLWithPath: manifestPath)
-            let manifest = try JSONDecoder().decode(
-                Manifest.self,
-                from: Data(contentsOf: manifestURL)
-            )
-
-            let baselineURL = URL(fileURLWithPath: input)
-            let outputURL = URL(fileURLWithPath: output)
-            let certificateURL = certificate.map { URL(fileURLWithPath: $0) }
-
             let stderr = FileHandle.standardError
             let warnHandler: (String) -> Void = { msg in
                 stderr.write(Data((msg + "\n").utf8))
             }
 
+            // R2 review Finding 1 (CRITICAL): a certificate-write failure
+            // must never overwrite the transaction's own success/failure
+            // signal. `certificateWarnHandler` captures it separately so
+            // the exit code and message below reflect the ACTUAL
+            // transaction outcome, plus this warning when there is one.
+            var certificateWriteWarning: String?
+            let certificateWarnHandler: (String) -> Void = { msg in certificateWriteWarning = msg }
+
             do {
+                // Manifest decoding and baseline/output URL construction are
+                // inside this `do` block (R2 review L5): any failure here —
+                // a missing manifest file, malformed JSON, an unreadable
+                // baseline — is not a `CertificationError` (the transaction
+                // never even started), but must still surface through the
+                // repo's Traditional Chinese "錯誤：" convention rather than
+                // ArgumentParser's default English top-level printer.
+                let manifestURL = URL(fileURLWithPath: manifestPath)
+                let manifest = try JSONDecoder().decode(
+                    Manifest.self,
+                    from: Data(contentsOf: manifestURL)
+                )
+                let baselineURL = URL(fileURLWithPath: input)
+                let outputURL = URL(fileURLWithPath: output)
+                let certificateURL = certificate.map { URL(fileURLWithPath: $0) }
+
                 _ = try CertifiedTransaction().apply(
                     manifest: manifest,
                     baselineURL: baselineURL,
                     outputURL: outputURL,
                     certificateURL: certificateURL,
-                    warnHandler: warnHandler
+                    warnHandler: warnHandler,
+                    certificateWarnHandler: certificateWarnHandler
                 )
                 stderr.write(Data("已寫入: \(output)\n".utf8))
             } catch let error as CertificationError {
                 Self.reportCertificationFailure(error, to: stderr)
+                if let certificateWriteWarning {
+                    stderr.write(Data("警告：\(certificateWriteWarning)\n".utf8))
+                }
+                throw ExitCode.failure
+            } catch {
+                // L5（R2 review）：非 CertificationError 的失敗（例如
+                // Executor 內既有的 reducer 錯誤、manifest／baseline 讀取
+                // 失敗）維持繁體中文「錯誤：」前綴，不讓 ArgumentParser
+                // 預設的英文頂層錯誤印出格式蓋過本 repo 的訊息慣例。這不
+                // 修復任何底層錯誤本身（例如 set_bold 的 macdoc#232），
+                // 只統一 CLI 呈現層的語言前綴。
+                stderr.write(Data("錯誤：套用 manifest 時發生非預期錯誤：\(error)\n".utf8))
+                throw ExitCode.failure
+            }
+
+            if let certificateWriteWarning {
+                stderr.write(Data(
+                    "警告：\(certificateWriteWarning)；輸出檔本身有效，但 --certificate 指定的檔案不存在或內容不可信，請確認路徑後重跑。\n".utf8
+                ))
                 throw ExitCode.failure
             }
         }
@@ -108,6 +142,10 @@ extension MacDoc.Docx {
             case .baselineChanged(let certificate):
                 writeLine("錯誤：baseline 檔案在交易過程中被改動，已中止（TOCTOU 防護），輸出檔未變更。")
                 reportRejectedCandidate(certificate)
+            case .outputPathIsDirectory(let path):
+                writeLine("錯誤：輸出路徑「\(path)」已經是一個既有目錄，拒絕覆寫；未做任何寫入。")
+            case .certificateDestinationInvalid(let path, let reason):
+                writeLine("錯誤：--certificate 指定的路徑「\(path)」無效（\(reason)），交易未開始，輸出檔與 baseline 皆未變更。")
             }
         }
     }
