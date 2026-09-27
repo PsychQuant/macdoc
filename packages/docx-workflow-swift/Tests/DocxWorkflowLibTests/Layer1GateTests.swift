@@ -273,4 +273,109 @@ final class Layer1GateTests: XCTestCase {
             return false
         }, "\(result.violations)")
     }
+
+    // MARK: - R2 review LOW items (review-c137.md L2, L3, L4)
+
+    /// L2: OPC (ECMA-376 Part 2 §10.1) content-type extension matching is
+    /// case-insensitive. Only the `Default`'s own `Extension` attribute
+    /// case changes here — the two `.rels` parts on disk are unaffected
+    /// and rely entirely on this one `Default` (no per-part `Override`).
+    func testContentTypeDefaultExtensionMatchIsCaseInsensitive() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            try self.replace(
+                #"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#,
+                with: #"<Default Extension="RELS" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#,
+                in: dir.appendingPathComponent("[Content_Types].xml"))
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(allowedParts: ["word/document.xml", "[Content_Types].xml"], stepSummary: ["insert_paragraph"])
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertFalse(result.violations.contains { violation in
+            if case .missingContentType = violation { return true }
+            return false
+        }, "\(result.violations)")
+    }
+
+    /// L3: a relationship `Target` may be percent-encoded (e.g. a space as
+    /// `%20`); it must be decoded before resolving against the package's
+    /// actual part names.
+    func testRelationshipTargetIsPercentDecodedBeforeResolution() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            let media = dir.appendingPathComponent("word/media/my file.png")
+            try FileManager.default.createDirectory(at: media.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("not a real png, just bytes".utf8).write(to: media)
+            try self.insert(
+                #"<Relationship Id="rIdSpace" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/my%20file.png"/>"#,
+                before: "</Relationships>", in: dir.appendingPathComponent("word/_rels/document.xml.rels"))
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(
+            allowedParts: ["word/document.xml", "word/_rels/document.xml.rels", "word/media/my file.png"],
+            stepSummary: ["insert_paragraph"]
+        )
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertFalse(result.violations.contains { violation in
+            if case .danglingRelationship(_, let target) = violation { return target == "media/my%20file.png" }
+            return false
+        }, "\(result.violations)")
+    }
+
+    /// L4: a relative `Target` using `..` must resolve against the owner
+    /// part's directory, not just its own — a chart's rels (owner
+    /// directory `word/charts`) referencing shared media one level up
+    /// (`word/media/`) is the common real-world shape for this.
+    func testDotDotRelativeTargetResolvesToSiblingDirectory() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            let media = dir.appendingPathComponent("word/media/image1.png")
+            try FileManager.default.createDirectory(at: media.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("fake image bytes".utf8).write(to: media)
+
+            let chartRels = dir.appendingPathComponent("word/charts/_rels/chart1.xml.rels")
+            try FileManager.default.createDirectory(at: chartRels.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(Self.chartRelsXML.utf8).write(to: chartRels)
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(allowedParts: ["word/document.xml"], stepSummary: ["insert_paragraph"])
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertFalse(result.violations.contains { violation in
+            if case .danglingRelationship(let source, _) = violation { return source == "word/charts/_rels/chart1.xml.rels" }
+            return false
+        }, "\(result.violations)")
+    }
+
+    /// L4 negative companion: proves the `..` traversal in the test above
+    /// is actually exercised — remove the sibling file and the SAME
+    /// relationship must now be reported dangling, naming the raw
+    /// (un-resolved) `Target` string.
+    func testDotDotRelativeTargetIsDanglingWhenTheSiblingFileIsAbsent() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            // No word/media/image1.png this time.
+            let chartRels = dir.appendingPathComponent("word/charts/_rels/chart1.xml.rels")
+            try FileManager.default.createDirectory(at: chartRels.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(Self.chartRelsXML.utf8).write(to: chartRels)
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(allowedParts: ["word/document.xml"], stepSummary: ["insert_paragraph"])
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertTrue(
+            result.violations.contains(.danglingRelationship(source: "word/charts/_rels/chart1.xml.rels", target: "../media/image1.png")),
+            "\(result.violations)"
+        )
+    }
+
+    private static let chartRelsXML = #"""
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdChartImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>
+    """#
 }

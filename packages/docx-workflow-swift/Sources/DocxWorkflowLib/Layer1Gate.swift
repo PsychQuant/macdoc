@@ -256,7 +256,11 @@ public enum Layer1Gate {
 
     private static func hasContentType(partName: String, contentTypes: ContentTypes) -> Bool {
         if contentTypes.overrides["/" + partName] != nil { return true }
-        let ext = fileExtension(of: partName)
+        // R2 review Finding L2: OPC (ECMA-376 Part 2 §10.1.2.2.1) compares
+        // a `Default`'s `Extension` case-insensitively. `contentTypes
+        // .defaults` is stored lowercased (see `ContentTypesCollector`
+        // below), so lowercase the part's own extension too.
+        let ext = fileExtension(of: partName).lowercased()
         return contentTypes.defaults[ext] != nil
     }
 
@@ -280,7 +284,9 @@ public enum Layer1Gate {
             switch elementName {
             case "Default":
                 if let ext = attributes["Extension"], let contentType = attributes["ContentType"] {
-                    defaults[ext] = contentType
+                    // Lowercased on the way in — matched against a
+                    // lowercased extension in `hasContentType` (Finding L2).
+                    defaults[ext.lowercased()] = contentType
                 }
             case "Override":
                 if let partName = attributes["PartName"], let contentType = attributes["ContentType"] {
@@ -335,16 +341,20 @@ public enum Layer1Gate {
     /// Resolves a relationship `Target` against its owner directory,
     /// per OPC: a target starting with "/" is package-root-relative;
     /// otherwise it is relative to `ownerDirectory`. `.` and `..`
-    /// components are normalized.
+    /// components are normalized. The target is percent-decoded first
+    /// (Finding L3) — OPC part URIs may escape characters such as a space
+    /// (`%20`), and the package's actual part names on disk are never
+    /// percent-encoded.
     private static func resolveTarget(_ target: String, ownerDirectory: String) -> String {
+        let decodedTarget = target.removingPercentEncoding ?? target
         let base: [String]
         var rest: Substring
-        if target.hasPrefix("/") {
+        if decodedTarget.hasPrefix("/") {
             base = []
-            rest = target.dropFirst()
+            rest = decodedTarget.dropFirst()
         } else {
             base = ownerDirectory.isEmpty ? [] : ownerDirectory.split(separator: "/").map(String.init)
-            rest = Substring(target)
+            rest = Substring(decodedTarget)
         }
         var components = base
         for component in rest.split(separator: "/", omittingEmptySubsequences: false) {
