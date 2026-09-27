@@ -167,6 +167,142 @@ final class MacDocDocxIntegrationTests: XCTestCase {
         XCTAssertEqual(certificate["changedParts"] as? [String], ["word/document.xml"])
     }
 
+    // MARK: - set_bold integration (PsychQuant/macdoc#232)
+
+    func testSetBoldOnlyBoldsMatchedSubstringAndSucceeds() throws {
+        // Spec: `macdoc docx apply` with a `set_bold` step whose `anchor`
+        // resolves to a paragraph and whose `substring` names a range
+        // inside that paragraph's text bolds only that range and exits 0
+        // with a `.layer1Verified` certificate — the issue's reproduction
+        // ("EditPlanner compiled set_bold into a paragraph-targeted edit,
+        // which the reducer always rejected with `target must be <w:r>`,
+        // and `substring` was never used") no longer applies.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro alpha TARGET beta gamma"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        let certificateURL = temp.appendingPathComponent("cert-\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: certificateURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "set_bold", "anchor": { "after_text": "intro" }, "substring": "TARGET" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", certificateURL.path]
+        )
+
+        // `guard` + `return` (rather than a plain `XCTAssertEqual` that lets
+        // execution fall through) so a non-zero exit — no candidate, no
+        // certificate — reports exactly the assertion below and nothing
+        // else: the unguarded `Data(contentsOf: certificateURL)` further
+        // down would otherwise throw its own unrelated Cocoa "file does not
+        // exist" error and mask the real failure.
+        guard exitCode == 0 else {
+            XCTFail("Expected exit 0, got \(exitCode). stdout: \(stdout) stderr: \(stderr)")
+            return
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+        let certificateData = try Data(contentsOf: certificateURL)
+        let certificate = try XCTUnwrap(JSONSerialization.jsonObject(with: certificateData) as? [String: Any])
+        XCTAssertEqual(certificate["status"] as? String, "layer1Verified")
+        XCTAssertEqual(certificate["changedParts"] as? [String], ["word/document.xml"])
+
+        let outputDoc = try DocxReader.read(from: outputURL, wireTreeBackedViews: true)
+        var found = false
+        for child in outputDoc.body.children {
+            guard case .paragraph(let paragraph) = child, paragraph.text.contains("intro") else { continue }
+            found = true
+            XCTAssertEqual(paragraph.text, "intro alpha TARGET beta gamma",
+                           "set_bold must not change any character of the paragraph's text")
+            guard let node = paragraph.xmlNode else {
+                XCTFail("expected a tree-backed paragraph")
+                continue
+            }
+            let runs = node.children.filter { $0.kind == .element && $0.localName == "r" }
+            func text(_ run: XmlNode) -> String {
+                run.children
+                    .filter { $0.kind == .element && $0.localName == "t" }
+                    .flatMap { $0.children.filter { $0.kind == .text }.map(\.textContent) }
+                    .joined()
+            }
+            func isBold(_ run: XmlNode) -> Bool {
+                guard let rPr = run.children.first(where: { $0.kind == .element && $0.localName == "rPr" })
+                else { return false }
+                return rPr.children.contains { $0.kind == .element && $0.localName == "b" }
+            }
+            for run in runs {
+                if text(run) == "TARGET" {
+                    XCTAssertTrue(isBold(run), "the matched substring must be bold")
+                } else {
+                    XCTAssertFalse(isBold(run), "\(String(reflecting: text(run))) must not be bold")
+                }
+            }
+        }
+        XCTAssertTrue(found, "expected to find the 'intro' paragraph in the output")
+    }
+
+    func testSetBoldSubstringNotFoundFailsWithReasonAndLeavesOutputAbsent() throws {
+        // Spec: a `substring` that does not occur in the anchor paragraph
+        // surfaces ooxml-swift's specific reason (not the issue's "error
+        // 1"), exits non-zero, and never writes the output — #137's
+        // transactional semantics.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro alpha beta gamma"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "set_bold", "anchor": { "after_text": "intro" }, "substring": "NOPE" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertTrue(stderr.contains("NOPE"), "stderr should name the substring that was not found: \(stderr)")
+        XCTAssertTrue(stderr.contains("not found"), "stderr should carry ooxml-swift's specific reason: \(stderr)")
+        XCTAssertFalse(stderr.contains("ReducerError error"),
+                       "must not regress to the generic NSError-bridged \"error N\" message the issue reported: \(stderr)")
+    }
+
     func testFailingVerifyLeavesOutputAbsent() throws {
         // Spec: "Failing verify leaves no output"
         guard let binary = macdocBinary else {
