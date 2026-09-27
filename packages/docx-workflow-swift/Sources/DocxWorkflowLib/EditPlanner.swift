@@ -10,7 +10,19 @@
 //   - insert_paragraph    → OOXMLEdit.insertParagraph(after:, content:, styleId:)
 //   - remove_paragraph    → OOXMLEdit.removeParagraph(target:)
 //   - wrap_link           → OOXMLEdit.wrapWithHyperlink(target:, href:)
-//   - set_bold            → OOXMLEdit.setBold(target:, value: true)
+//   - set_bold            → OOXMLEdit.setBoldInRange(target:, substring:,
+//                            value: true, instance: 1) (ooxml-swift 3.16.0,
+//                            PsychQuant/macdoc#232). `target` is the anchor
+//                            PARAGRAPH's ElementID, not a Run — the reducer
+//                            locates `substring` within the paragraph's
+//                            flattened text and splits run(s) as needed so
+//                            only the matched range is bolded. Previously
+//                            compiled to `OOXMLEdit.setBold(target:, value:)`
+//                            against the paragraph ElementID, which the
+//                            reducer always rejected (`setRunFormat target
+//                            must be <w:r>`) because that case expects a
+//                            Run, not a paragraph — `substring` was decoded
+//                            but never consulted.
 //
 // Phase 1 spec-documented but Reducer-pending (warn + skip at runtime):
 //   - replace_text, set_italic, set_underline, set_paragraph_style — pending
@@ -75,14 +87,32 @@ internal struct EditPlanner {
             }
             return .functional(OOXMLEdit.wrapWithHyperlink(target: ref.elementID, href: url))
 
-        case .setBold(_):
+        case .setBold(let payload):
             guard let ref = anchorRef else {
                 return .pending(stepType: "set_bold", tracker: "internal: anchor missing")
             }
-            // v1.0.0 setBold targets a paragraph-level ElementID. Substring
-            // granularity within the paragraph is Phase 2c follow-up; for
-            // now the whole paragraph at the anchor becomes bold.
-            return .functional(OOXMLEdit.setBold(target: ref.elementID, value: true))
+            // PsychQuant/macdoc#232: an empty substring can never match a
+            // text range inside the anchor paragraph — reject it here, at
+            // compile time, rather than emitting an Edit that would only
+            // fail once `doc.apply(edit)` materializes the operation log
+            // (ooxml-swift's reducer also defends against this with its own
+            // "substring must not be empty" `malformedOp`, but surfacing it
+            // here means a malformed manifest never reaches the reducer at
+            // all). Same treatment `wrap_link` already gives an unparsable
+            // `url` a few cases above: pending + a tracker string, not a
+            // thrown error — the manifest doesn't break, the step is
+            // skipped and reported via `warnHandler`.
+            guard !payload.substring.isEmpty else {
+                return .pending(
+                    stepType: "set_bold",
+                    tracker: "empty substring: manifest declares substring: \"\" for anchor \(payload.anchor), which can never match a text range"
+                )
+            }
+            return .functional(OOXMLEdit.setBoldInRange(
+                target: ref.elementID,
+                substring: payload.substring,
+                value: true
+            ))
 
         // MARK: Phase 2c Reducer-pending (no shipped Edit case in v1.0.0)
 
