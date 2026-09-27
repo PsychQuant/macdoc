@@ -45,7 +45,7 @@ A runtime-functional step whose type has no row SHALL cause `derive(from:)` to t
 - Every part outside the intent's allowed set is byte-identical between baseline and candidate. A breach yields `unexpectedChange`, carrying both sizes and the first differing byte offset.
 - The candidate re-opens through `DocxReader`. Otherwise the result is `unreadablePackage`.
 - Every part whose name ends in `.xml` or `.rels` parses as well-formed XML. Otherwise the result is `malformedXML`.
-- `[Content_Types].xml` assigns a content type to every part, by `Override` or by extension `Default`. The `Default` `Extension` comparison SHALL be case-insensitive, per OPC (ECMA-376 Part 2 §10.1.2.2.1). Otherwise the result is `missingContentType`.
+- `[Content_Types].xml` assigns a content type to every part, by `Override` or by extension `Default`. The `Default` `Extension` comparison SHALL be case-insensitive, per OPC (ECMA-376 Part 2, the Content Types stream's `Default` element). Otherwise the result is `missingContentType`.
 - Every internal relationship target, percent-decoded first, resolves to an existing part. Otherwise the result is `danglingRelationship`, naming the target as it was written (not decoded).
 
 The result SHALL list `changedParts`, the parts whose bytes differ, whether or not they were allowed.

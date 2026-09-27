@@ -9,7 +9,7 @@ All notable changes to `docx-workflow-swift` are recorded here.
 - **`Executor.apply` 不再刪除或重寫未被 step 觸及的 part**（macdoc#231）。過去以 `DocxWriter.writeData`（scratch 模式）產生輸出，從 typed model 重新序列化全部 part：模型不產生的 part（主題、註腳、尾註、webSettings、自訂 XML）被靜默刪除，其餘每個 part 都被重寫，卻仍回報成功。改用 overlay 模式的 `DocxWriter.write(_:to:)` 後，輸出以 baseline 的原始 archive 為底，只取代 step 實際改動的 part；寫入同時是原子的（暫存檔加改名）。以真實 Word 範本（13 個 part）實測：`insert_paragraph` 只改 `word/document.xml`，`wrap_link` 另加 `word/_rels/document.xml.rels`，無一 part 被刪。回歸測試 `ExecutorTests.testApplyPreservesPartsTheStepDoesNotTouch` 以帶 theme relationship 與自訂 part 的 baseline 逐 part 比對。
 - **CertifiedTransaction 的憑證寫入失敗不再蓋掉交易本身的成功/失敗訊號**（macdoc#137 對抗式審查 R2，review-c137.md CRITICAL Finding 1）。修前：憑證在 commit 之後才寫，寫入失敗丟出的不是 CertificationError，呼叫端接不住，導致成功的 apply 也回報失敗、失敗的 apply 則整段吃掉真正的失敗原因與 rejected-candidate 路徑。修法兩層：交易開始前先驗證 `--certificate` 目的地（父目錄存在、可寫、路徑本身不是既有目錄），不符直接以新的 `CertificationError.certificateDestinationInvalid(path:reason:)` 中止、不寫任何檔案；驗證通過後才發生的寫入失敗（競態）改走原子寫法且不再拋錯，改用新的 `certificateWarnHandler` callback 回報，交易本身的回傳/拋出結果完全不受影響。
 - **CertifiedTransaction 的輸出路徑若是既有目錄會被靜默整個刪除取代**（同一輪審查 MEDIUM Finding 2）。`commit` 呼叫的 `FileManager.replaceItemAt` 對「目的地是目錄」會直接刪除整個目錄樹再放上新檔案、不報錯。新增 `CertificationError.outputPathIsDirectory(path:)`，在交易開始前（與上一條同一步）拒絕，不做任何寫入。
-- **`Layer1Gate` 的 `[Content_Types].xml` Default Extension 比對改成不分大小寫**（OPC ECMA-376 Part 2 §10.1.2.2.1 的規定；同一輪審查 LOW L2）。
+- **`Layer1Gate` 的 `[Content_Types].xml` Default Extension 比對改成不分大小寫**（OPC（ECMA-376 Part 2）對 Content Types stream `Default` 元素的規定；同一輪審查 LOW L2）。
 - **`Layer1Gate` 的 relationship Target 解析前先做百分比解碼**（例如 `%20`；同一輪審查 LOW L3）。
 
 ### Added
