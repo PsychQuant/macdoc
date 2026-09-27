@@ -14,6 +14,7 @@ All notable changes to `docx-workflow-swift` are recorded here.
 - **`--certificate` 指定的路徑若與 `--output`、`--input`（baseline）、manifest 或 rejected 候選檔路徑相同，直接拒絕**（macdoc#137）。憑證的寫入時機在 commit 之後；兩個路徑字面相同（或透過 hard link、大小寫不敏感檔案系統實際指向同一檔案）時，憑證 JSON 會覆寫剛驗證過的輸出檔或使用者的來源檔案，且 CLI 原本仍回報成功、不印任何警告。現在會在交易開始前先擋下，新增 `CertificationError.certificateDestinationConflictsWithOtherPath` 與公開的 `CertifiedTransaction.filesAreIdentical(_:_:)`。
 - **`commit` 改名操作的最後一步改用 POSIX `rename(2)`，不再用 `FileManager.replaceItemAt`**（macdoc#137）。輸出路徑若在通過前置檢查之後、實際改名之前剛好被建成目錄，`rename(2)` 會直接以 `EISDIR` 拒絕，不會像過去那樣把目錄與其內容整個刪除取代；候選檔會保留在 rejected 路徑供診斷，新增 `CertificationError.commitFailed`。
 - **`Layer1Gate` 的 `[Content_Types].xml` Override PartName 比對也改成不分大小寫**（macdoc#137），與 Default Extension 的規則一致，皆依 OPC（ECMA-376 Part 2）對 Content Types stream 的規定。
+- **`--certificate` 與 `--output` 只差大小寫、且兩者事前都不存在時，憑證寫入仍會蓋掉剛驗證過的輸出**（macdoc#137）。前一條「路徑相同直接拒絕」的檢查在兩個檔案都還不存在時看不出兩者其實是同一個檔案（大小寫不敏感檔案系統上，`Out.docx` 與 `out.docx`一旦其中之一被建立就是同一檔）；commit 建出輸出之後，緊接著的憑證寫入才會撞上、把輸出覆寫成憑證 JSON，而交易仍回報成功。現在在 commit 之後、寫憑證之前多做一次同檔判定，命中時不寫憑證、改用既有的憑證寫入失敗回報機制，交易本身「已成功 commit」的結果不受影響、照實回報。
 
 ### Added
 

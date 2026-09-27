@@ -126,7 +126,9 @@ None of these cases SHALL produce a `CertificationCertificate`; like `intentUnav
 
 ### Requirement: A certificate write failing after pre-flight validation passed does not change the transaction's own result
 
-After the certificate destination has passed the pre-flight check above, `CertifiedTransaction.apply` SHALL write the certificate atomically. If that write still fails (a race — the destination changed between the check and the write), `apply` SHALL NOT let that failure change whether it returns or throws for the transaction itself, and SHALL NOT change which `CertificationCertificate` it returns or carries. It SHALL instead invoke a `certificateWarnHandler` callback exactly once with a description of the failure.
+After the certificate destination has passed the pre-flight check above, and after the commit itself has completed, `CertifiedTransaction.apply` SHALL re-run `filesAreIdentical(_:_:)` between the certificate destination and each of the output path, the baseline path, and the rejected-candidate path. This re-check exists because the pre-flight check's device/inode tier is silent when a path does not exist yet — a certificate destination differing from a not-yet-created output only by case, on a case-insensitive filesystem, passes pre-flight undetected and only becomes distinguishable from it once the commit has created the output. If the re-check finds a match, `apply` SHALL skip the certificate write and treat it exactly as the write-failure case below (`certificateWarnHandler`, no change to the transaction's own result).
+
+If the destination is not a collision, `CertifiedTransaction.apply` SHALL write the certificate atomically. If that write still fails (a race — the destination changed between the check and the write), `apply` SHALL NOT let that failure change whether it returns or throws for the transaction itself, and SHALL NOT change which `CertificationCertificate` it returns or carries. It SHALL instead invoke a `certificateWarnHandler` callback exactly once with a description of the failure.
 
 #### Scenario: Certificate write fails after a successful commit
 
@@ -141,6 +143,25 @@ After the certificate destination has passed the pre-flight check above, `Certif
 - **WHEN** a manifest `verify` assertion fails, the candidate is committed to the rejected-candidate path, and the certificate write then fails despite the destination having passed pre-flight validation
 - **THEN** `apply` still throws `CertificationError.verifyFailed` carrying the same `VerifyError` and a certificate whose `rejectedCandidateURL` is set
 - **AND** `certificateWarnHandler` is called once
+
+#### Scenario: Certificate destination collides with the output only by case, invisible until after commit
+
+- **WHEN** `--output` and `--certificate` name paths that differ only by case, on a case-insensitive filesystem, and neither exists before `apply` is called
+- **THEN** pre-flight passes (both `filesAreIdentical` tiers are silent: the strings differ and neither file exists yet)
+- **AND** the commit succeeds, creating the output
+- **AND** the post-commit re-check finds the certificate destination now identical (by device/inode) to the output
+- **AND** `apply` still returns a certificate with `status` `layer1Verified`
+- **AND** the output path still holds the committed candidate's bytes, not certificate JSON
+- **AND** `certificateWarnHandler` is called once, naming the collision
+- **AND** no separate certificate file is written
+
+##### Example: Post-commit collision, `--output Out.docx --certificate out.docx`
+
+GIVEN a temporary directory on a case-insensitive filesystem, and neither `Out.docx` nor `out.docx` exists
+WHEN `apply` runs a manifest with `output: Out.docx` and is given `certificateURL: out.docx`
+THEN the returned certificate's `status` is `layer1Verified`
+AND reading `Out.docx` back as a `.docx` succeeds and contains the manifest's inserted content
+AND `certificateWarnHandler` receives exactly one message naming `out.docx` and the output path as colliding
 
 ### Requirement: Certified transaction commits only after every gate passes
 
