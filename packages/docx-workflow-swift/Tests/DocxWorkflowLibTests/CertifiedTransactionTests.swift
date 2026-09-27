@@ -12,6 +12,7 @@
 // / `testHookBeforeBaselineRecheck`), mirroring the precedent in
 // `OOXMLSwift.DocxWriter.write`'s `immediatelyBeforeGenerationCheck`.
 
+import Darwin
 import XCTest
 @testable import DocxWorkflowLib
 
@@ -735,5 +736,232 @@ final class CertifiedTransactionTests: XCTestCase {
             if case .paragraph(let p) = child, p.text.contains("inserted") { foundInserted = true }
         }
         XCTAssertTrue(foundInserted, "output must still be the committed .docx, not certificate JSON")
+    }
+
+    // MARK: - R4 review Finding E: `--output` is itself a symbolic link.
+    //
+    // POSIX `rename(2)` (used by `commit` since the R3 review's Finding B
+    // fix) replaces a symlink's own directory entry, not the file it
+    // points to — before that switch, `FileManager.replaceItemAt` threw
+    // for this same case and touched neither. Rejecting it here keeps that
+    // same "safe failure" shape instead of silently severing an alias
+    // relationship the caller had set up.
+
+    func testOutputPathThatIsAlreadyASymlinkIsRejectedBeforeAnyWrite() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let realTarget = makeTempURL(prefix: "ct-symlink-target")
+        try Data("original target content".utf8).write(to: realTarget)
+        let outputLink = makeTempURL(prefix: "ct-out-symlink")
+        try FileManager.default.createSymbolicLink(at: outputLink, withDestinationURL: realTarget)
+        defer {
+            cleanup(baseline, realTarget)
+            try? FileManager.default.removeItem(at: outputLink)
+        }
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: outputLink.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: outputLink,
+                certificateURL: nil, warnHandler: { _ in }
+            )
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .outputPathIsSymlink(let path, let target, let rejectedCandidatePath) = certError else {
+                XCTFail("Expected .outputPathIsSymlink, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, outputLink.path)
+            XCTAssertTrue(target.contains(realTarget.lastPathComponent), target)
+            XCTAssertNil(rejectedCandidatePath, "no candidate exists yet at pre-flight time")
+        }
+
+        // The symlink itself must still be a symlink, and its target must
+        // be byte-for-byte unchanged.
+        let resolvedDestination = try FileManager.default.destinationOfSymbolicLink(atPath: outputLink.path)
+        XCTAssertEqual(resolvedDestination, realTarget.path)
+        XCTAssertEqual(try String(contentsOf: realTarget, encoding: .utf8), "original target content")
+    }
+
+    func testOutputPathBecomingASymlinkBetweenPreFlightAndCommitIsRejectedAndCandidatePreserved() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out")
+        let rejected = rejectedURL(for: output)
+        let realTarget = makeTempURL(prefix: "ct-symlink-target")
+        try Data("original target content".utf8).write(to: realTarget)
+        defer {
+            cleanup(baseline, rejected, realTarget)
+            try? FileManager.default.removeItem(at: output)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output,
+                certificateURL: nil, warnHandler: { _ in },
+                testHookAfterCandidateWritten: nil,
+                testHookBeforeBaselineRecheck: {
+                    // Pre-flight already ran (step 0) and saw nothing here.
+                    // This is the window between it and the commit.
+                    try FileManager.default.createSymbolicLink(at: output, withDestinationURL: realTarget)
+                }
+            )
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .outputPathIsSymlink(let path, _, let rejectedCandidatePath) = certError else {
+                XCTFail("Expected .outputPathIsSymlink, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, output.path)
+            XCTAssertEqual(rejectedCandidatePath, rejected.path)
+        }
+
+        let resolvedDestination = try FileManager.default.destinationOfSymbolicLink(atPath: output.path)
+        XCTAssertEqual(resolvedDestination, realTarget.path)
+        XCTAssertEqual(try String(contentsOf: realTarget, encoding: .utf8), "original target content")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rejected.path))
+        let rejectedDoc = try DocxReader.read(from: rejected, wireTreeBackedViews: false)
+        var foundInserted = false
+        for child in rejectedDoc.body.children {
+            if case .paragraph(let p) = child, p.text.contains("inserted") { foundInserted = true }
+        }
+        XCTAssertTrue(foundInserted, "the rejected candidate should carry the applied change")
+    }
+
+    // MARK: - R4 review Finding F: overwriting an existing output loses
+    // its permissions/ACL/xattrs/creation date under plain `rename(2)`.
+
+    func testOverwritingExistingOutputPreservesPermissionsXattrsAndCreationDateButNotModificationTime() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = try makeBaseline(texts: ["old content"])
+        defer { cleanup(baseline, output) }
+
+        let fm = FileManager.default
+        try fm.setAttributes([.posixPermissions: 0o640], ofItemAtPath: output.path)
+        let oldCreationDate = Date(timeIntervalSince1970: 1_000_000_000)
+        let oldModificationDate = Date(timeIntervalSince1970: 1_100_000_000)
+        try fm.setAttributes([.creationDate: oldCreationDate, .modificationDate: oldModificationDate], ofItemAtPath: output.path)
+        let xattrName = "com.example.macdoc137.marker"
+        let xattrValue = "r4-finding-f"
+        let xattrResult = xattrValue.withCString { value in
+            setxattr(output.path, xattrName, value, strlen(value), 0, 0)
+        }
+        XCTAssertEqual(xattrResult, 0, "test setup: setxattr itself must succeed")
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        let certificate = try CertifiedTransaction().apply(
+            manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: nil, warnHandler: { _ in }
+        )
+        XCTAssertEqual(certificate.status, .layer1Verified)
+
+        let newAttributes = try fm.attributesOfItem(atPath: output.path)
+        XCTAssertEqual((newAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o640, "permissions must survive the overwrite")
+        XCTAssertEqual(newAttributes[.creationDate] as? Date, oldCreationDate, "creation date must survive the overwrite")
+        XCTAssertNotEqual(
+            newAttributes[.modificationDate] as? Date, oldModificationDate,
+            "modification time must NOT be copied from the old file — the content genuinely changed"
+        )
+
+        var buffer = [UInt8](repeating: 0, count: 64)
+        let length = getxattr(output.path, xattrName, &buffer, buffer.count, 0, 0)
+        XCTAssertGreaterThan(length, 0, "custom extended attribute must survive the overwrite")
+        XCTAssertEqual(String(bytes: buffer.prefix(max(length, 0)), encoding: .utf8), xattrValue)
+
+        let doc = try DocxReader.read(from: output, wireTreeBackedViews: false)
+        var foundInserted = false
+        for child in doc.body.children {
+            if case .paragraph(let p) = child, p.text.contains("inserted") { foundInserted = true }
+        }
+        XCTAssertTrue(foundInserted)
+    }
+
+    func testMetadataPreservationFailureRejectsCommitAndLeavesOldOutputUnchanged() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = try makeBaseline(texts: ["old content"])
+        let rejected = rejectedURL(for: output)
+        let originalOutputBytes = try Data(contentsOf: output)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: output.path)
+            cleanup(baseline, output, rejected)
+        }
+
+        // Deterministic, non-racy reproduction of "copyfile(3) itself
+        // fails": mode 0 still lets `stat` (used by `fileExists` and
+        // `attributesOfItem`) see the file — `stat` only needs search
+        // permission on the parent directories, not read permission on
+        // the file itself — but it blocks `copyfile`'s own `open()` of it.
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: output.path)
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+
+        XCTAssertThrowsError(
+            try CertifiedTransaction().apply(
+                manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: nil, warnHandler: { _ in }
+            )
+        ) { error in
+            guard let certError = error as? CertificationError,
+                  case .metadataPreservationFailed(let path, let reason, let rejectedCandidatePath) = certError else {
+                XCTFail("Expected .metadataPreservationFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, output.path)
+            XCTAssertFalse(reason.isEmpty)
+            XCTAssertEqual(rejectedCandidatePath, rejected.path)
+        }
+
+        // The commit never happened: restore read access (mode 0 blocks
+        // even the owner) and confirm the old output's bytes are exactly
+        // what they were before this call.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: output.path)
+        XCTAssertEqual(try Data(contentsOf: output), originalOutputBytes)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rejected.path))
+        let rejectedDoc = try DocxReader.read(from: rejected, wireTreeBackedViews: false)
+        var foundInserted = false
+        for child in rejectedDoc.body.children {
+            if case .paragraph(let p) = child, p.text.contains("inserted") { foundInserted = true }
+        }
+        XCTAssertTrue(foundInserted)
+    }
+
+    func testNewOutputWithNoPriorFileIsUnaffectedByMetadataPreservation() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let output = makeTempURL(prefix: "ct-out-fresh")
+        defer { cleanup(baseline, output) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path), "the point of this test is that output does not pre-exist")
+
+        let manifest = Manifest(
+            baseline: baseline.path, output: output.path,
+            steps: [.insertParagraph(InsertParagraphStep(anchor: .afterText("intro"), content: "inserted"))]
+        )
+        let certificate = try CertifiedTransaction().apply(
+            manifest: manifest, baselineURL: baseline, outputURL: output, certificateURL: nil, warnHandler: { _ in }
+        )
+        XCTAssertEqual(certificate.status, .layer1Verified)
+
+        // `preserveMetadataIfOverwriting` is a no-op whenever `outputURL`
+        // did not already exist — a brand-new output keeps whatever
+        // `Executor`/`DocxWriter` gave it, exactly as before this fix
+        // existed. Checked as a basic sanity bound (owner read/write bits
+        // set) rather than one exact mode value, since the precise default
+        // depends on the running process's umask.
+        let permissions = (try FileManager.default.attributesOfItem(atPath: output.path)[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
+        XCTAssertEqual(permissions & 0o600, 0o600, "the owner must still be able to read and write a freshly created output")
     }
 }
