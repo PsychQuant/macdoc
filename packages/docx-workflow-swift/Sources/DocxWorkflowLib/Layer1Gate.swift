@@ -15,7 +15,12 @@ import Foundation
 
 /// One breach of Layer 1's package/byte-preservation guarantee. A closed
 /// enum — see design.md's Implementation Contract "Interface".
-public enum Layer1Violation: Equatable {
+///
+/// `Codable` is hand-written: Swift does not auto-synthesize `Codable` for
+/// an enum with associated values. The JSON shape is a `kind` discriminator
+/// plus the case's own fields (flat, not nested under the case name), so a
+/// consumer can `switch` on `kind` without unwrapping an extra container.
+public enum Layer1Violation: Equatable, Codable {
     case partAdded(String)
     case partRemoved(String)
     case unexpectedChange(part: String, baselineSize: Int, candidateSize: Int, firstDifferingOffset: Int)
@@ -23,6 +28,78 @@ public enum Layer1Violation: Equatable {
     case malformedXML(part: String, message: String)
     case missingContentType(part: String)
     case danglingRelationship(source: String, target: String)
+
+    private enum Kind: String, Codable {
+        case partAdded, partRemoved, unexpectedChange, unreadablePackage
+        case malformedXML, missingContentType, danglingRelationship
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, part, baselineSize, candidateSize, firstDifferingOffset, message, source, target
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(Kind.self, forKey: .kind) {
+        case .partAdded:
+            self = .partAdded(try container.decode(String.self, forKey: .part))
+        case .partRemoved:
+            self = .partRemoved(try container.decode(String.self, forKey: .part))
+        case .unexpectedChange:
+            self = .unexpectedChange(
+                part: try container.decode(String.self, forKey: .part),
+                baselineSize: try container.decode(Int.self, forKey: .baselineSize),
+                candidateSize: try container.decode(Int.self, forKey: .candidateSize),
+                firstDifferingOffset: try container.decode(Int.self, forKey: .firstDifferingOffset)
+            )
+        case .unreadablePackage:
+            self = .unreadablePackage(try container.decode(String.self, forKey: .message))
+        case .malformedXML:
+            self = .malformedXML(
+                part: try container.decode(String.self, forKey: .part),
+                message: try container.decode(String.self, forKey: .message)
+            )
+        case .missingContentType:
+            self = .missingContentType(part: try container.decode(String.self, forKey: .part))
+        case .danglingRelationship:
+            self = .danglingRelationship(
+                source: try container.decode(String.self, forKey: .source),
+                target: try container.decode(String.self, forKey: .target)
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .partAdded(let part):
+            try container.encode(Kind.partAdded, forKey: .kind)
+            try container.encode(part, forKey: .part)
+        case .partRemoved(let part):
+            try container.encode(Kind.partRemoved, forKey: .kind)
+            try container.encode(part, forKey: .part)
+        case .unexpectedChange(let part, let baselineSize, let candidateSize, let firstDifferingOffset):
+            try container.encode(Kind.unexpectedChange, forKey: .kind)
+            try container.encode(part, forKey: .part)
+            try container.encode(baselineSize, forKey: .baselineSize)
+            try container.encode(candidateSize, forKey: .candidateSize)
+            try container.encode(firstDifferingOffset, forKey: .firstDifferingOffset)
+        case .unreadablePackage(let message):
+            try container.encode(Kind.unreadablePackage, forKey: .kind)
+            try container.encode(message, forKey: .message)
+        case .malformedXML(let part, let message):
+            try container.encode(Kind.malformedXML, forKey: .kind)
+            try container.encode(part, forKey: .part)
+            try container.encode(message, forKey: .message)
+        case .missingContentType(let part):
+            try container.encode(Kind.missingContentType, forKey: .kind)
+            try container.encode(part, forKey: .part)
+        case .danglingRelationship(let source, let target):
+            try container.encode(Kind.danglingRelationship, forKey: .kind)
+            try container.encode(source, forKey: .source)
+            try container.encode(target, forKey: .target)
+        }
+    }
 }
 
 /// The outcome of `Layer1Gate.evaluate`.

@@ -9,7 +9,7 @@
 
 ## 3. Certificate
 
-- [ ] 3.1 [P] Certificate claims only evaluated layers. `CertificationCertificate` is `Codable` with `schemaVersion` 1. `status` is `layer1Verified` or `rejected` and never `certified`. `layer2` and `layer3` are `notEvaluated` with a non-empty reason. The `verify` outcome is `passed`, `failed` or `notRequested`, and the certificate carries hashes, allowed and changed parts, URLs and a timestamp. This follows the design decision "Certificate claims only the layers that were evaluated". Verified by `CertificateTests`: a JSON round-trip, a check that the status vocabulary cannot encode `certified`, and a check of the key names.
+- [x] 3.1 [P] Certificate claims only evaluated layers. `CertificationCertificate` is `Codable` with `schemaVersion` 1. `status` is `layer1Verified` or `rejected` and never `certified`. `layer2` and `layer3` are `notEvaluated` with a non-empty reason. The `verify` outcome is `passed`, `failed` or `notRequested`, and the certificate carries hashes, allowed and changed parts, URLs and a timestamp. This follows the design decision "Certificate claims only the layers that were evaluated". Verified by `CertificateTests`: a JSON round-trip, a check that the status vocabulary cannot encode `certified`, and a check of the key names.
 
 ## 4. Certified transaction
 
