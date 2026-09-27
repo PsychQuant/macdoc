@@ -4,8 +4,8 @@
 
 ## 2. Layer 1 gate
 
-- [ ] 2.1 [P] Layer 1 gate proves package and byte preservation — part-set and byte checks. `Layer1Gate.evaluate` reports `partAdded`, `partRemoved`, and `unexpectedChange` with both sizes and the first differing offset. `changedParts` lists every differing part. This follows the design decision "Compare non-target parts by exact bytes, not canonical XML". Verified by `Layer1GateTests` cases for a clean pass, a dropped theme part, an added part and an unallowed `word/styles.xml` change, all written RED first.
-- [ ] 2.2 Layer 1 gate package-integrity checks. The candidate must re-open through `DocxReader` (`unreadablePackage`). Every `.xml` and `.rels` part must be well-formed (`malformedXML`). `[Content_Types].xml` must cover every part through an `Override` or an extension `Default` (`missingContentType`). Every internal relationship target must exist (`danglingRelationship`). Verified by one `Layer1GateTests` case per violation, each built from a synthetic package.
+- [x] 2.1 [P] Layer 1 gate proves package and byte preservation — part-set and byte checks. `Layer1Gate.evaluate` reports `partAdded`, `partRemoved`, and `unexpectedChange` with both sizes and the first differing offset. `changedParts` lists every differing part. This follows the design decision "Compare non-target parts by exact bytes, not canonical XML". Verified by `Layer1GateTests` cases for a clean pass, a dropped theme part, an added part and an unallowed `word/styles.xml` change, all written RED first.
+- [x] 2.2 Layer 1 gate package-integrity checks. The candidate must re-open through `DocxReader` (`unreadablePackage`). Every `.xml` and `.rels` part must be well-formed (`malformedXML`). `[Content_Types].xml` must cover every part through an `Override` or an extension `Default` (`missingContentType`). Every internal relationship target must exist (`danglingRelationship`). Verified by one `Layer1GateTests` case per violation, each built from a synthetic package.
 
 ## 3. Certificate
 
