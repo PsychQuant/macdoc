@@ -147,6 +147,17 @@ final class SetBoldEndToEndTests: XCTestCase {
         }
         XCTAssertTrue(introRuns.contains { runText($0) == "TARGET" }, "run split must isolate the substring into its own run")
 
+        // The split leaves "intro alpha " and " beta gamma" with edge
+        // whitespace; without xml:space="preserve" Word drops it and the
+        // words run together ("alphaTARGETbeta").
+        for run in introRuns {
+            let text = runText(run)
+            guard text.first == " " || text.last == " " else { continue }
+            let t = run.children.first { $0.kind == .element && $0.localName == "t" }
+            XCTAssertEqual(t?.attributeValue(prefix: "xml", localName: "space"), "preserve",
+                           "\(String(reflecting: text)) has edge whitespace but no xml:space=\"preserve\"")
+        }
+
         // The untouched second paragraph is untouched.
         let secondRuns = try runs(inParagraphContaining: "second paragraph", of: outputDoc)
         XCTAssertEqual(secondRuns.map(runText).joined(), "second paragraph untouched")
