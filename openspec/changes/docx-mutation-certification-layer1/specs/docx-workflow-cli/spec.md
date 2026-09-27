@@ -41,3 +41,14 @@ The optional `--certificate <path>` flag SHALL write the certificate JSON to tha
 
 - **WHEN** the certificate destination passes pre-flight validation, the underlying transaction succeeds, and the certificate write itself then fails
 - **THEN** stderr reports the output path as written, stderr also reports the certificate-write failure, and the exit code is non-zero
+
+##### Example: Certificate directory removed between pre-flight and write
+
+| Step | Detail |
+|---|---|
+| GIVEN | `--certificate /tmp/certs/cert.json`, where `/tmp/certs/` exists and is writable when `apply` starts |
+| GIVEN | the manifest's one `insert_paragraph` step and its baseline are otherwise valid |
+| WHEN | `/tmp/certs/` is removed after the candidate has been committed to `out.docx` but before the certificate write is attempted (a race) |
+| THEN | `out.docx` exists with the applied change, stderr contains `已寫入: out.docx` |
+| AND | stderr also contains a warning naming `/tmp/certs/cert.json` and the write failure |
+| AND | the exit code is non-zero, and no file exists at `/tmp/certs/cert.json` |
