@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.7.0] - 2026-09-28
+
+### Changed
+
+- `binary_version` **4.6.0 → 4.7.0**：
+  - 過去回報成功卻沒有真的寫入的工具改為真的寫入或回 `isError`：`set_columns` 等六個格式工具、浮水印三件組（`insert_watermark`／`insert_image_watermark`／`remove_watermark` 現在真的寫入 VML）、欄位代碼與內容控制對越界 `paragraph_index` 的靜默附加（PsychQuant/che-word-mcp#245、#208、#250、#251）。
+  - JSON-RPC batch 內有請求超過深度上限時整批不執行，每個請求都在同一個回應陣列裡拿到錯誤（PsychQuant/che-word-mcp#242）。
+  - 圖片：`list_images`／`get_document_info` 以 package 引用為準、列出 header／footer 圖片與孤兒媒體檔；`insert_image_from_path` 支援 PDF 來源；`insert_floating_image` 接上 `relative_to_h`／`relative_to_v`（PsychQuant/che-word-mcp#199、#217、#219、#16、#233、#209）。**`list_images` 輸出格式改變**，見 che-word-mcp 的 CHANGELOG「升級注意」。
+  - 表單類文件：`replace_text` 跨 run 替換保留各段格式、`update_cell` 寫入空儲存格時繼承字型、純空白 run 遺失時的搜尋備援、巢狀表格可讀可寫（PsychQuant/che-word-mcp#190、#191、#187、#188、#189）。
+  - 字串參數的型別與列舉值改為嚴格驗證；`tools/list` 補齊陣列參數的 `items`（PsychQuant/che-word-mcp#240、#236）。
+  - ooxml-swift 3.16.2：兩層以上巢狀表格的文件編輯外層儲存格後存檔，不再讓行程當掉（PsychQuant/ooxml-swift#195）。
+- gitlink `mcp/che-word-mcp` 指向 4.7.0 的 release commit。
+
 ## [4.6.0] - 2026-09-27
 
 ### Changed
