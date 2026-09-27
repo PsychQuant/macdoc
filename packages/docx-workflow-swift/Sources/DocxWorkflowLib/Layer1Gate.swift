@@ -255,11 +255,19 @@ public enum Layer1Gate {
     }
 
     private static func hasContentType(partName: String, contentTypes: ContentTypes) -> Bool {
-        if contentTypes.overrides["/" + partName] != nil { return true }
-        // R2 review Finding L2: OPC (ECMA-376 Part 2, Content Types stream `Default` element) compares
-        // a `Default`'s `Extension` case-insensitively. `contentTypes
-        // .defaults` is stored lowercased (see `ContentTypesCollector`
-        // below), so lowercase the part's own extension too.
+        // R3 review Finding C: OPC's part name comparison is ASCII
+        // case-insensitive, and an `Override` element's `PartName`
+        // attribute names a part — this is the same principle the R2 fix
+        // below already applies to `Default`'s `Extension` attribute, just
+        // not yet applied here. `contentTypes.overrides` is stored
+        // lowercased (see `ContentTypesCollector` below), so lowercase the
+        // query key too.
+        if contentTypes.overrides[("/" + partName).lowercased()] != nil { return true }
+        // R2 review Finding L2: OPC's Content Types stream `Default`
+        // element compares its `Extension` attribute case-insensitively.
+        // `contentTypes.defaults` is stored lowercased (see
+        // `ContentTypesCollector` below), so lowercase the part's own
+        // extension too.
         let ext = fileExtension(of: partName).lowercased()
         return contentTypes.defaults[ext] != nil
     }
@@ -290,7 +298,10 @@ public enum Layer1Gate {
                 }
             case "Override":
                 if let partName = attributes["PartName"], let contentType = attributes["ContentType"] {
-                    overrides[partName] = contentType
+                    // Lowercased on the way in — matched against a
+                    // lowercased query key in `hasContentType` (R3 review
+                    // Finding C).
+                    overrides[partName.lowercased()] = contentType
                 }
             default:
                 break

@@ -8,20 +8,27 @@
 // transaction commits only after every gate passes".
 //
 // Sequence (design.md's numbered contract):
-// 0. Pre-flight: reject an output path that is an existing directory, and
-//    a `--certificate` destination that is not writable, before anything
-//    is touched (R2 review Findings 1 CRITICAL and 2 MEDIUM).
+// 0. Pre-flight: reject an output path that is an existing directory, a
+//    `--certificate` destination that is not writable, and a
+//    `--certificate` destination that refers to the same file as the
+//    output, the baseline, or the rejected-candidate path — before
+//    anything is touched (R2 review Findings 1 CRITICAL and 2 MEDIUM; R3
+//    review Finding A CRITICAL).
 // 1. Read the baseline and record its SHA-256.
 // 2. Apply the manifest in memory (`Executor`) and write the candidate.
 // 3. Run the Layer 1 gate, then the manifest's `verify` assertions, both
 //    against the candidate.
 // 4. Re-check the baseline hash.
 // 5. Only if everything passed, atomically rename the candidate onto the
-//    output.
+//    output via POSIX `rename(2)` (R3 review Finding B — `rename(2)`
+//    itself refuses a directory destination with `EISDIR` instead of
+//    `FileManager.replaceItemAt`'s silent delete-and-replace, closing the
+//    TOCTOU window between the pre-flight check above and this rename).
 // On any failure, the output path is untouched; the candidate is renamed
 // to a rejected-candidate path instead, except for `intentUnavailable`,
-// `outputPathIsDirectory` and `certificateDestinationInvalid`, which fail
-// before any candidate exists.
+// `outputPathIsDirectory`, `certificateDestinationInvalid` and
+// `certificateDestinationConflictsWithOtherPath`, which fail before any
+// candidate exists.
 //
 // Certificate persistence is deliberately NOT part of the pass/fail signal
 // above (R2 review Finding 1): once the destination has passed pre-flight
@@ -30,6 +37,7 @@
 // `certificateWarnHandler`, never by changing what `apply` returns or
 // throws for the transaction itself.
 
+import Darwin
 import Foundation
 
 public struct CertifiedTransaction {
@@ -98,12 +106,13 @@ public struct CertifiedTransaction {
         deriveIntent: (Manifest) throws -> MutationIntent = { try MutationIntent.derive(from: $0) }
     ) throws -> CertificationCertificate {
 
-        // 0. Pre-flight: reject an unwritable destination before anything
-        // is touched. Neither check depends on the manifest or the
-        // baseline, so both run before step 1's read.
+        // 0. Pre-flight: reject an unwritable or conflicting destination
+        // before anything is touched. None of these checks depend on the
+        // manifest or the baseline's content, so all run before step 1's
+        // read.
         try Self.validateOutputIsNotDirectory(outputURL)
         if let certificateURL {
-            try Self.validateCertificateDestination(certificateURL)
+            try Self.validateCertificateDestination(certificateURL, outputURL: outputURL, baselineURL: baselineURL)
         }
 
         // 1. Read the baseline and record its SHA-256.
@@ -116,12 +125,21 @@ public struct CertifiedTransaction {
 
         // 2. Apply the manifest in memory and write the candidate.
         let candidateURL = Self.makeCandidateURL(for: outputURL)
+        // R3 review Finding B: if the final commit rename fails, the
+        // candidate is deliberately NOT deleted — it is either handed off
+        // to the rejected-candidate path, or (if even that rename fails)
+        // left at its own `candidateURL` for diagnosis. This flag is set
+        // immediately before throwing in either of those cases so the
+        // `defer` below does not delete the very evidence just preserved.
+        var candidateCleanupSuppressed = false
         defer {
             // Best-effort: once committed (either to `outputURL` or to the
             // rejected path) `candidateURL` no longer exists, so this is a
             // no-op on every normal path. It only matters if something
             // throws between the write above and the rename below.
-            try? FileManager.default.removeItem(at: candidateURL)
+            if !candidateCleanupSuppressed {
+                try? FileManager.default.removeItem(at: candidateURL)
+            }
         }
         _ = try Executor().apply(manifest: manifest, baselineURL: baselineURL, outputURL: candidateURL, warnHandler: warnHandler)
         try testHookAfterCandidateWritten?(candidateURL)
@@ -168,7 +186,32 @@ public struct CertifiedTransaction {
 
         // 5. Only if everything passed, atomically rename the candidate.
         if overallPassed {
-            try Self.commit(from: candidateURL, to: outputURL)
+            do {
+                try Self.commit(from: candidateURL, to: outputURL)
+            } catch let failure as RenameFailure {
+                // The output slot changed underneath us between the last
+                // pre-flight check and this rename (R3 review Finding B).
+                // `rename(2)` itself refused it (typically `EISDIR`) —
+                // unlike `FileManager.replaceItemAt`, it never silently
+                // deleted anything. The candidate — which passed every
+                // gate — is not lost: fall back to the rejected path.
+                let rejectedURL = Self.rejectedURL(for: outputURL)
+                var preservedAt: String?
+                do {
+                    try Self.commit(from: candidateURL, to: rejectedURL)
+                    preservedAt = rejectedURL.path
+                } catch {
+                    candidateCleanupSuppressed = true
+                    preservedAt = candidateURL.path
+                }
+                throw CertificationError.commitFailed(
+                    path: outputURL.path,
+                    reason: failure.isDestinationDirectory
+                        ? "輸出路徑在最後改名瞬間變成了既有目錄"
+                        : "改名失敗：\(failure.message)",
+                    rejectedCandidatePath: preservedAt
+                )
+            }
             Self.removeIfExists(Self.rejectedURL(for: outputURL))
             let certificate = CertificationCertificate(
                 status: .layer1Verified,
@@ -191,7 +234,23 @@ public struct CertifiedTransaction {
         }
 
         let rejectedURL = Self.rejectedURL(for: outputURL)
-        try Self.commit(from: candidateURL, to: rejectedURL)
+        do {
+            try Self.commit(from: candidateURL, to: rejectedURL)
+        } catch let failure as RenameFailure {
+            // The rejected-candidate slot itself changed underneath us
+            // (the same race as above, just on the failure path). There is
+            // no further fallback location; leave the candidate at its own
+            // temporary path rather than let the deferred cleanup delete
+            // the only remaining evidence.
+            candidateCleanupSuppressed = true
+            throw CertificationError.commitFailed(
+                path: rejectedURL.path,
+                reason: failure.isDestinationDirectory
+                    ? "rejected 候選檔路徑在最後改名瞬間變成了既有目錄"
+                    : "改名失敗：\(failure.message)",
+                rejectedCandidatePath: candidateURL.path
+            )
+        }
         let certificate = CertificationCertificate(
             status: .rejected,
             baselineSHA256: baselineHashAtRead,
@@ -242,19 +301,72 @@ public struct CertifiedTransaction {
         return directory.appendingPathComponent(name)
     }
 
-    /// Atomic same-volume rename (POSIX `rename(2)`, falling back to
-    /// copy+delete cross-volume) via the same `FileManager` API
-    /// `OOXMLSwift.DocxWriter.write` uses. Replaces `destinationURL` if it
-    /// already exists — "replacing any previous rejected file" for the
-    /// rejected path, and the normal overwrite semantics for the output.
+    /// A POSIX `rename(2)` failure, carrying `errno` for the caller to
+    /// format or specialize (R3 review Finding B).
+    private struct RenameFailure: Error {
+        let errnoValue: Int32
+        var isDestinationDirectory: Bool { errnoValue == EISDIR }
+        var message: String { String(cString: strerror(errnoValue)) }
+    }
+
+    /// Atomic same-volume rename via the raw POSIX `rename(2)` syscall
+    /// (`Darwin.rename`) — deliberately NOT `FileManager.replaceItemAt`
+    /// (R2 review Finding 2 → R3 review Finding B). `candidateURL` is
+    /// always a sibling of the output, so this is always same-volume: no
+    /// cross-volume fallback is needed. `rename(2)`'s own semantics are
+    /// exactly what this transaction needs and `replaceItemAt` did not
+    /// give: replacing an existing regular file is atomic, and replacing
+    /// an existing DIRECTORY is refused with `EISDIR` instead of the
+    /// directory (and everything in it) being silently deleted.
     private static func commit(from candidateURL: URL, to destinationURL: URL) throws {
-        _ = try FileManager.default.replaceItemAt(
-            destinationURL, withItemAt: candidateURL, backupItemName: nil, options: []
-        )
+        let result = candidateURL.path.withCString { candidatePath in
+            destinationURL.path.withCString { destinationPath in
+                Darwin.rename(candidatePath, destinationPath)
+            }
+        }
+        guard result == 0 else {
+            throw RenameFailure(errnoValue: errno)
+        }
     }
 
     private static func removeIfExists(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Same-file identity (R3 review Finding A)
+
+    private struct FileIdentity: Equatable {
+        let device: Int
+        let inode: Int
+    }
+
+    private static func fileIdentity(_ url: URL) -> FileIdentity? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        guard let device = attributes[.systemNumber] as? Int,
+              let inode = attributes[.systemFileNumber] as? Int else { return nil }
+        return FileIdentity(device: device, inode: inode)
+    }
+
+    /// True when `a` and `b` refer to the same file: either their
+    /// symlink-resolved, standardized paths are textually equal, or — when
+    /// both actually exist — they share the same device and inode. The
+    /// second check is what catches a hard link, or a case-insensitive
+    /// filesystem's collision between two differently cased paths that
+    /// string normalization alone does not fold when the leaf component
+    /// does not yet exist on disk (APFS is case-insensitive by default: on
+    /// such a volume `Out.docx` and `out.docx` name the same file once
+    /// either is created, even though `resolvingSymlinksInPath` cannot
+    /// know that ahead of creation). Exposed (not `private`) so the CLI
+    /// layer can apply the identical rule to a path `CertifiedTransaction`
+    /// itself never sees — the manifest's own file path.
+    public static func filesAreIdentical(_ a: URL, _ b: URL) -> Bool {
+        let normalizedA = a.resolvingSymlinksInPath().standardizedFileURL
+        let normalizedB = b.resolvingSymlinksInPath().standardizedFileURL
+        if normalizedA.path == normalizedB.path { return true }
+        guard let identityA = fileIdentity(normalizedA), let identityB = fileIdentity(normalizedB) else {
+            return false
+        }
+        return identityA == identityB
     }
 
     // MARK: - Pre-flight destination checks (R2 review Findings 1 CRITICAL, 2 MEDIUM)
@@ -278,7 +390,15 @@ public struct CertifiedTransaction {
     /// directory. A write that still fails after this check passes is a
     /// race, handled separately by `writeCertificateIfRequested`'s
     /// `certificateWarnHandler`, not by this function.
-    private static func validateCertificateDestination(_ certificateURL: URL) throws {
+    ///
+    /// Also checked (R3 review Finding A, CRITICAL): the certificate
+    /// destination must not be the same file as the output, the baseline,
+    /// or the rejected-candidate path this same call would use. Without
+    /// this, a certificate path that happens to equal one of those would
+    /// let the certificate write — which runs AFTER the commit — silently
+    /// overwrite the just-verified output or the caller's own source file,
+    /// while `apply` still reports success.
+    private static func validateCertificateDestination(_ certificateURL: URL, outputURL: URL, baselineURL: URL) throws {
         let fm = FileManager.default
         let parent = certificateURL.deletingLastPathComponent()
         var parentIsDirectory: ObjCBool = false
@@ -296,6 +416,17 @@ public struct CertifiedTransaction {
         if fm.fileExists(atPath: certificateURL.path, isDirectory: &targetIsDirectory), targetIsDirectory.boolValue {
             throw CertificationError.certificateDestinationInvalid(
                 path: certificateURL.path, reason: "目的路徑本身是既有目錄"
+            )
+        }
+
+        let others: [(URL, String)] = [
+            (outputURL, "輸出路徑（--output）"),
+            (baselineURL, "baseline 路徑（--input）"),
+            (rejectedURL(for: outputURL), "rejected 候選檔路徑"),
+        ]
+        for (other, role) in others where filesAreIdentical(certificateURL, other) {
+            throw CertificationError.certificateDestinationConflictsWithOtherPath(
+                certificatePath: certificateURL.path, conflictingRole: role, conflictingPath: other.path
             )
         }
     }
