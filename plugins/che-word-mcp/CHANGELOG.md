@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.5.0] - 2026-09-27
+
+### Changed
+
+- `binary_version` **4.4.0 → 4.5.0**：
+  - 任何工具呼叫帶巢狀很深的 JSON 引數不再讓 server 行程當掉，改回 JSON-RPC 錯誤（PsychQuant/che-word-mcp#116）；`estimate_paragraph_for_page` 讀到文件內超界的頁面尺寸不再當掉（PsychQuant/che-word-mcp#237）。
+  - Direct Mode 與 `revert_to_disk`／`reload_from_disk`／`recover_from_autosave` 不再洩漏解壓暫存目錄（PsychQuant/che-word-mcp#221）。
+  - 幾個過去回報成功、實際沒做事的呼叫改回 `isError`：`set_table_style` 沒命中任何樣式、`splice_paragraph_omath_from_source` 來源沒有 OMath、`create_numbering_definition` 的 level 全部無效（PsychQuant/che-word-mcp#215、PsychQuant/che-word-mcp#238）。
+  - ooxml-swift 3.14.0：`update_cell` 後存檔，表格其他地方的垂直合併、空段落的段落格式、列的對齊不再被靜默改掉（PsychQuant/che-word-mcp#185、PsychQuant/che-word-mcp#224）。
+- 文件保護五個工具與浮水印寫入三個工具目前未實作，CLAUDE.md、README.md、skill 都改為明講（PsychQuant/che-word-mcp#210）。
+- gitlink `mcp/che-word-mcp` 指向 4.5.0 的 release commit。
+
 ## [4.4.0] - 2026-09-25
 
 ### Changed

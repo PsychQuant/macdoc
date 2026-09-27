@@ -182,7 +182,9 @@ export_all_images(doc_id, output_dir)
 
 ### Bookmarks / Indexes / TOC / Watermarks
 
-`insert_bookmark`, `delete_bookmark`, `list_bookmarks`, `insert_index`, `insert_index_entry`, `insert_toc`, `insert_table_of_figures`, `insert_watermark`, `insert_image_watermark`, `remove_watermark`, `get_watermark`, `list_watermarks`
+`insert_bookmark`, `delete_bookmark`, `list_bookmarks`, `insert_index`, `insert_index_entry`, `insert_toc`, `insert_table_of_figures`, `get_watermark`, `list_watermarks`
+
+Watermark write tools (`insert_watermark`, `insert_image_watermark`, `remove_watermark`) are listed by the server but not implemented: each call returns `isError`. Do not use them to add or remove a watermark (PsychQuant/che-word-mcp#208).
 
 ### Fields
 
@@ -194,7 +196,7 @@ export_all_images(doc_id, output_dir)
 
 ### Document Protection
 
-`protect_document`, `unprotect_document`, `set_document_password`, `remove_document_password`, `restrict_editing_region`
+Not implemented. `protect_document`, `unprotect_document`, `set_document_password`, `remove_document_password` and `restrict_editing_region` are listed by the server, but each call returns `isError` (PsychQuant/che-word-mcp#172). Tell the user protection has to be set in Word.
 
 ### Compare / Export
 
