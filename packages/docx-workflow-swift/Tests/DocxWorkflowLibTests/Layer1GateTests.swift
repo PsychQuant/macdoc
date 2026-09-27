@@ -436,4 +436,44 @@ final class Layer1GateTests: XCTestCase {
             return false
         }, "\(result.violations)")
     }
+
+    /// R4 review Finding G (LOW, test-gap): `testContentTypeOverridePartNameMatchIsCaseInsensitive`
+    /// only changed the `Override` element's own `PartName` attribute case
+    /// (`/Word/Styles.XML`) — the actual on-disk part it was matched
+    /// against (`word/styles.xml`, from the real ZIP entry) is already
+    /// lowercase, so `hasContentType`'s READ-side `.lowercased()` call on
+    /// the Override branch was never actually exercised by it (removing
+    /// just that line left all 15 `Layer1GateTests` cases passing — the
+    /// review's own mutation probe). This is the Override-branch
+    /// counterpart to `testContentTypeDefaultExtensionMatchIsCaseInsensitiveOnTheQuerySide`
+    /// above: the part added here has an uppercase on-disk name
+    /// (`word/Extra.XML`), so the query side's case must be folded too, not
+    /// just the stored `Override`'s. The generic `Default Extension="xml"`
+    /// fallback is removed so only the `Override` branch can satisfy the
+    /// lookup — otherwise the Default branch (already covered by the test
+    /// above) would silently rescue a broken Override branch and this test
+    /// would pass for the wrong reason.
+    func testContentTypeOverridePartNameMatchIsCaseInsensitiveOnTheQuerySide() throws {
+        let baseline = try makeBaseline(texts: ["intro"])
+        let candidate = try makeCandidate(from: baseline) { dir in
+            try self.replace(
+                #"<Default Extension="xml" ContentType="application/xml"/>"#,
+                with: "",
+                in: dir.appendingPathComponent("[Content_Types].xml"))
+            let extra = dir.appendingPathComponent("word/Extra.XML")
+            try Data(#"<?xml version="1.0" encoding="UTF-8"?><root/>"#.utf8).write(to: extra)
+            try self.insert(
+                #"<Override PartName="/word/extra.xml" ContentType="application/xml"/>"#,
+                before: "</Types>", in: dir.appendingPathComponent("[Content_Types].xml"))
+        }
+        defer { cleanup(baseline, candidate) }
+
+        let intent = MutationIntent(allowedParts: ["word/document.xml"], stepSummary: ["insert_paragraph"])
+        let result = Layer1Gate.evaluate(baseline: baseline, candidate: candidate, intent: intent)
+
+        XCTAssertFalse(result.violations.contains { violation in
+            if case .missingContentType(let part) = violation { return part == "word/Extra.XML" }
+            return false
+        }, "\(result.violations)")
+    }
 }
