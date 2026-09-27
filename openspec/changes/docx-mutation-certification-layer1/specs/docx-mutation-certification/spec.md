@@ -45,8 +45,8 @@ A runtime-functional step whose type has no row SHALL cause `derive(from:)` to t
 - Every part outside the intent's allowed set is byte-identical between baseline and candidate. A breach yields `unexpectedChange`, carrying both sizes and the first differing byte offset.
 - The candidate re-opens through `DocxReader`. Otherwise the result is `unreadablePackage`.
 - Every part whose name ends in `.xml` or `.rels` parses as well-formed XML. Otherwise the result is `malformedXML`.
-- `[Content_Types].xml` assigns a content type to every part, by `Override` or by extension `Default`. Otherwise the result is `missingContentType`.
-- Every internal relationship target resolves to an existing part. Otherwise the result is `danglingRelationship`.
+- `[Content_Types].xml` assigns a content type to every part, by `Override` or by extension `Default`. The `Default` `Extension` comparison SHALL be case-insensitive, per OPC (ECMA-376 Part 2 §10.1.2.2.1). Otherwise the result is `missingContentType`.
+- Every internal relationship target, percent-decoded first, resolves to an existing part. Otherwise the result is `danglingRelationship`, naming the target as it was written (not decoded).
 
 The result SHALL list `changedParts`, the parts whose bytes differ, whether or not they were allowed.
 
@@ -69,6 +69,57 @@ The result SHALL list `changedParts`, the parts whose bytes differ, whether or n
 
 - **WHEN** a relationship in the candidate targets a part that does not exist in the candidate
 - **THEN** the gate fails with `danglingRelationship` naming the source relationships part and the target
+
+#### Scenario: Content-type Default extension match is case-insensitive
+
+- **WHEN** `[Content_Types].xml`'s `Default` for a part's extension is written in a different case than the part's own extension (for example `Extension="RELS"` covering a part ending in `.rels`)
+- **THEN** the gate does not report `missingContentType` for that part
+
+#### Scenario: Relationship target is percent-decoded before resolution
+
+- **WHEN** a relationship's `Target` is percent-encoded (for example a space written as `%20`) and the decoded path resolves to a part that exists
+- **THEN** the gate does not report `danglingRelationship` for that relationship
+
+### Requirement: Pre-flight destination checks reject an unwritable output or certificate path before any write
+
+Before `CertifiedTransaction.apply` reads the baseline, it SHALL reject two destinations without creating, truncating or replacing anything:
+
+- The output path, if it already exists and is a directory, SHALL cause `apply` to throw `CertificationError.outputPathIsDirectory(path:)`.
+- When a certificate URL is given, its destination SHALL be validated: the parent directory SHALL exist and be writable, and the destination itself, if something already exists there, SHALL NOT be a directory. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationInvalid(path:reason:)`.
+
+Neither case SHALL produce a `CertificationCertificate`; like `intentUnavailable`, both fail before any candidate exists. This check SHALL run regardless of whether the manifest's steps and `verify` block would otherwise have succeeded or failed.
+
+#### Scenario: Output path is an existing directory
+
+- **WHEN** the output path already exists and is a directory
+- **THEN** `apply` throws `CertificationError.outputPathIsDirectory`
+- **AND** the directory and everything in it are unchanged
+- **AND** the baseline is unchanged
+
+#### Scenario: Certificate destination is invalid
+
+- **WHEN** a certificate URL is given whose parent directory does not exist
+- **THEN** `apply` throws `CertificationError.certificateDestinationInvalid` naming the path and a reason
+- **AND** neither the output, the certificate, nor any candidate file is created
+- **AND** this holds whether the manifest's steps and `verify` block would otherwise have caused a successful or a rejected transaction
+
+### Requirement: A certificate write failing after pre-flight validation passed does not change the transaction's own result
+
+After the certificate destination has passed the pre-flight check above, `CertifiedTransaction.apply` SHALL write the certificate atomically. If that write still fails (a race — the destination changed between the check and the write), `apply` SHALL NOT let that failure change whether it returns or throws for the transaction itself, and SHALL NOT change which `CertificationCertificate` it returns or carries. It SHALL instead invoke a `certificateWarnHandler` callback exactly once with a description of the failure.
+
+#### Scenario: Certificate write fails after a successful commit
+
+- **WHEN** the Layer 1 gate and every requested `verify` assertion pass, the output is committed, and the certificate write then fails despite the destination having passed pre-flight validation
+- **THEN** `apply` still returns a certificate with `status` `layer1Verified`
+- **AND** the output path still holds the candidate's bytes
+- **AND** `certificateWarnHandler` is called once
+- **AND** no file exists at the certificate destination
+
+#### Scenario: Certificate write fails after a rejected commit
+
+- **WHEN** a manifest `verify` assertion fails, the candidate is committed to the rejected-candidate path, and the certificate write then fails despite the destination having passed pre-flight validation
+- **THEN** `apply` still throws `CertificationError.verifyFailed` carrying the same `VerifyError` and a certificate whose `rejectedCandidateURL` is set
+- **AND** `certificateWarnHandler` is called once
 
 ### Requirement: Certified transaction commits only after every gate passes
 
