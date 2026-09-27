@@ -19,7 +19,7 @@
 
 ## 5. CLI
 
-- [ ] 5.1 docx apply commits its output only through the certified transaction, and gains `--certificate <path>`, written on success and on failure. On failure, stderr names the failure kind and the rejected-candidate path, and the exit code is non-zero. Verified by two `MacDocDocxIntegrationTests` cases: `--certificate` producing a `layer1Verified` JSON on success, and a failing `verify` leaving `out.docx` absent.
+- [x] 5.1 docx apply commits its output only through the certified transaction, and gains `--certificate <path>`, written on success and on failure. On failure, stderr names the failure kind and the rejected-candidate path, and the exit code is non-zero. Verified by two `MacDocDocxIntegrationTests` cases: `--certificate` producing a `layer1Verified` JSON on success, and a failing `verify` leaving `out.docx` absent.
 
 ## 6. Documentation and regression
 
