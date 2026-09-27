@@ -55,13 +55,15 @@ public struct Executor {
             }
         }
 
-        // Emit via the foundation's DocxWriter. Plain write — atomic
-        // overwrite via Data.write(to:options:.atomic) does an unlink-rename
-        // dance on macOS that errors when the destination doesn't exist
-        // (NSCocoaErrorDomain Code=4). Default write semantics handle both
-        // create-new and overwrite-existing paths cleanly.
-        let bytes = try DocxWriter.writeData(doc)
-        try bytes.write(to: outputURL)
+        // PsychQuant/macdoc#231: emit through `DocxWriter.write(_:to:)`, the
+        // overlay-mode writer. `DocxWriter.writeData` is scratch mode — it
+        // re-serializes every part from the typed model, so parts the model
+        // does not produce (theme, footnotes, endnotes, webSettings, custom
+        // XML) were silently dropped and every other part was rewritten.
+        // `write(_:to:)` starts from the baseline's extracted archive and only
+        // replaces what the edits dirtied. It is also atomic (temp file +
+        // rename), and it handles both a new and an existing destination.
+        try DocxWriter.write(doc, to: outputURL)
 
         return ExecutorResult(
             appliedStepCount: appliedCount,
