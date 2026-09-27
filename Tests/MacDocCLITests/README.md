@@ -168,3 +168,16 @@ executableTarget + 直接依賴它的 testTarget，內含 XCTest 與 Swift Testi
 上方的 `make test-release` 仍保留作為低成本防禦性做法（與本文件既有建議的指令一致），但這不代表
 「已修復」；若之後在其他機器/CI 上重現此錯誤，請補上當時的 `swift --version` 輸出與是否為乾淨
 建置，一併記錄於 #188。
+
+## 不得引用家目錄下的絕對路徑
+
+測試、原始碼與 scripts 不得寫死使用者家目錄下的路徑（`/Users/<帳號>/…`、`/home/<帳號>/…`）。
+這種路徑在別台機器上一定失敗，也會把作者的資料夾結構公開出去。需要外部 fixture 時，用下列其中一種：
+
+- 放進 repo 的 `Tests/MacDocCLITests/Fixtures/`；
+- 在測試內動態產生（#186 的做法）；
+- 以環境變數指定目錄，例如 `MACDOC_TEMPLATE_DIR`，缺少時 `XCTSkip`。
+
+`HostAbsolutePathGuardTests` 會掃描 `Tests/`、`Sources/`、`scripts/`，發現就失敗並列出檔案與行號。
+這條規則來自 [#190](https://github.com/PsychQuant/macdoc/issues/190)：#186 移除的舊路徑仍留在 Git 歷史裡，
+擁有者決定不改寫歷史，改為防止再出現。
