@@ -307,7 +307,7 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 - 列舉與讀取：`list_headers`, `get_header`, `list_footers`, `get_footer`
 - 刪除：`delete_header`, `delete_footer`
 - v3.11.0 新增 4 個：`enable_even_odd_headers`（`<w:evenAndOddHeaders/>`），`link_section_header_to_previous` / `unlink_section_header_from_previous`（Word-compat clone），`get_section_header_map`
-- 浮水印：`insert_watermark`, `insert_image_watermark`, `remove_watermark`, `list_watermarks`, `get_watermark`
+- 浮水印（只有讀取）：`list_watermarks`, `get_watermark`。寫入工具 `insert_watermark`、`insert_image_watermark`、`remove_watermark` 目前未實作，呼叫會回 `isError`（PsychQuant/che-word-mcp#208）
 
 ### Content Controls / SDT（v3.9.0+ 完整 read/write，#44）
 
@@ -389,8 +389,7 @@ get_revisions / accept_revision / reject_revision / accept_all_revisions / rejec
 
 - `get_document_properties` ⚡, `set_document_properties`
 - `get_section_properties` ⚡, `get_word_count_by_section` ⚡
-- `protect_document`, `unprotect_document`, `set_document_password`, `remove_document_password`
-- `restrict_editing_region`
+- 文件保護目前未實作：`protect_document`, `unprotect_document`, `set_document_password`, `remove_document_password`, `restrict_editing_region` 呼叫一律回 `isError`（PsychQuant/che-word-mcp#172）
 
 ### 欄位代碼
 

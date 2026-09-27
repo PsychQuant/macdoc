@@ -28,9 +28,9 @@ Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift). **版本以
 | Content controls / SDT (v3.9) | `insert_content_control`, `list_content_controls`, `update_content_control_text`, `replace_content_control_content`, `insert_repeating_section`, `insert_checkbox`, `insert_dropdown` |
 | Images | `insert_image`, `insert_floating_image`, `update_image`, `set_image_style`, `export_image`, `export_all_images`, `insert_drop_cap` |
 | Footnotes / endnotes / equations / captions | `insert_footnote`, `insert_endnote`, `insert_equation`, `insert_caption`, `list_captions` |
-| Bookmarks / TOC / watermarks | `insert_bookmark`, `insert_toc`, `insert_table_of_figures`, `insert_index`, `insert_watermark`, `insert_image_watermark` |
+| Bookmarks / TOC / watermarks | `insert_bookmark`, `insert_toc`, `insert_table_of_figures`, `insert_index`; watermark read only: `list_watermarks`, `get_watermark`. The write side (`insert_watermark`, `insert_image_watermark`, `remove_watermark`) is not implemented and returns `isError` (PsychQuant/che-word-mcp#208) |
 | Fields | `insert_date_field`, `insert_page_field`, `insert_sequence_field`, `insert_calculation_field`, `insert_if_field`, `insert_merge_field`, `update_all_fields` |
-| Document protection | `protect_document`, `set_document_password`, `restrict_editing_region` |
+| Document protection | Not implemented: `protect_document`, `unprotect_document`, `set_document_password`, `remove_document_password`, `restrict_editing_region` all return `isError` (PsychQuant/che-word-mcp#172) |
 | Compare / export | `compare_documents`, `compare_documents_markdown`, `export_text`, `export_markdown`, `export_revision_summary_markdown`, `export_comment_threads_markdown` |
 
 MCP namespace: `mcp__che-word-mcp__<tool>`.
