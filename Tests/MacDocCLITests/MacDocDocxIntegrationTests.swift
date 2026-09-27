@@ -7,8 +7,23 @@
 
 import XCTest
 import Foundation
+import OOXMLSwift
 
 final class MacDocDocxIntegrationTests: XCTestCase {
+
+    /// A synthetic baseline built directly through the authoring API — no
+    /// `test-files/` fixture needed, so the two `--certificate` tests below
+    /// run in any clone/CI, not only where a local `.docx` happens to sit.
+    private func makeSyntheticBaseline(texts: [String]) throws -> URL {
+        var doc = WordDocument()
+        for text in texts {
+            doc.appendParagraph(Paragraph(text: text))
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("docx-cli-baseline-\(UUID().uuidString).docx")
+        try DocxWriter.writeData(doc).write(to: url)
+        return url
+    }
 
     // MARK: - Binary resolution
 
@@ -102,6 +117,94 @@ final class MacDocDocxIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(bytes.count, 0)
         XCTAssertEqual(Array(bytes.prefix(4)), [0x50, 0x4B, 0x03, 0x04],
             "Output should start with the ZIP/OOXML signature")
+    }
+
+    // MARK: - Certified transaction integration (docx-mutation-certification-layer1)
+
+    func testCertificateFlagWritesLayer1VerifiedJSONOnSuccess() throws {
+        // Spec: "Certificate flag writes the JSON on success"
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        let certificateURL = temp.appendingPathComponent("cert-\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: certificateURL)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", certificateURL.path]
+        )
+
+        XCTAssertEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: certificateURL.path))
+
+        let certificateData = try Data(contentsOf: certificateURL)
+        let certificate = try XCTUnwrap(JSONSerialization.jsonObject(with: certificateData) as? [String: Any])
+        XCTAssertEqual(certificate["status"] as? String, "layer1Verified")
+        XCTAssertEqual(certificate["schemaVersion"] as? Int, 1)
+        XCTAssertEqual(certificate["changedParts"] as? [String], ["word/document.xml"])
+    }
+
+    func testFailingVerifyLeavesOutputAbsent() throws {
+        // Spec: "Failing verify leaves no output"
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        let rejectedURL = temp.appendingPathComponent("\(outputURL.deletingPathExtension().lastPathComponent).rejected.docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: rejectedURL)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ],
+          "verify": { "expected_paragraphs_min": 5 }
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertTrue(stderr.contains("verify") || stderr.contains("驗證") || stderr.contains("驗"),
+                       "stderr should name the verify failure: \(stderr)")
     }
 
     func testPlanDoesNotWriteOutput() throws {
