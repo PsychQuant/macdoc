@@ -169,6 +169,18 @@ extension MacDoc.Docx {
                 } else {
                     writeLine("候選檔也未能保留，請檢查磁碟狀態。")
                 }
+            case .outputPathIsSymlink(let path, let linkTarget, let rejectedCandidatePath):
+                writeLine("錯誤：輸出路徑「\(path)」本身是一個連到「\(linkTarget)」的符號連結，拒絕覆寫（改名會直接換掉連結本身，不會更新它指向的檔案）；建議改用實際路徑。")
+                if let rejectedCandidatePath {
+                    writeLine("已保留候選檔（供診斷）: \(rejectedCandidatePath)")
+                }
+            case .metadataPreservationFailed(let path, let reason, let rejectedCandidatePath):
+                writeLine("錯誤：既有輸出「\(path)」的權限／ACL／擴充屬性複製失敗（\(reason)），為避免新檔案帶著比原檔更寬的權限落地，交易已中止。")
+                if let rejectedCandidatePath {
+                    writeLine("已保留候選檔（供診斷）: \(rejectedCandidatePath)")
+                } else {
+                    writeLine("候選檔也未能保留，請檢查磁碟狀態。")
+                }
             }
         }
     }

@@ -6,6 +6,7 @@
 // are absent, matching the precedent from NoteHTMLConvertTests.
 
 import XCTest
+import Darwin
 import Foundation
 import OOXMLSwift
 
@@ -612,6 +613,160 @@ final class MacDocDocxIntegrationTests: XCTestCase {
         let data = try Data(contentsOf: outputURL)
         XCTAssertEqual(Array(data.prefix(4)), [0x50, 0x4B, 0x03, 0x04],
                        "output must still be a ZIP/OOXML container, not certificate JSON")
+    }
+
+    // MARK: - R4 (review-c137-r3.md Finding E HIGH, Finding F HIGH)
+
+    func testOutputPathThatIsASymlinkIsRejectedAtCliAndTargetSurvivesUntouched() throws {
+        // Finding E: `commit`'s switch to POSIX `rename(2)` (R3) means a
+        // symlink named by `--output` gets its OWN directory entry
+        // replaced by the new file — the target the symlink used to point
+        // to is left completely alone, and the alias relationship between
+        // them is severed without any warning. Before that switch,
+        // `FileManager.replaceItemAt` threw for this same case and
+        // touched neither.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let realTarget = temp.appendingPathComponent("real-target-\(UUID().uuidString).docx")
+        try Data("original target content".utf8).write(to: realTarget)
+        let outputLink = temp.appendingPathComponent("out-symlink-\(UUID().uuidString).docx")
+        try FileManager.default.createSymbolicLink(at: outputLink, withDestinationURL: realTarget)
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: realTarget)
+            try? FileManager.default.removeItem(at: outputLink)
+        }
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputLink.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputLink.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertTrue(stderr.contains("符號連結"), "stderr must name the symlink case: \(stderr)")
+        XCTAssertFalse(stderr.contains("已寫入"), "the transaction must not report success: \(stderr)")
+
+        let resolvedDestination = try FileManager.default.destinationOfSymbolicLink(atPath: outputLink.path)
+        XCTAssertEqual(resolvedDestination, realTarget.path, "the symlink itself must survive, still pointing at the same target")
+        XCTAssertEqual(try String(contentsOf: realTarget, encoding: .utf8), "original target content")
+    }
+
+    func testOverwritingExistingOutputAtCliPreservesPermissionsXattrAndCreationDate() throws {
+        // Finding F: plain `rename(2)` does not preserve a replaced
+        // file's permissions/ACL/xattrs the way `FileManager
+        // .replaceItemAt` used to. Re-running `apply` against an output
+        // the caller had deliberately locked down (e.g. `chmod 640`)
+        // must not silently widen it back to the default umask.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let output = try makeSyntheticBaseline(texts: ["old content"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: output)
+            try? FileManager.default.removeItem(at: manifestURL)
+        }
+
+        let fm = FileManager.default
+        try fm.setAttributes([.posixPermissions: 0o640], ofItemAtPath: output.path)
+        let oldCreationDate = Date(timeIntervalSince1970: 1_000_000_000)
+        try fm.setAttributes([.creationDate: oldCreationDate], ofItemAtPath: output.path)
+        let xattrName = "com.example.macdoc137.cli-marker"
+        let xattrValue = "r4-finding-f-cli"
+        let xattrResult = xattrValue.withCString { value in
+            setxattr(output.path, xattrName, value, strlen(value), 0, 0)
+        }
+        XCTAssertEqual(xattrResult, 0, "test setup: setxattr itself must succeed")
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(output.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", output.path]
+        )
+        XCTAssertEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+
+        let newAttributes = try fm.attributesOfItem(atPath: output.path)
+        XCTAssertEqual((newAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o640, "permissions must survive the overwrite")
+        XCTAssertEqual(newAttributes[.creationDate] as? Date, oldCreationDate, "creation date must survive the overwrite")
+
+        var buffer = [UInt8](repeating: 0, count: 64)
+        let length = getxattr(output.path, xattrName, &buffer, buffer.count, 0, 0)
+        XCTAssertGreaterThan(length, 0, "custom extended attribute must survive the overwrite")
+        XCTAssertEqual(String(bytes: buffer.prefix(max(length, 0)), encoding: .utf8), xattrValue)
+    }
+
+    func testMetadataPreservationFailureAtCliRejectsCommitAndReportsError() throws {
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let output = try makeSyntheticBaseline(texts: ["old content"])
+        let temp = FileManager.default.temporaryDirectory
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let originalOutputBytes = try Data(contentsOf: output)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: output.path)
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: output)
+            try? FileManager.default.removeItem(at: manifestURL)
+        }
+
+        // Deterministic, non-racy reproduction of "copyfile(3) itself
+        // fails": mode 0 still lets `stat` see the file but blocks
+        // `copyfile`'s own `open()` of it (see the library-level test's
+        // comment for why `fileExists`/`attributesOfItem` still succeed).
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: output.path)
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(output.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", output.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertFalse(stderr.contains("已寫入"), "the transaction must not report success: \(stderr)")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: output.path)
+        XCTAssertEqual(try Data(contentsOf: output), originalOutputBytes, "the old output must be byte-for-byte unchanged")
     }
 
     func testPlanDoesNotWriteOutput() throws {
