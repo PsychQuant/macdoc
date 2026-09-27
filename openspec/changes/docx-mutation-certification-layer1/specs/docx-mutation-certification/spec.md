@@ -93,7 +93,7 @@ Before `CertifiedTransaction.apply` reads the baseline, it SHALL reject these de
 - When a certificate URL is given, its destination SHALL be validated: the parent directory SHALL exist and be writable, and the destination itself, if something already exists there, SHALL NOT be a directory. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationInvalid(path:reason:)`.
 - When a certificate URL is given, it SHALL NOT refer to the same file — per `CertifiedTransaction.filesAreIdentical(_:_:)` — as the output path, the baseline path, or the rejected-candidate path this same call would use. Otherwise `apply` SHALL throw `CertificationError.certificateDestinationConflictsWithOtherPath(certificatePath:conflictingRole:conflictingPath:)`.
 
-`filesAreIdentical(_:_:)` SHALL consider two paths the same file when either their symlink-resolved, standardized paths are textually equal, or — when both actually exist — they share the same device and inode.
+`filesAreIdentical(_:_:)` SHALL return `true` when either the two paths' symlink-resolved, standardized paths are textually equal, or — when both actually exist — they share the same device and inode; otherwise it SHALL return `false`.
 
 None of these cases SHALL produce a `CertificationCertificate`; like `intentUnavailable`, all fail before any candidate exists. These checks SHALL run regardless of whether the manifest's steps and `verify` block would otherwise have succeeded or failed.
 
