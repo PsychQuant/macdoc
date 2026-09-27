@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.12.0] - 2026-09-28
+
+### Fixed
+
+- CLI binary **0.14.0 → 0.15.1**：`macdoc docx apply` 的 `set_bold` 過去對任何文件都失敗，現在依 manifest 的 `substring` 只把該段文字加粗，必要時切分 run、其他文字與格式不變；找不到時錯誤訊息寫出具體原因，輸出不寫入（PsychQuant/macdoc#232）。比對範圍不能跨越追蹤修訂、超連結、SDT，目前只支援粗體。
+  - 同時帶進 ooxml-swift 3.14–3.16 的修正：表格編輯後其他列與格的格式保留、typed 重寫時多項格式不再遺失。
+  - 0.15.0 發布後實跑發現切出的片段缺 `xml:space="preserve"`（字會黏在一起），因此跳過 0.15.0，直接指向 0.15.1。
+- skill：1.12.0 版本紀錄。
+
 ## [1.11.0] - 2026-09-27
 
 ### Changed
