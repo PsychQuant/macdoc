@@ -68,3 +68,22 @@ The optional `--certificate <path>` flag SHALL write the certificate JSON to tha
 | WHEN | `apply` runs |
 | THEN | the exit code is non-zero, `out.docx` does not exist afterward |
 | AND | stderr names `out.docx` as conflicting with `輸出路徑（--output）`, and does not contain `已寫入` |
+
+#### Scenario: Certificate path colliding with --output only by case is caught after commit, on a case-insensitive filesystem
+
+- **WHEN** `--output` and `--certificate` differ only by case, on a case-insensitive filesystem, and neither path exists before the call — so the pre-flight check in the "Certificate path equal to the output..." Scenario above cannot see the collision (there is nothing on disk yet to compare devices/inodes against)
+- **THEN** the transaction itself still succeeds and commits: `out.docx` exists as a valid `.docx`, and stderr reports it as written (`已寫入`)
+- **AND** the certificate is not written at the colliding path
+- **AND** the exit code is non-zero, because the certificate could not be written as requested
+- **AND** this Scenario is skipped, with a stated reason, when run on a case-sensitive filesystem
+
+##### Example: `--output Out.docx --certificate out.docx`, neither existing beforehand
+
+| Step | Detail |
+|---|---|
+| GIVEN | a temporary directory on a case-insensitive filesystem (detected by creating a mixed-case file and checking whether its lowercased name resolves to it — not by querying volume attributes) |
+| GIVEN | `macdoc docx apply manifest.json --input baseline.docx --output Out.docx --certificate out.docx`, and neither `Out.docx` nor `out.docx` exists before the call |
+| WHEN | `apply` runs |
+| THEN | the exit code is non-zero |
+| AND | stderr contains `已寫入` naming `Out.docx` |
+| AND | `Out.docx`'s first four bytes are the ZIP signature `PK\x03\x04`, not certificate JSON |
