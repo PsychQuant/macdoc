@@ -88,6 +88,29 @@ The baseline's SHA-256 is recorded when it is read. It is recomputed immediately
 
 Output-path races (another process writing the output between check and rename) are out of scope. The rename replaces whatever is there, which is the same semantics as today.
 
+### R2: Pre-flight checks reject an unwritable output or certificate destination before anything is touched
+
+Added in R2 after an adversarial review (macdoc#137 review-c137.md, CRITICAL Finding 1 and MEDIUM Finding 2). Before step 1 (reading the baseline), `apply` runs two checks that depend only on the arguments, not on the manifest or the baseline's content:
+
+- The output path, if it already exists, must not be a directory. `FileManager.replaceItemAt` — what `commit` uses — silently deletes an existing directory (and everything in it) to replace it with a file; this check turns that into a named, reported failure (`CertificationError.outputPathIsDirectory`) before any write, instead of data loss.
+- When `--certificate` is given, its destination must be writable: the parent directory must exist and be writable, and the destination itself, if something is already there, must not be a directory. Otherwise `CertificationError.certificateDestinationInvalid(path:reason:)` is thrown before any write.
+
+Both checks fail closed and leave everything — baseline, output, and any prior rejected candidate — exactly as it was. Neither carries a `CertificationCertificate`: like `intentUnavailable`, they fail before a candidate exists.
+
+- **Alternative**: check the certificate destination only, since that was the reviewed reproduction. Rejected — the same `FileManager.replaceItemAt` call that made the certificate race matter also makes an existing output directory a silent-deletion hazard, and the fix is the same shape (validate before touching anything), so both are covered together.
+
+### R2: A certificate write failing after pre-flight validation passed does not change the transaction's own result
+
+Also from review-c137.md Finding 1. Pre-flight validation (above) catches the common case — a certificate path pointing at a directory that does not exist yet, which was the review's literal CLI reproduction. It cannot catch a genuine race: the destination passed validation, but something removed the directory, revoked the permission, or filled the disk before the write actually happened.
+
+For that narrower case, `apply` still writes the certificate atomically (`Data.write(options: .atomic)` — temp file plus rename, in the same directory), but a failure there is reported only through a new `certificateWarnHandler: (String) -> Void` callback, never by changing whether `apply` returns or throws:
+
+- If the transaction itself succeeded, `apply` still returns the `layer1Verified` certificate and the output is still committed; `certificateWarnHandler` is called once with a description of the write failure. The CLI (`docx-workflow-cli` spec) turns this into: report the success as usual, print the warning, and exit non-zero anyway — a caller must not treat a `--certificate` file that does not actually exist as ground truth just because the underlying `apply` "succeeded".
+- If the transaction failed, `apply` still throws the same `CertificationError` case it would have thrown anyway (`gateFailed`, `verifyFailed` or `baselineChanged`), carrying the same certificate and the same `rejectedCandidateURL`; `certificateWarnHandler` is called once, in addition.
+
+- **Alternative**: make the race throw its own `CertificationError` case (e.g. `certificateWriteFailed(underlying:certificate:)`), carrying whichever certificate was already decided. Rejected: it would force every catch site to re-derive "was the underlying transaction success or failure" from a certificate's `status` field instead of from the normal case it already switches on, and — because the exact same certificate is available either way — it adds a vocabulary without adding information the callback does not already convey more simply.
+- **Alternative**: let the race throw and treat it exactly like `intentUnavailable` (transaction-level failure). Rejected: the commit has already happened by the time the certificate write runs. Treating a purely cosmetic side-effect failure as if the whole transaction failed would misrepresent a real, already-committed `layer1Verified` output as rejected.
+
 ### Assumptions recorded for macdoc#137's open decisions (unattended run)
 
 macdoc#137 left three decisions for a discussion with the owner. This slice was produced by an unattended `/idd-all` run, which proceeds on documented assumptions rather than stopping. Each assumption is scoped so that a different later choice needs no rework here.
@@ -108,7 +131,9 @@ macdoc#137 left three decisions for a discussion with the owner. This slice was 
 4. Re-checks the baseline hash.
 5. Renames the candidate onto the output.
 
-When `--certificate` is given, the certificate JSON is written to that path in both the success and the failure case. On success, the exit code is 0 and stderr reports the output path, as today. On failure, the exit code is non-zero, the output path is untouched, and stderr names the failure and the rejected-candidate path.
+Before step 1, two pre-flight checks run (R2): the output path must not already be a directory, and — when `--certificate` is given — its destination must be writable. Either failing means nothing is written at all: exit non-zero, output untouched, stderr names the problem.
+
+When `--certificate` is given and passes pre-flight, the certificate JSON is written to that path in both the success and the failure case, atomically. On success, the exit code is 0 and stderr reports the output path, as today — UNLESS the certificate write itself then fails (R2: a race, since pre-flight already passed), in which case stderr reports the output path AND a certificate-write warning, and the exit code is non-zero (so a caller does not treat a missing certificate file as ground truth just because the transaction succeeded). On failure, the exit code is non-zero, the output path is untouched, and stderr names the failure and the rejected-candidate path — plus the same certificate-write warning, when the certificate write also failed.
 
 **Interface** (`DocxWorkflowLib`, public)
 
@@ -122,11 +147,14 @@ When `--certificate` is given, the certificate JSON is written to that path in b
   - `malformedXML(part: String, message: String)`
   - `missingContentType(part: String)`
   - `danglingRelationship(source: String, target: String)`
-- `CertifiedTransaction.apply(manifest:baselineURL:outputURL:certificateURL:warnHandler:) throws -> CertificationCertificate`. It throws `CertificationError` with these cases:
+- `CertifiedTransaction.apply(manifest:baselineURL:outputURL:certificateURL:warnHandler:certificateWarnHandler:) throws -> CertificationCertificate` (R2 adds `certificateWarnHandler`, defaulted to a no-op, so this is source-compatible with the R1 signature). It throws `CertificationError` with these cases:
   - `.gateFailed(CertificationCertificate)`
   - `.verifyFailed(VerifyError, CertificationCertificate)`
   - `.baselineChanged(CertificationCertificate)`
   - `.intentUnavailable(stepType:)`
+  - `.outputPathIsDirectory(path:)` (R2) — the output path already exists and is a directory; thrown before any candidate is written.
+  - `.certificateDestinationInvalid(path:reason:)` (R2) — the `--certificate` destination is unwritable; thrown before any candidate is written.
+  - A certificate write that fails AFTER `certificateDestinationInvalid`'s check has passed (a race) does NOT throw a `CertificationError` case. It calls `certificateWarnHandler(String)` once and otherwise leaves `apply`'s return/throw behavior exactly as it would have been without `--certificate` at all.
 - `CertificationCertificate` is `Codable`. Its JSON keys are:
   - `schemaVersion`, fixed at 1
   - `status`: `layer1Verified` or `rejected`
@@ -140,7 +168,9 @@ When `--certificate` is given, the certificate JSON is written to that path in b
 
 **Failure modes**
 
-Every failure leaves the output path untouched. Only `intentUnavailable` fails before a candidate exists, so no candidate is kept for it. Every other failure keeps the rejected candidate and reports its path.
+Every failure leaves the output path untouched. `intentUnavailable`, `outputPathIsDirectory` and `certificateDestinationInvalid` (R2) fail before a candidate exists, so no candidate is kept for any of them. Every other failure keeps the rejected candidate and reports its path.
+
+A certificate write failing after `certificateDestinationInvalid`'s check has passed (R2, a race) is not a failure mode of the transaction itself — see the R2 decision above. It is reported via `certificateWarnHandler` alongside whatever the transaction's own outcome already was.
 
 **Acceptance criteria**
 
@@ -150,9 +180,15 @@ Every failure leaves the output path untouched. Only `intentUnavailable` fails b
   - gate failure, where the output path is untouched and the rejected candidate exists;
   - verify failure, where the output path is untouched;
   - baseline changed before commit;
-  - intent unavailable.
+  - intent unavailable;
+  - (R2) certificate destination invalid, tried against both a manifest that would otherwise succeed and one that would otherwise fail verify — pre-flight wins either way, before anything is written;
+  - (R2) output path is an existing directory — rejected before any write, the directory and its contents survive;
+  - (R2) a certificate write failing after pre-flight validation passed (a race, via a test-only hook) does not change the transaction's own returned or thrown result, tried against both a successful and a rejected outcome.
 - A macdoc CLI integration test shows `--certificate` writing the JSON.
 - A second integration test shows a failing `verify` assertion leaving the output path absent.
+- (R2) A macdoc CLI integration test shows an invalid `--certificate` destination failing before any write, in Traditional Chinese, exit non-zero, even when the underlying manifest would otherwise have succeeded or otherwise have failed verify.
+- (R2) A macdoc CLI integration test shows an output path that is an existing directory being rejected without deleting it.
+- (R2) A macdoc CLI integration test shows a non-`CertificationError` failure (e.g. a missing manifest file) still using the Traditional Chinese "錯誤：" prefix, not swift-argument-parser's default English top-level error printer.
 - The macdoc#231 regression test still passes.
 
 **Scope boundaries**
