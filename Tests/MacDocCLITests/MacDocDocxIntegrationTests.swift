@@ -547,6 +547,73 @@ final class MacDocDocxIntegrationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
     }
 
+    // MARK: - R3b (review-c137-r2.md follow-up): a same-file collision
+    // pre-flight cannot see, because neither --output nor --certificate
+    // existed yet and they differ only by case.
+
+    /// True when `directory`'s filesystem folds case for lookups (APFS's
+    /// default). Probes empirically rather than querying volume
+    /// attributes, per the coordinator's explicit instruction that this
+    /// follow-up should not need to.
+    private func directoryIsCaseInsensitive(_ directory: URL) -> Bool {
+        let name = "CASEPROBE-\(UUID().uuidString)"
+        let mixedCase = directory.appendingPathComponent(name)
+        let lowered = directory.appendingPathComponent(name.lowercased())
+        FileManager.default.createFile(atPath: mixedCase.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: mixedCase) }
+        return FileManager.default.fileExists(atPath: lowered.path)
+    }
+
+    func testCertificateDestinationCollidingWithOutputOnlyByCaseIsCaughtAfterCommit() throws {
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("cli-case-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        guard directoryIsCaseInsensitive(temp) else {
+            throw XCTSkip("this filesystem is case-sensitive — the R3b collision needs a case-insensitive volume (APFS's default)")
+        }
+
+        let baseline = try makeSyntheticBaseline(texts: ["intro"])
+        let manifestURL = temp.appendingPathComponent("manifest.json")
+        let outputURL = temp.appendingPathComponent("Out.docx")
+        let certificateURL = temp.appendingPathComponent("out.docx")   // same file once created, different case
+        defer { try? FileManager.default.removeItem(at: baseline) }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path), "the point of this test is that neither path exists before the call")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: certificateURL.path))
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "intro" }, "content": "inserted" }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path,
+                   "--certificate", certificateURL.path]
+        )
+
+        XCTAssertNotEqual(exitCode, 0, "stdout: \(stdout) stderr: \(stderr)")
+        XCTAssertTrue(stderr.contains("已寫入"), "the transaction itself succeeded and must still be reported: \(stderr)")
+
+        // The output must still be a valid ZIP/OOXML container — not
+        // overwritten by certificate JSON that the case-insensitive
+        // collision would otherwise have routed to the exact same
+        // directory entry.
+        let data = try Data(contentsOf: outputURL)
+        XCTAssertEqual(Array(data.prefix(4)), [0x50, 0x4B, 0x03, 0x04],
+                       "output must still be a ZIP/OOXML container, not certificate JSON")
+    }
+
     func testPlanDoesNotWriteOutput() throws {
         // Spec: "plan does not write output"
         guard let binary = macdocBinary else {
