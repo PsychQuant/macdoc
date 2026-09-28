@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.8.0] - 2026-09-28
+
+### Security
+
+- `binary_version` **4.7.0 → 4.8.0**（ooxml-swift 3.18.1）：修正 `export_all_images`／`export_image` 的圖片路徑穿越。4.7.0 以前，惡意 .docx 的圖片關係 `Target` 若帶足夠的 `../`，`open_document` 會把封裝之外的本機檔案讀進記憶體，匯出工具再把它寫進呼叫端指定的輸出目錄。以下載的 4.8.0 release binary 與惡意文件實測：只匯出合法圖片。
+
+### Changed
+
+- 32 個寫側工具的 JSON 字面拒絕改為 `isError`；`execute_script` 驗證失敗的 body 改為 JSON；工具回應可能在主要內容之後多出 `Advisory: ` 區塊（PsychQuant/che-word-mcp#182、#214、#192）。
+- `restrict_editing_region` 改為真的寫入；`export_script` 新增 `from_oplog`；存檔的圖片一致性守門改查實際寫出的位元組（PsychQuant/che-word-mcp#184、#169、#220）。
+- 讀取 .docx 套用解壓大小上限（ooxml-swift 3.17.0）。詳見 che-word-mcp 的 CHANGELOG「升級注意」。
+- gitlink `mcp/che-word-mcp` 指向 4.8.0 的 release commit。
+
 ## [4.7.0] - 2026-09-28
 
 ### Changed

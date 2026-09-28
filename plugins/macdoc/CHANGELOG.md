@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [1.13.0] - 2026-09-28
+
+### Security
+
+- CLI binary **0.15.1 → 0.16.0**（ooxml-swift 3.19.0）：修正讀入 .docx 時的圖片路徑穿越。0.15.1 以前，document 本體圖片關係的 `Target` 若帶足夠的 `../`，會把封裝之外的本機檔案讀進來，`macdoc convert --to marker` 會把它寫成 `images/` 裡的檔案。0.16.0 依 OPC 規則解析 Target，解開符號連結後必須落在封裝內且是一般檔案。以惡意 .docx 實測：0.15.1 的 marker 輸出含封裝外內容，0.16.0 只輸出合法圖片。
+  - 同時帶進 ooxml-swift 3.17–3.19 的解壓大小上限、typed 重寫保真度、relationships 與穩健性修正。
+- skill：1.13.0 版本紀錄。
+
 ## [1.12.0] - 2026-09-28
 
 ### Fixed

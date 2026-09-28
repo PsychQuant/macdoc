@@ -260,6 +260,7 @@ macdoc config document gc --force                             # 實際刪除；�
 
 - **1.10.0**：`word reverse --paragraphs-only` 改用 ooxml-swift 的共用實作（與 che-word-mcp 一致）；讀寫 Word 文件時保留未建模的段落屬性（`w:kinsoku`、`w:snapToGrid` 等）、非 UTF-8 宣告的 part 正確轉碼、依 relationship 找格式 part（需要 CLI 0.13.0）
 - **1.10.1**：typed 編輯後段落框線與網底不再消失、段落屬性依 schema 順序寫出；CLI 與 che-word-mcp 4.4.0 用同一版 ooxml-swift（需要 CLI 0.13.1）
+- **1.13.0**：安全修正——讀入 .docx 時的圖片路徑穿越，惡意文件不能再經 marker 轉換寫出本機檔案；同時帶進解壓大小上限與多項 typed 重寫修正（需要 CLI 0.16.0）
 - **1.12.0**：`docx apply` 的 `set_bold` 依 `substring` 只加粗該段文字（過去一律失敗）；同時帶進表格格式保留與 typed 重寫的多項修正（需要 CLI 0.15.1）
 - **1.11.0**：`docx apply` 改為認證式交易：通過 Layer 1 關卡與 `verify` 才寫出輸出，失敗時輸出路徑不動（**BREAKING**）；新增 `--certificate` 寫出證書 JSON（需要 CLI 0.14.0）
 - **1.10.2**：`docx apply` 不再刪除或重寫未觸及的 part（主題、註腳、尾註等），修正會讓真實文件遺失格式的問題（需要 CLI 0.13.2）
