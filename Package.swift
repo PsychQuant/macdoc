@@ -43,7 +43,7 @@ let package = Package(
         // ScriptExporter / SidecarStore / DocxReader live in OOXMLSwift).
         // 3.16.0 (macdoc#232): OOXMLEdit.setBoldInRange(target:substring:
         // value:instance:) + ReducerError: LocalizedError.
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.16.1"),
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.19.0"),
     ],
     targets: [
         // cli-spec.yaml generator (#72): dump-help decoder, project schema
