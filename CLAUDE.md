@@ -94,6 +94,8 @@ che-word-mcp ────────┘                       ├──→ ooxm
   └──→ ooxml-swift (直接讀寫)                 └──→ markdown-swift         marker-swift
                                                                         surya-swift
 macdoc CLI ──→ pdf-to-latex-swift (PDFToLaTeXCore)                      pdf-to-latex-swift
+macdoc CLI ──→ pdf-form-fill-swift ──→ pdf-visual-diff-swift (form overlay + pixel verification, #240)
+pdf-to-latex-swift ──→ pdf-visual-diff-swift (page geometry in compare)
 macdoc CLI ──→ bib-apa-to-html-swift ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ bib-apa-to-md-swift  ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ word-builder-swift ──→ ooxml-swift (fluent Swift API for .docx, 1:1 mirror of docx.js)
@@ -272,7 +274,7 @@ swift package clean && swift build
 - **PDF**：簡化 pipeline（init → render → ocr → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）。舊的 block-level transcribe 已 deprecated，改用整頁 GLM-OCR。
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list，支援 --key 過濾）
 - **Config**：AI 後端設定管理
-- **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
+- **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + pdf-visual-diff-swift + pdf-form-fill-swift + ArgumentParser
 
 #### che-word-mcp（245 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -421,6 +423,8 @@ swift build
 | `packages/pptx-swift` | https://github.com/PsychQuant/pptx-swift.git | PresentationML (.pptx) 解析與生成（v0.1.0+；v0.2.0 起有公分↔EMU 幾何模組與圖片原生比例，#90） |
 | `packages/pdf-to-latex-swift` | https://github.com/PsychQuant/pdf-to-latex-swift.git | PDF → LaTeX pipeline (consumed via remote url dep since #79) |
 | `packages/ocr-swift` | https://github.com/PsychQuant/ocr-swift.git | OCR pipeline (MLX + Ollama backends, PDFKit extractor; consumed via remote url dep since #79) |
+| (remote only) | https://github.com/PsychQuant/pdf-visual-diff-swift.git | Threshold-free pixel verification of PDFs: signed RGB difference, overlay checks, preserved regions, A4 geometry (#240) |
+| (remote only) | https://github.com/PsychQuant/pdf-form-fill-swift.git | Blank-form overlay filling: skeleton, xelatex overlay, 1:1 stamping, built-in verification (#240) |
 | `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP（submodule） |
 | `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP（submodule） |
 | `mcp/che-pptx-mcp` | https://github.com/PsychQuant/che-pptx-mcp.git | PPTX MCP（submodule） |

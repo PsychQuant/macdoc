@@ -1,6 +1,6 @@
 ## Context
 
-A Python prototype (in a private repository) filled PDF forms and was verified by subtracting renders of the result from renders of the original PDF. What drove this design: placing the form under a TeX overlay with pdfpages rescaled it slightly, so lines across the whole page moved; setting the TeX page size equal to the form still left a few edge pixels different because of a 0.001 bp rounding offset; stamping the overlay onto an untouched copy gave 0 pixels outside the overlay. PDFs exported through Acrobat PDFMaker are A4 quantized to a 600 dpi dot grid (4960.63 × 7015.75 dots rounded to 4961 × 7016, that is 595.32 × 841.92 bp); fitting such a page into A4 by scaling moved the whole page while a top-left 1:1 placement changed nothing. A verification pass that only compared a binarized or filtered image hid real collisions that the threshold-free check then found in a template that had passed visual review.
+A prototype filled PDF forms and was verified by subtracting renders of the result from renders of the original PDF. What drove this design: placing the form under a TeX overlay with pdfpages rescaled it slightly, so lines across the whole page moved; setting the TeX page size equal to the form still left a few edge pixels different because TeX rounds page sizes; stamping the overlay onto an untouched copy gave 0 pixels outside the overlay. PDFs exported through Acrobat PDFMaker are A4 quantized to a 600 dpi dot grid (4960.63 × 7015.75 dots rounded to 4961 × 7016, that is 595.32 × 841.92 bp); fitting such a page into A4 by scaling moved the whole page while a top-left 1:1 placement changed nothing. A comparison of binarized or filtered images can hide one-pixel collisions that a threshold-free comparison shows.
 
 macdoc already has `macdoc pdf compare` (text-only, in PsychQuant/pdf-to-latex-swift) and an unrelated ratio-threshold docx visual-diff harness in che-word-mcp. Packages that have a second consumer are split into their own PsychQuant repositories and consumed by URL and version.
 
@@ -17,7 +17,9 @@ macdoc already has `macdoc pdf compare` (text-only, in PsychQuant/pdf-to-latex-s
 - Automatic detection of table grid lines or field boxes in the skeleton (first version emits label positions only).
 - Verifying figure regions of the PDF → LaTeX transcription: figures are raster crops of rendered pages, so their difference is non-zero by construction; tracked in PsychQuant/pdf-to-latex-swift#13.
 - A che-pdf-mcp tool (PsychQuant/che-pdf-mcp#6) and migrating the docx harness (PsychQuant/che-word-mcp#295).
-- Multi-page forms.
+- Multi-page forms, rotated pages, and originals with annotations or form fields (refused).
+- Fields on shaded cells or scanned forms, where the overlap check cannot pass (follow-up issue).
+- A read sandbox for TeX (`openin_any=p` was tested and does not stop an absolute `\input` on the installed TeX Live); the .tex is trusted input.
 - Cross-renderer comparison: both sides are always rendered by CoreGraphics.
 
 ## Decisions
@@ -32,27 +34,27 @@ Rendering uses `CGContext` with an sRGB color space, 8 bits per component, premu
 
 ### Signed difference without filtering and overlap from the overlay-only render
 
-D is computed per channel as Int16 with no thresholds or morphology. Overlap cannot be read from D because ink on ink leaves D near 0, so the overlay-on-ink check uses a separate render of the overlay alone and intersects its non-white pixels with the original's non-white pixels. This is the four-check verifier described in the pdf-visual-verification spec.
+D is computed per channel as Int16 with no thresholds or morphology, over the common region of the two rasters; whether the rasters have the same size is reported separately, and an identity check requires both. Overlap cannot be read from D because ink on ink leaves D near 0, so the overlay-on-ink check uses a separate render of the overlay alone and intersects its non-white pixels with the original's non-white pixels. The same overlay render shows typed text that never reached the output (overlay ink where the output is white). This is the five-check verifier described in the pdf-visual-verification spec.
 
-### Stamping through a CoreGraphics PDF context with an object-level fallback
+### Stamping through a CoreGraphics PDF context
 
-The filler creates a new single-page PDF with a CoreGraphics PDF context whose media box is the target size, draws the original page translated so its top-left corner lands on the target's top-left corner, then draws the overlay page translated the same way, never scaled. The verifier is the acceptance test: on the synthetic near-A4 form the difference outside the overlay must be 0. If CoreGraphics re-encoding were to produce non-zero difference, the fallback is to rewrite only the MediaBox and append a content stream at the object level; the fallback is not implemented unless the acceptance test fails. Annotations and form fields of the original are not carried over; blank forms are flat pages.
+The filler creates a new single-page PDF with a CoreGraphics PDF context whose media box is the target size, draws the original page translated so its top-left corner lands on the target's top-left corner and clipped to its own crop box, then draws the overlay page translated and clipped the same way, never scaled. The page content is redrawn as vector content, not rasterized. The overlay page must have the target size. The verifier is the acceptance test: on the synthetic near-A4 form the difference outside the overlay is 0, so the object-level alternative (rewriting only the MediaBox and appending a content stream) was not built. A redraw does not carry annotations, and `drawPDFPage` does not draw their appearances on either side, so the verifier cannot see that loss; originals with any entry in /Annots are therefore refused, as are rotated pages. The output path may not name the original, the overlay or the .tex, including through a symbolic link.
 
 ### Exact A4 normalization by top-left translation
 
-A4 is 210/25.4×72 by 297/25.4×72 bp. Near A4 means both dimensions within 1.5 bp. Normalization is a translation that keeps the top-left corner; before normalizing, the original's render is checked for ink in the strip that would be removed, and normalization fails if any is found.
+A4 is 210/25.4×72 by 297/25.4×72 bp. Near A4 means both dimensions within 1.5 bp. Normalization is a translation that keeps the top-left corner; before normalizing, the original's render is checked for ink in the strip that would be removed (the corner shared by the right and bottom strips counted once), and normalization fails if any is found. The verification core provides the size, the classification and the strip check; the normalization itself is part of stamping.
 
 ### Skeleton from PDFKit text runs
 
-The skeleton generator reads page 1 with PDFKit, splits its text into lines, takes each run of non-whitespace characters as a label, and uses the union of its character bounds (converted to bp with a top-left origin) for the position. Each label becomes a commented `\at` line placed just right of the label on its baseline, plus the settings section and helper macros. Alternative: emitting nodes inside detected boxes (rejected for now: requires vector path parsing; Clarity Surface row 3).
+The skeleton generator reads page 1 with PDFKit, splits its text into lines, takes each run of non-whitespace characters as a label, and uses the union of its character bounds (converted to bp with a top-left origin) for the position; font sizes come from one attributed string for the page. Each label gets an empty field macro (`\FieldA`, `\FieldB`, …) in the settings section and a commented `\at` line placed just right of the label on its baseline that uses it. The page is A4 for a near-A4 form and the form's own size otherwise, so the overlay always has the output's size. `\atbox` places a field of several lines that wraps within a given width. A blank-form path containing a backslash, a brace, `%`, `#`, `^` or a control character is refused. Alternative: emitting nodes inside detected boxes (rejected for now: requires vector path parsing; Clarity Surface row 3).
 
 ### Overlay compilation in a temporary directory
 
-The compiler copies nothing; it runs the engine with `-output-directory` set to a temporary directory and `-interaction=nonstopmode -halt-on-error`, twice, with the source file's directory as the working directory so relative `\BlankForm` and font paths resolve. The engine defaults to `xelatex` found on PATH; an explicit path is accepted.
+The compiler copies the source into a fresh temporary directory as `overlay.tex`, so the file name never reaches TeX's command line, and runs the engine with `-no-shell-escape -interaction=nonstopmode -halt-on-error` and `-output-directory` set to that directory, twice, with the source file's directory as the working directory so relative paths resolve. A run that does not finish within the timeout (120 s) is stopped. On failure the directory is removed and the end of the log is carried in the error; on success the caller removes it after stamping. The engine defaults to `xelatex` found on PATH; an explicit path is accepted.
 
 ### Page geometry layer in the pdf-to-latex-swift comparator
 
-`PDFComparator` gains a geometry section computed with the core's page-geometry classifier: page sizes grouped by size, classification (exact A4, near A4, other) and the indices of pages whose sizes differ between the two documents. The existing report fields keep their meaning; the JSON report gains a new optional field. Released as pdf-to-latex-swift 0.6.0.
+`PDFComparator` gains a geometry section computed with the core's page-geometry classifier: page sizes as displayed (after /Rotate) grouped by exact size, classification (exact A4, near A4, other) and the indices of pages whose sizes are not identical between the two documents. The existing report fields keep their meaning; the JSON report gains a new optional field. Released as pdf-to-latex-swift 0.6.0 and corrected in 0.6.1.
 
 ### Raw difference artifact format
 
@@ -60,25 +62,25 @@ diff.bin stores D as little-endian Int16 in row-major height × width × 3 order
 
 ### Release order and audit gate
 
-The repositories are created, hardened according to macdoc's SECURITY.md baseline and audited with macdoc's audit script before their first tag. Order: pdf-visual-diff-swift 0.1.0, then pdf-form-fill-swift 0.1.0 and pdf-to-latex-swift 0.6.0, then macdoc switches its dependencies and regenerates Package.resolved.
+The repositories are created, hardened according to macdoc's SECURITY.md baseline and audited with macdoc's audit script before their first tag. Order: pdf-visual-diff-swift 0.1.0, then pdf-form-fill-swift 0.1.0 and pdf-to-latex-swift 0.6.0, then macdoc switches its dependencies and regenerates Package.resolved. Verification round 1 fixes ship as pdf-visual-diff-swift 0.2.0, pdf-form-fill-swift 0.2.0 and pdf-to-latex-swift 0.6.1, and macdoc pins those.
 
 ## Implementation Contract
 
 **pdf-visual-diff-swift (library product PDFVisualDiff):**
 
-- `PageRaster.render(page:dpi:)` and `PageRaster.render(url:pageIndex:dpi:)` return width, height, dpi and RGB bytes; deterministic.
-- `SignedDiff(original:output:)` exposes width, height, Int16 values, changed-pixel count and per-channel minimum and maximum.
-- `OverlayVerifier.verify(original:output:overlay:)` returns a report with the four counts and bands (top, bottom, left, right in bp, pixel count) and `passed`.
-- `PreservedRegions.check(_:diff:)` takes rectangles in bp with a top-left origin and returns per-rectangle differing-pixel counts.
-- `PageGeometry.a4`, `PageGeometry.classify(_:)` returning exact A4, near A4 or other, and `PageGeometry.inkInRemovedStrip(original:target:dpi:)`.
-- `DiffArtifacts.write(diff:report:to:)` writes diff_signed.png, diff_abs.png, diff.bin and report.json.
+- `PageRaster.render(page:dpi:)` and `PageRaster.render(url:pageIndex:dpi:)` return width, height, dpi and RGB bytes; deterministic; resolutions above `PageRaster.maxDPI` (2400) and bitmaps above `PageRaster.maxPixelCount` are refused.
+- `SignedDiff(original:output:)` exposes width, height, Int16 values, changed-pixel count, per-channel true minimum and maximum, and `sizesMatch`.
+- `OverlayVerifier.verify(original:output:overlay:)` returns a report with the five counts and bands (top, bottom, left, right in bp, pixel count) and `passed`.
+- `PreservedRegions.check(_:diff:) throws` takes rectangles in bp with a top-left origin and returns per-rectangle changed and unchecked pixel counts; non-finite rectangles are refused.
+- `PageGeometry.a4`, `PageGeometry.classify(_:)` returning exact A4, near A4 or other, and `PageGeometry.inkInRemovedStrip(url:pageIndex:target:dpi:)` / `inkInRemovedStrip(page:target:dpi:)`.
+- `DiffArtifacts.write(diff:checks:preserved:identical:to:)` writes diff_signed.png, diff_abs.png, diff.bin and report.json with the results of the checks that ran.
 
 **pdf-form-fill-swift (library product PDFFormFill, depends on PDFVisualDiff):**
 
-- `FormSkeleton.generate(blankForm:)` returns the skeleton text; deterministic.
-- `OverlayCompiler(engine:).compile(tex:)` returns the overlay PDF URL in a temporary directory; errors name the log, the engine, or both page sizes.
-- `FormStamper.stamp(original:overlay:pageMode:output:)` writes the stamped single page; errors for multi-page originals and for ink in the removed strip.
-- `FormFiller.fill(tex:output:pageMode:dpi:engine:diffDirectory:)` compiles, stamps, verifies and returns the report; the output is written even when verification fails.
+- `FormSkeleton.generate(blankForm:reference:)` returns the skeleton text; deterministic; refuses unsafe blank-form paths.
+- `OverlayCompiler(engine:).compile(tex:pageSize:timeout:)` returns the overlay PDF URL in a temporary directory that `OverlayCompiler.discard(_:)` removes; errors carry the end of the log, name the engine, report a timeout, or give both page sizes.
+- `FormStamper.stamp(original:overlay:pageMode:output:)` writes the stamped single page; `FormStamper.targetSize(original:pageMode:)` runs the checks that do not need the overlay; errors for multi-page, rotated or annotated originals, ink in the removed strip, an overlay of the wrong size, and an output that names an input.
+- `FormFiller.fill(tex:output:pageMode:dpi:engine:diffDirectory:timeout:)` checks everything it can before writing, compiles, stamps, verifies and returns the report; the output is written even when verification fails.
 
 **macdoc CLI:**
 
@@ -98,6 +100,7 @@ The repositories are created, hardened according to macdoc's SECURITY.md baselin
 - [xelatex or fonts missing on CI] → engine-dependent tests skip with a message naming the missing engine; core tests do not need TeX.
 - [Public repositories leak private material] → tests generate synthetic PDFs; review checks for absolute home paths and institution names before pushing.
 - [Antialiasing makes adjacent-but-not-touching glyphs share an edge pixel] → reported as overlap by design; the report gives the band so a human decides; no filtering is added.
+- [A file name injects TeX through `\BlankForm`] → the skeleton refuses such paths; the engine runs without shell escape and with a timeout; reading files is not sandboxed and the .tex is documented as trusted input.
 
 ## Migration Plan
 

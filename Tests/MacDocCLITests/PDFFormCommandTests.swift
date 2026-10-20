@@ -149,7 +149,60 @@ struct PDFFormCommandTests {
         #expect(result.stderr.contains("--preserve"))
     }
 
+    @Test("visual-diff fails the identity check when the page sizes differ")
+    func visualDiffSizeMismatch() throws {
+        let dir = try Self.directory()
+        let a = try Self.pdf([(Self.nearA4, [])], at: dir.appendingPathComponent("a.pdf"))
+        let b = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("b.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", b.path])
+        #expect(result.exitCode != 0)
+        #expect(result.stdout.contains("✗ identical"))
+        #expect(result.stdout.contains("page sizes differ"))
+    }
+
+    @Test("visual-diff rejects a --preserve with a non-finite number")
+    func visualDiffInfiniteRect() throws {
+        let dir = try Self.directory()
+        let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", a.path, "--preserve", "0,0,inf,100"])
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("--preserve"))
+    }
+
+    @Test("visual-diff fails a preserved region that reaches beyond the page")
+    func visualDiffRegionBeyondPage() throws {
+        let dir = try Self.directory()
+        let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", a.path, "--preserve", "500,800,700,900"])
+        #expect(result.exitCode != 0)
+        #expect(result.stdout.contains("✗ preserved region 0"))
+        #expect(result.stdout.contains("outside the compared area"))
+    }
+
+    @Test("visual-diff says how many bands it did not print")
+    func visualDiffBandsTruncated() throws {
+        let dir = try Self.directory()
+        let marks = (0..<12).map { Item.fill(CGRect(x: 100, y: 100 + Double($0) * 20, width: 2, height: 2)) }
+        let original = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("original.pdf"))
+        let output = try Self.pdf([(Self.a4, marks)], at: dir.appendingPathComponent("output.pdf"))
+        let overlay = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("overlay.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", original.path, "--output", output.path,
+                                            "--overlay", overlay.path])
+        #expect(result.exitCode != 0)
+        #expect(result.stdout.contains("    … 2 more bands"))
+    }
+
     // MARK: form-skeleton
+
+    @Test("form-skeleton prints nothing on stderr when it succeeds")
+    func formSkeletonQuiet() throws {
+        let dir = try Self.directory()
+        try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
+        let result = try CLITestHelper.run(["pdf", "form-skeleton", "--pdf", dir.appendingPathComponent("blank.pdf").path,
+                                            "--output", dir.appendingPathComponent("filled.tex").path])
+        #expect(result.exitCode == 0)
+        #expect(result.stderr.isEmpty, "stderr: \(result.stderr)")
+    }
 
     @Test("form-skeleton writes a skeleton and refuses to overwrite it")
     func formSkeleton() throws {
@@ -172,7 +225,7 @@ struct PDFFormCommandTests {
 
     // MARK: form-fill
 
-    @Test("form-fill on a clean overlay prints the output and four zero checks", .enabled(if: xelatexAvailable))
+    @Test("form-fill on a clean overlay prints the output and four zero checks", .enabled(if: xelatexAvailable, "xelatex not found"))
     func formFillClean() throws {
         let dir = try Self.directory()
         try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
@@ -187,7 +240,7 @@ struct PDFFormCommandTests {
         }
     }
 
-    @Test("form-fill exits non-zero when typed text touches the form", .enabled(if: xelatexAvailable))
+    @Test("form-fill exits non-zero when typed text touches the form", .enabled(if: xelatexAvailable, "xelatex not found"))
     func formFillCollision() throws {
         let dir = try Self.directory()
         try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
@@ -197,6 +250,20 @@ struct PDFFormCommandTests {
         #expect(result.exitCode != 0)
         #expect(result.stdout.contains("✗ overlayInkOnOriginalInk"))
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("filled.pdf").path))
+    }
+
+    @Test("form-fill refuses a default output that is the blank form itself and leaves it untouched")
+    func formFillDefaultOutputIsBlankForm() throws {
+        let dir = try Self.directory()
+        let blank = try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("form.pdf"))
+        let tex = dir.appendingPathComponent("form.tex")
+        try Self.overlayTeX("\\at{123}{310}{12}{42};").replacingOccurrences(of: "{blank.pdf}", with: "{form.pdf}")
+            .write(to: tex, atomically: true, encoding: .utf8)
+        let before = try Data(contentsOf: blank)
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("refusing to write the output over the blank form"))
+        #expect(try Data(contentsOf: blank) == before)
     }
 
     // MARK: compare geometry
