@@ -15,7 +15,7 @@ extension MacDoc.PDF {
             commandName: "visual-diff",
             abstract: "逐像素比較兩份 PDF 的第一頁（有號 RGB 差值，不設門檻）。",
             discussion: """
-            兩份 PDF 用 CoreGraphics 以同一解析度算繪、對齊左上角，逐像素逐通道相減（D = output − original）。
+            兩份 PDF 用 CoreGraphics 以同一解析度算繪、對齊左上角，逐像素逐通道相減（D = reproduced − original）。
             給 --overlay（單獨算繪的疊印層）時跑五項疊印檢查；給 --preserve 時檢查這些區域 D 全為 0，
             且區域整個落在比對範圍內；兩者都沒給時，檢查兩頁尺寸相同且沒有任何像素不同。所有檢查都通過才以 0 結束。
             """
@@ -24,8 +24,8 @@ extension MacDoc.PDF {
         @Option(name: .long, help: "原始 PDF。")
         var original: String
 
-        @Option(name: .long, help: "要檢查的 PDF。")
-        var output: String
+        @Option(name: .long, help: "由原始 PDF 產生、要檢查的 PDF。")
+        var reproduced: String
 
         @Option(name: .long, help: "單獨算繪的疊印層 PDF；給了才跑五項疊印檢查。")
         var overlay: String?
@@ -40,52 +40,58 @@ extension MacDoc.PDF {
         var diffDir: String?
 
         mutating func run() throws {
-            let originalURL = try FormCommandSupport.existingFile(original, label: "原始 PDF")
-            let outputURL = try FormCommandSupport.existingFile(output, label: "要檢查的 PDF")
-            let overlayURL = try overlay.map { try FormCommandSupport.existingFile($0, label: "疊印層 PDF") }
+            let originalURL = try FormCommandSupport.inputURL(original)
+            let reproducedURL = try FormCommandSupport.inputURL(reproduced)
+            let overlayURL = try overlay.map(FormCommandSupport.inputURL)
             let regions = try preserve.map(FormCommandSupport.parseRect)
+            let passed = try FormCommandSupport.reportingErrors {
+                try compare(originalURL, reproducedURL, overlayURL, regions)
+            }
+            if !passed { throw ExitCode.failure }
+        }
 
+        /// Prints the comparison and returns whether every applicable check passed.
+        private func compare(_ originalURL: URL, _ reproducedURL: URL, _ overlayURL: URL?, _ regions: [CGRect]) throws -> Bool {
             let originalRaster = try PageRaster.render(url: originalURL, pageIndex: 0, dpi: dpi)
-            let outputRaster = try PageRaster.render(url: outputURL, pageIndex: 0, dpi: dpi)
-            print("Original: \(originalURL.path) (\(FormCommandSupport.size(originalRaster.pageSize)))")
-            print("Output:   \(outputURL.path) (\(FormCommandSupport.size(outputRaster.pageSize)))")
+            let reproducedRaster = try PageRaster.render(url: reproducedURL, pageIndex: 0, dpi: dpi)
+            print("Original:   \(originalURL.path) (\(FormCommandSupport.size(originalRaster.pageSize)))")
+            print("Reproduced: \(reproducedURL.path) (\(FormCommandSupport.size(reproducedRaster.pageSize)))")
 
             var passed = true
             let diff: SignedDiff
             var checks: [CheckResult]?
             if let overlayURL {
                 let verification = try OverlayVerifier.verify(
-                    original: originalRaster, output: outputRaster,
+                    original: originalRaster, output: reproducedRaster,
                     overlay: PageRaster.render(url: overlayURL, pageIndex: 0, dpi: dpi))
                 diff = verification.diff
                 checks = verification.report.checks
             } else {
-                diff = try SignedDiff(original: originalRaster, output: outputRaster)
+                diff = try SignedDiff(original: originalRaster, output: reproducedRaster)
             }
             FormCommandSupport.printDiffSummary(diff)
             if let checks {
                 passed = FormCommandSupport.printChecks(checks) && passed
             }
             let preserved = regions.isEmpty ? nil : try PreservedRegions.check(regions, diff: diff)
-            if let preserved {
-                for result in preserved {
-                    var line = String(format: "%@ preserved region %d (%.1f, %.1f)–(%.1f, %.1f) bp: %d px",
-                                      result.passed ? "✓" : "✗", result.index, result.left, result.top,
-                                      result.right, result.bottom, result.changedPixels)
-                    if result.uncheckedPixels > 0 {
-                        line += ", \(result.uncheckedPixels) px outside the compared area"
-                    }
-                    print(line)
-                    passed = passed && result.passed
+            for result in preserved ?? [] {
+                var line = String(format: "%@ preserved region %d (%.1f, %.1f)–(%.1f, %.1f) bp: %d px",
+                                  result.passed ? "✓" : "✗", result.index, result.left, result.top,
+                                  result.right, result.bottom, result.changedPixels)
+                if result.uncheckedPixels > 0 {
+                    line += ", \(result.uncheckedPixels) px outside the compared area"
                 }
+                print(line)
+                passed = passed && result.passed
             }
             var identical: Bool?
             if overlayURL == nil && regions.isEmpty {
                 let same = diff.changedPixelCount == 0 && diff.sizesMatch
                 let reason = diff.sizesMatch
                     ? "\(diff.changedPixelCount) px differ"
-                    : "page sizes differ (\(originalRaster.width) × \(originalRaster.height) vs "
-                        + "\(outputRaster.width) × \(outputRaster.height) px); \(diff.changedPixelCount) px differ in the common region"
+                    : "page sizes differ (\(FormCommandSupport.size(originalRaster.pageSize)) vs "
+                        + "\(FormCommandSupport.size(reproducedRaster.pageSize))); "
+                        + "\(diff.changedPixelCount) px differ in the common region"
                 print("\(same ? "✓" : "✗") identical: \(reason)")
                 identical = same
                 passed = same
@@ -93,9 +99,9 @@ extension MacDoc.PDF {
             if let diffDir {
                 let directory = FormCommandSupport.absoluteURL(diffDir)
                 try DiffArtifacts.write(diff: diff, checks: checks, preserved: preserved, identical: identical, to: directory)
-                print("Diff artifacts: \(directory.path)")
+                FormCommandSupport.reportWritten(directory)
             }
-            if !passed { throw ExitCode.failure }
+            return passed
         }
     }
 
@@ -103,7 +109,7 @@ extension MacDoc.PDF {
     struct FormSkeletonCommand: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "form-skeleton",
-            abstract: "從空白 PDF 表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一行註解）。"
+            abstract: "從空白 PDF 表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一個欄位巨集與一行註解）。"
         )
 
         @Option(name: .long, help: "空白 PDF 表單。")
@@ -113,20 +119,17 @@ extension MacDoc.PDF {
         var output: String
 
         mutating func run() throws {
-            let form = try FormCommandSupport.existingFile(pdf, label: "空白 PDF 表單")
+            let form = try FormCommandSupport.inputURL(pdf)
             let tex = FormCommandSupport.absoluteURL(output)
             guard !FileManager.default.fileExists(atPath: tex.path) else {
                 throw ValidationError("輸出檔已存在，不覆寫：\(tex.path)")
             }
             let reference = FormCommandSupport.relativePath(of: form, from: tex.deletingLastPathComponent())
-            let skeleton: String
-            do {
+            let skeleton = try FormCommandSupport.reportingErrors {
                 // PDFKit logs debug lines on stderr while it reads the page's text.
-                skeleton = try FormCommandSupport.withStderrSilenced {
+                try FormCommandSupport.withStderrSilenced {
                     try FormSkeleton.generate(blankForm: form, reference: reference)
                 }
-            } catch let error as FormFillError {
-                throw ValidationError(error.description)
             }
             try FileManager.default.createDirectory(at: tex.deletingLastPathComponent(), withIntermediateDirectories: true)
             do {
@@ -136,7 +139,7 @@ extension MacDoc.PDF {
                 throw ValidationError("輸出檔已存在，不覆寫：\(tex.path)")
             }
             let labels = skeleton.split(separator: "\n").filter { $0.hasPrefix("% \\at{") }.count
-            print("Skeleton: \(tex.path) (\(labels) label\(labels == 1 ? "" : "s"); \\BlankForm = \(reference))")
+            FormCommandSupport.reportWritten(tex, note: "\(labels) 個標籤；\\BlankForm = \(reference)")
         }
     }
 
@@ -149,17 +152,17 @@ extension MacDoc.PDF {
             空白表單取自 .tex 的 \\BlankForm（相對路徑以 .tex 所在資料夾為準）。原表不經過 TeX：
             疊印層以 xelatex 編兩次後，用 CoreGraphics 1:1 蓋到原表副本上。--page a4（預設）把接近 A4 的原表
             對齊左上校正成精確 A4（210×297 mm），不縮放；裁掉的邊條若有墨則拒絕。--page original 保留原表尺寸。
-            疊印層的頁面必須與成品同尺寸（form-skeleton 依原表大小寫好）。成品不能是原表或 .tex 本身；
-            多頁、旋轉或帶註解（連結、表單欄位）的原表會被拒絕。五項檢查都是 0 才以 0 結束；
-            即使檢查失敗，成品仍會寫出供檢視。
+            疊印層的頁面必須與成品同尺寸（form-skeleton 依原表大小寫好），字不能超出頁緣。--output 必須是檔案，
+            不能是資料夾、符號連結、原表或 .tex；多頁、旋轉或帶註解（連結、表單欄位）的原表會被拒絕。
+            五項檢查都是 0 才以 0 結束；即使檢查失敗，成品仍會寫出供檢視。
             """
         )
 
         @Argument(help: "疊印層 .tex。")
         var tex: String
 
-        @Option(name: .long, help: "成品 PDF（預設：.tex 同名的 .pdf）。")
-        var out: String?
+        @Option(name: .long, help: "要寫出的成品 PDF 檔（預設：.tex 同名的 .pdf）。")
+        var output: String?
 
         @Option(name: .long, help: "頁面尺寸：a4（預設）或 original。")
         var page: PageMode = .a4
@@ -174,107 +177,18 @@ extension MacDoc.PDF {
         var diffDir: String?
 
         mutating func run() throws {
-            let texURL = try FormCommandSupport.existingFile(tex, label: ".tex")
-            let output = out.map(FormCommandSupport.absoluteURL) ?? texURL.deletingPathExtension().appendingPathExtension("pdf")
-            let result: FillResult
-            do {
-                result = try FormFiller.fill(tex: texURL, output: output, pageMode: page, dpi: dpi, engine: engine,
-                                             diffDirectory: diffDir.map(FormCommandSupport.absoluteURL))
-            } catch let error as FormFillError {
-                FileHandle.standardError.write(Data("error: \(error)\n".utf8))
-                throw ExitCode.failure
-            } catch let error as PDFVisualDiffError {
-                FileHandle.standardError.write(Data("error: \(error)\n".utf8))
-                throw ExitCode.failure
+            let texURL = try FormCommandSupport.inputURL(tex)
+            let outputURL = output.map(FormCommandSupport.absoluteURL) ?? texURL.deletingPathExtension().appendingPathExtension("pdf")
+            let diffDirectory = diffDir.map(FormCommandSupport.absoluteURL)
+            let result = try FormCommandSupport.reportingErrors {
+                try FormFiller.fill(tex: texURL, output: outputURL, pageMode: page, dpi: dpi, engine: engine,
+                                    diffDirectory: diffDirectory)
             }
-            print("Output: \(result.output.path) (\(FormCommandSupport.size(result.pageSize)), \(PageGeometry.classify(result.pageSize).rawValue))")
+            FormCommandSupport.reportWritten(result.output)
+            if let diffDirectory { FormCommandSupport.reportWritten(diffDirectory) }
+            print("Page: \(FormCommandSupport.size(result.pageSize)) (\(PageGeometry.classify(result.pageSize).rawValue))")
             print(String(format: "Changed pixels: %d at %.0f dpi", result.report.changedPixelCount, result.report.dpi))
-            let passed = FormCommandSupport.printChecks(result.report.checks)
-            if let diffDir { print("Diff artifacts: \(FormCommandSupport.absoluteURL(diffDir).path)") }
-            if !passed { throw ExitCode.failure }
+            if !FormCommandSupport.printChecks(result.report.checks) { throw ExitCode.failure }
         }
-    }
-}
-
-/// Shared formatting and path handling for the form commands.
-enum FormCommandSupport {
-    static func absoluteURL(_ path: String) -> URL {
-        let expanded = (path as NSString).expandingTildeInPath
-        if expanded.hasPrefix("/") { return URL(fileURLWithPath: expanded).standardizedFileURL }
-        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent(expanded).standardizedFileURL
-    }
-
-    static func existingFile(_ path: String, label: String) throws -> URL {
-        let url = absoluteURL(path)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw ValidationError("找不到\(label)：\(url.path)")
-        }
-        return url
-    }
-
-    /// "x0,y0,x1,y1" in bp → rectangle with a top-left origin.
-    static func parseRect(_ text: String) throws -> CGRect {
-        let values = text.split(separator: ",").map { Double($0.trimmingCharacters(in: .whitespaces)) }
-        guard values.count == 4, let x0 = values[0], let y0 = values[1], let x1 = values[2], let y1 = values[3],
-              [x0, y0, x1, y1].allSatisfy(\.isFinite), x1 > x0, y1 > y0 else {
-            throw ValidationError("--preserve 需要四個有限數 x0,y0,x1,y1（bp，x1 > x0、y1 > y0），收到：\(text)")
-        }
-        return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
-    }
-
-    /// Path of `file` relative to `directory` when `file` lies inside it, otherwise absolute.
-    static func relativePath(of file: URL, from directory: URL) -> String {
-        let fileParts = file.standardizedFileURL.pathComponents
-        let dirParts = directory.standardizedFileURL.pathComponents
-        guard fileParts.count > dirParts.count, Array(fileParts.prefix(dirParts.count)) == dirParts else {
-            return file.standardizedFileURL.path
-        }
-        return fileParts.dropFirst(dirParts.count).joined(separator: "/")
-    }
-
-    static func size(_ size: CGSize) -> String {
-        String(format: "%.2f × %.2f bp", size.width, size.height)
-    }
-
-    static func printDiffSummary(_ diff: SignedDiff) {
-        let ranges = (0..<3).map { "\(["R", "G", "B"][$0]) \(diff.channelMin[$0])..\(diff.channelMax[$0])" }
-        print(String(format: "Changed pixels: %d of %d × %d at %.0f dpi; D %@",
-                     diff.changedPixelCount, diff.width, diff.height, diff.dpi, ranges.joined(separator: ", ")))
-    }
-
-    /// Bands printed per check; the rest are counted.
-    static let bandLimit = 10
-
-    /// Runs `body` with file descriptor 2 pointed at /dev/null, restoring it
-    /// afterwards. For library calls that log noise on stderr.
-    static func withStderrSilenced<T>(_ body: () throws -> T) rethrows -> T {
-        fflush(stderr)
-        let saved = dup(STDERR_FILENO)
-        let null = open("/dev/null", O_WRONLY)
-        if saved >= 0 && null >= 0 { dup2(null, STDERR_FILENO) }
-        defer {
-            fflush(stderr)
-            if saved >= 0 { dup2(saved, STDERR_FILENO); close(saved) }
-            if null >= 0 { close(null) }
-        }
-        return try body()
-    }
-
-    /// Prints one line per check plus its bands; returns true when all are 0.
-    @discardableResult
-    static func printChecks(_ checks: [CheckResult]) -> Bool {
-        for check in checks {
-            print("\(check.count == 0 ? "✓" : "✗") \(check.check.rawValue): \(check.count) px")
-            for band in check.bands.prefix(bandLimit) {
-                print(String(format: "    y %.1f–%.1f  x %.1f–%.1f bp  %d px",
-                             band.top, band.bottom, band.left, band.right, band.pixels))
-            }
-            if check.bands.count > bandLimit {
-                let more = check.bands.count - bandLimit
-                print("    … \(more) more band\(more == 1 ? "" : "s") (all bands are in report.json with --diff-dir)")
-            }
-        }
-        return checks.allSatisfy { $0.count == 0 }
     }
 }

@@ -281,17 +281,21 @@ macdoc pdf form-skeleton --pdf blank.pdf --output filled.tex
 # 編疊印層 → 1:1 蓋到原表副本 → 五項逐像素檢查（預設輸出 filled.pdf，精確 A4）
 macdoc pdf form-fill filled.tex --diff-dir diff/
 
+# 指定成品檔名（--output 必須是檔案，不能是資料夾）
+macdoc pdf form-fill filled.tex --output filled-final.pdf
+
 # 不接近 A4 的表單：骨架已用原表尺寸，保留原表尺寸填
 macdoc pdf form-fill large.tex --page original
 
 # 任意兩份 PDF 的逐像素比對（有號 RGB 差值，不設門檻）
-macdoc pdf visual-diff --original blank.pdf --output filled.pdf --overlay overlay.pdf
+macdoc pdf visual-diff --original blank.pdf --reproduced filled.pdf --overlay overlay.pdf
 ```
 
 五項檢查（疊印以外的差異、原表變亮、疊印壓到原表、裁掉的邊條有墨、打的字沒進成品）全部為 0 才以 0 結束；
 `--diff-dir` 寫出 `diff_signed.png`、`diff_abs.png`、`diff.bin`、`report.json`。多行欄位用
 `\atbox{x}{y}{寬}{字級}{文字}`，在寬度內自動換行。成品不能是原表或 .tex 本身；旋轉或帶註解（連結、表單欄位）
-的原表會被拒絕。.tex 視為可信任的輸入：TeX 能讀使用者能讀的任何檔案，只填自己寫或看過的疊印層。
+的原表會被拒絕；字超出頁緣時也拒絕，因為被裁掉的部分任何算繪都看不到。寫出的檔案在 stderr 報「已寫入」，
+錯誤訊息為繁體中文。.tex 視為可信任的輸入：TeX 能讀使用者能讀的任何檔案，只填自己寫或看過的疊印層。
 
 ### AI 設定（`config`）
 

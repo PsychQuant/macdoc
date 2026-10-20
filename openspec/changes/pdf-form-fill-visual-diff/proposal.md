@@ -21,6 +21,7 @@ Documented assumptions (unattended run, to be challenged in review):
 - Fields printed on shaded cells or scanned forms, where every typed pixel lands on non-white original pixels and the overlap check cannot pass; tracked as a follow-up issue.
 - A read sandbox for TeX: the overlay .tex is trusted input. The engine runs without shell escape and with a timeout, and the generated skeleton refuses blank-form paths that TeX would misread.
 - MCP tools (PsychQuant/che-pdf-mcp#6), the docx harness (PsychQuant/che-word-mcp#295) and transcription figure checks (PsychQuant/pdf-to-latex-swift#13).
+- The two optional items of the issue: invisible anchor text in a field for external stamping tools, and merging several documents into A4 pages (scaling non-A4 pages). Neither is part of this change.
 
 ## Capabilities
 
@@ -37,8 +38,8 @@ Documented assumptions (unattended run, to be challenged in review):
 
 - Affected specs: new `pdf-visual-verification`, new `pdf-form-fill`. The `cli-spec` requirements are unchanged; only the generated cli-spec.yaml is regenerated.
 - Affected code:
-  - New: Sources/MacDocCLI/MacDoc+PDFForm.swift, Tests/MacDocCLITests/PDFFormCommandTests.swift
-  - Modified: Package.swift, Package.resolved, Sources/MacDocCLI/MacDoc+PDF.swift, cli-spec.yaml, README.md, CONVERSIONS.md
+  - New: Sources/MacDocCLI/MacDoc+PDFForm.swift, Sources/MacDocCLI/MacDoc+PDFFormSupport.swift, Tests/MacDocCLITests/PDFFormCommandTests.swift
+  - Modified: Package.swift, Package.resolved, Sources/MacDocCLI/MacDoc+PDF.swift, Sources/CLISpec/MacDocCLIMetadata.swift, cli-spec.yaml, README.md, CONVERSIONS.md, CLAUDE.md
   - Removed: (none)
 - External repositories: two new public repositories under PsychQuant (pdf-visual-diff-swift, pdf-form-fill-swift), each passing the macdoc security audit script before its first tag; a minor release of pdf-to-latex-swift.
 - Runtime dependency: form-fill requires xelatex on PATH (or an explicit engine path); tests that need it skip with an explicit message when it is absent.

@@ -112,6 +112,22 @@ public enum MacDocCLIMetadata {
             notes: ["Runs the mechanical clean-up, then hands remaining compile errors to the AI CLI chosen by --agent or `macdoc config ai`; --dry-run skips the agent."]
         ),
         CLISpecMetadata.CommandInfo(
+            path: "macdoc pdf visual-diff",
+            status: .active,
+            notes: ["Renders the first page of both PDFs with CoreGraphics and compares them pixel by pixel without thresholds (#240); exits non-zero when an applicable check fails."]
+        ),
+        CLISpecMetadata.CommandInfo(
+            path: "macdoc pdf form-skeleton",
+            status: .active,
+            notes: ["Reads the printed labels of a blank PDF form with PDFKit and writes a .tex overlay skeleton; never overwrites an existing file (#240)."]
+        ),
+        CLISpecMetadata.CommandInfo(
+            path: "macdoc pdf form-fill",
+            status: .active,
+            dependencies: ["tex"],
+            notes: ["Compiles the overlay with xelatex (twice, no shell escape, 120 s timeout), stamps it 1:1 onto a copy of the blank form and verifies every pixel; the output is written even when a check fails (#240)."]
+        ),
+        CLISpecMetadata.CommandInfo(
             path: "macdoc bib",
             status: .active,
             notes: ["`macdoc convert --to html|md|json file.bib` converts a whole file; these subcommands add repeatable --key filtering and `list`."]

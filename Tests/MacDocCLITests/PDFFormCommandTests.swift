@@ -92,7 +92,7 @@ struct PDFFormCommandTests {
         let dir = try Self.directory()
         let a = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("a.pdf"))
         let b = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("b.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", b.path])
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path])
         #expect(result.exitCode == 0, "stderr: \(result.stderr)")
         #expect(result.stdout.contains("Changed pixels: 0"))
         #expect(result.stdout.contains("✓ identical"))
@@ -105,7 +105,7 @@ struct PDFFormCommandTests {
         let original = try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("original.pdf"))
         let output = try Self.pdf([(Self.a4, Self.form + [typed])], at: dir.appendingPathComponent("output.pdf"))
         let overlay = try Self.pdf([(Self.a4, [typed])], at: dir.appendingPathComponent("overlay.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", original.path, "--output", output.path,
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", original.path, "--reproduced", output.path,
                                             "--overlay", overlay.path])
         #expect(result.exitCode != 0)
         #expect(result.stdout.contains("✗ overlayInkOnOriginalInk"))
@@ -119,7 +119,7 @@ struct PDFFormCommandTests {
         let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
         let b = try Self.pdf([(Self.a4, [.fill(CGRect(x: 10, y: 10, width: 5, height: 5))])], at: dir.appendingPathComponent("b.pdf"))
         let diffDir = dir.appendingPathComponent("diff")
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", b.path, "--diff-dir", diffDir.path])
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path, "--diff-dir", diffDir.path])
         #expect(result.exitCode != 0)
         for name in ["diff_signed.png", "diff_abs.png", "diff.bin", "report.json"] {
             #expect(FileManager.default.fileExists(atPath: diffDir.appendingPathComponent(name).path), "\(name)")
@@ -131,11 +131,11 @@ struct PDFFormCommandTests {
         let dir = try Self.directory()
         let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
         let b = try Self.pdf([(Self.a4, [.fill(CGRect(x: 100, y: 100, width: 2, height: 2))])], at: dir.appendingPathComponent("b.pdf"))
-        let failing = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", b.path,
+        let failing = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path,
                                              "--preserve", "50,50,150,150"])
         #expect(failing.exitCode != 0)
         #expect(failing.stdout.contains("✗ preserved region 0"))
-        let passing = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", b.path,
+        let passing = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path,
                                              "--preserve", "300,300,400,400"])
         #expect(passing.exitCode == 0, "stdout: \(passing.stdout)")
     }
@@ -144,7 +144,7 @@ struct PDFFormCommandTests {
     func visualDiffBadRect() throws {
         let dir = try Self.directory()
         let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", a.path, "--preserve", "1,2,3"])
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", a.path, "--preserve", "1,2,3"])
         #expect(result.exitCode != 0)
         #expect(result.stderr.contains("--preserve"))
     }
@@ -154,7 +154,7 @@ struct PDFFormCommandTests {
         let dir = try Self.directory()
         let a = try Self.pdf([(Self.nearA4, [])], at: dir.appendingPathComponent("a.pdf"))
         let b = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("b.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", b.path])
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path])
         #expect(result.exitCode != 0)
         #expect(result.stdout.contains("✗ identical"))
         #expect(result.stdout.contains("page sizes differ"))
@@ -164,7 +164,7 @@ struct PDFFormCommandTests {
     func visualDiffInfiniteRect() throws {
         let dir = try Self.directory()
         let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", a.path, "--preserve", "0,0,inf,100"])
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", a.path, "--preserve", "0,0,inf,100"])
         #expect(result.exitCode != 0)
         #expect(result.stderr.contains("--preserve"))
     }
@@ -173,7 +173,7 @@ struct PDFFormCommandTests {
     func visualDiffRegionBeyondPage() throws {
         let dir = try Self.directory()
         let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--output", a.path, "--preserve", "500,800,700,900"])
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", a.path, "--preserve", "500,800,700,900"])
         #expect(result.exitCode != 0)
         #expect(result.stdout.contains("✗ preserved region 0"))
         #expect(result.stdout.contains("outside the compared area"))
@@ -186,7 +186,7 @@ struct PDFFormCommandTests {
         let original = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("original.pdf"))
         let output = try Self.pdf([(Self.a4, marks)], at: dir.appendingPathComponent("output.pdf"))
         let overlay = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("overlay.pdf"))
-        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", original.path, "--output", output.path,
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", original.path, "--reproduced", output.path,
                                             "--overlay", overlay.path])
         #expect(result.exitCode != 0)
         #expect(result.stdout.contains("    … 2 more bands"))
@@ -201,7 +201,8 @@ struct PDFFormCommandTests {
         let result = try CLITestHelper.run(["pdf", "form-skeleton", "--pdf", dir.appendingPathComponent("blank.pdf").path,
                                             "--output", dir.appendingPathComponent("filled.tex").path])
         #expect(result.exitCode == 0)
-        #expect(result.stderr.isEmpty, "stderr: \(result.stderr)")
+        let lines = result.stderr.split(separator: "\n")
+        #expect(lines.count == 1 && lines[0].hasPrefix("已寫入: "), "stderr: \(result.stderr)")
     }
 
     @Test("form-skeleton writes a skeleton and refuses to overwrite it")
@@ -233,9 +234,10 @@ struct PDFFormCommandTests {
         try Self.overlayTeX("\\at{123}{310}{12}{42};").write(to: tex, atomically: true, encoding: .utf8)
         let result = try CLITestHelper.run(["pdf", "form-fill", tex.path], timeout: 120)
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
-        #expect(result.stdout.contains("Output: \(dir.appendingPathComponent("filled.pdf").path)"))
+        #expect(result.stderr.contains("已寫入: \(dir.appendingPathComponent("filled.pdf").path)"))
         #expect(result.stdout.contains("exactA4"))
-        for check in ["differenceOutsideOverlay", "originalMadeLighter", "overlayInkOnOriginalInk", "inkInCroppedStrip"] {
+        for check in ["differenceOutsideOverlay", "originalMadeLighter", "overlayInkOnOriginalInk", "inkInCroppedStrip",
+                      "overlayMissingFromOutput"] {
             #expect(result.stdout.contains("✓ \(check): 0 px"), "\(check)")
         }
     }
@@ -262,8 +264,66 @@ struct PDFFormCommandTests {
         let before = try Data(contentsOf: blank)
         let result = try CLITestHelper.run(["pdf", "form-fill", tex.path], timeout: 120)
         #expect(result.exitCode != 0)
-        #expect(result.stderr.contains("refusing to write the output over the blank form"))
+        #expect(result.stderr.contains("不能把成品寫在空白表單上"))
         #expect(try Data(contentsOf: blank) == before)
+    }
+
+    @Test("form-fill refuses an --output that is the .tex itself")
+    func formFillOutputIsTeX() throws {
+        let dir = try Self.directory()
+        try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
+        let tex = dir.appendingPathComponent("filled.tex")
+        try Self.overlayTeX("").write(to: tex, atomically: true, encoding: .utf8)
+        let before = try Data(contentsOf: tex)
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path, "--output", tex.path], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("不能把成品寫在.tex 原始檔上"))
+        #expect(try Data(contentsOf: tex) == before)
+    }
+
+    @Test("form-fill refuses a directory as --output and leaves it as it was")
+    func formFillOutputIsDirectory() throws {
+        let dir = try Self.directory()
+        try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
+        let tex = dir.appendingPathComponent("filled.tex")
+        try Self.overlayTeX("").write(to: tex, atomically: true, encoding: .utf8)
+        let before = try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path, "--output", dir.path], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("不是一般檔案"))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() == before)
+    }
+
+    @Test("form-fill reports a bad resolution in Chinese and writes nothing")
+    func formFillBadResolution() throws {
+        let dir = try Self.directory()
+        try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
+        let tex = dir.appendingPathComponent("filled.tex")
+        try Self.overlayTeX("").write(to: tex, atomically: true, encoding: .utf8)
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path, "--dpi", "0"], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("錯誤：解析度必須是"))
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("filled.pdf").path))
+    }
+
+    @Test("visual-diff fails the fifth check when the typed text is missing from the reproduced page")
+    func visualDiffMissingOverlay() throws {
+        let dir = try Self.directory()
+        let typed = Item.text("42", CGPoint(x: 123, y: 310), 12, "Helvetica")
+        let original = try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("original.pdf"))
+        let reproduced = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("reproduced.pdf"))
+        let overlay = try Self.pdf([(Self.a4, [typed])], at: dir.appendingPathComponent("overlay.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", original.path, "--reproduced", reproduced.path,
+                                            "--overlay", overlay.path])
+        #expect(result.exitCode != 0)
+        #expect(result.stdout.contains("✗ overlayMissingFromOutput"))
+    }
+
+    @Test("a missing input is reported the way every macdoc command reports it")
+    func missingInput() throws {
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", "/nonexistent/a.pdf", "--reproduced", "/nonexistent/b.pdf"])
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("找不到輸入檔案"))
     }
 
     // MARK: compare geometry

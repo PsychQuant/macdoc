@@ -44,7 +44,7 @@ The form-fill library SHALL read page 1 of a blank PDF form with PDFKit and writ
 
 ### Requirement: Overlay compilation
 
-The library SHALL compile the overlay .tex by copying it under a fixed name into a fresh temporary directory and running xelatex twice there with shell escape disabled, using the source file's directory as the working directory, so that no build artifacts are written next to the source file and the file name never reaches TeX's command line. It SHALL stop a run that does not finish within a timeout (default 120 seconds) and report the timeout. It SHALL fail with an error carrying the end of the log when compilation fails, with an error naming the engine when the engine cannot be found, and with an error stating both sizes when the compiled overlay page does not have the required size within 0.01 bp. On failure the temporary directory SHALL be removed; on success the caller SHALL be able to remove it.
+The library SHALL compile the overlay .tex (following a symbolic link to the file itself) by copying its contents under a fixed name into a fresh temporary directory and running xelatex twice there with shell escape disabled, using the source file's directory as the working directory, so that no build artifacts are written next to the source file and the file name never reaches TeX's command line. It SHALL stop a run that does not finish within a timeout (default 120 seconds), together with the helpers the engine started, and report the timeout; a timeout that is not a positive finite number SHALL be refused. Removing a compiled overlay's directory SHALL touch only a directory the compiler created in the temporary directory. It SHALL fail with an error carrying the end of the log when compilation fails, with an error naming the engine when the engine cannot be found, and with an error stating both sizes when the compiled overlay page does not have the required size within 0.01 bp. On failure the temporary directory SHALL be removed; on success the caller SHALL be able to remove it.
 
 #### Scenario: Missing engine is reported, not skipped silently
 
@@ -56,6 +56,12 @@ The library SHALL compile the overlay .tex by copying it under a fixed name into
 - **WHEN** an overlay is compiled successfully
 - **THEN** the directory containing the source .tex gains no new files
 
+#### Scenario: A .tex reached through a relative symbolic link compiles
+
+- **GIVEN** a symbolic link in another directory pointing to a filled .tex with a relative path
+- **WHEN** the form is filled through the link
+- **THEN** it compiles and every check passes
+
 #### Scenario: A compile that never ends is stopped
 
 - **WHEN** a .tex that loops forever is compiled with a 2 second timeout
@@ -63,7 +69,7 @@ The library SHALL compile the overlay .tex by copying it under a fixed name into
 
 ### Requirement: One-to-one stamping with A4 normalization
 
-The library SHALL stamp the compiled overlay onto a copy of the original page so that both pages are placed with translation only, each clipped to its own crop box, and neither is scaled; the page content SHALL be redrawn as vector content, not rasterized. The overlay page SHALL have the output's page size within 0.01 bp. With page mode `a4` (default) a near-A4 original SHALL be normalized to exact A4 by keeping its top-left corner; with page mode `original` the original page size SHALL be kept. Before anything is written, originals with more than one page, a rotated page, or any annotation SHALL be rejected with an error stating the page count, the rotation or the annotation count. The output SHALL NOT be the original, the overlay or the .tex source, including through a symbolic link; such a path SHALL be rejected before anything is written. The original file SHALL never be modified.
+The library SHALL stamp the compiled overlay onto a copy of the original page so that both pages are placed with translation only, each clipped to its own crop box, and neither is scaled; the page content SHALL be redrawn as vector content, not rasterized. The overlay page SHALL be unrotated and have the output's page size within 0.01 bp. With page mode `a4` (default) a near-A4 original SHALL be normalized to exact A4 by keeping its top-left corner; with page mode `original` the original page size SHALL be kept. Before anything is written, originals with more than one page, a rotated page, or any annotation SHALL be rejected with an error stating the page count, the rotation or the annotation count. The output SHALL NOT be the original, the overlay or the .tex source, including through a symbolic link, and when it exists it SHALL be a regular file, not a directory or a symbolic link; such a path SHALL be rejected before anything is written. The original file SHALL never be modified.
 
 #### Scenario: Near-A4 original becomes exact A4 without moving the form
 
@@ -82,6 +88,11 @@ The library SHALL stamp the compiled overlay onto a copy of the original page so
 - **WHEN** the form is filled with form.pdf as the output, directly or through a symbolic link
 - **THEN** the call fails with an error naming the blank form and form.pdf is byte-identical to before
 
+#### Scenario: A directory given as the output is rejected
+
+- **WHEN** the form is filled with the .tex's own directory, or any other existing directory, as the output
+- **THEN** the call fails with an error naming that path and nothing in the directory changes
+
 #### Scenario: An annotated original is rejected
 
 - **WHEN** stamping is requested on an original that carries one link annotation
@@ -94,13 +105,19 @@ The library SHALL stamp the compiled overlay onto a copy of the original page so
 
 ### Requirement: Built-in verification after filling
 
-The library SHALL check the resolution, the output path and the original before compiling, render the original before writing the output, compile the overlay at the output's page size, stamp it, and run the five overlay checks of the pdf-visual-verification capability against the original PDF, the output and the overlay page. It SHALL return the report and treat the fill as failed when any check is non-zero. The output file SHALL still be written so that the user can inspect it. The overlay's temporary directory SHALL be removed when filling ends.
+The library SHALL check the resolution, the timeout, the output path and the original before compiling, render the original before writing the output, compile the overlay at the output's page size, refuse an overlay with ink outside its page (typed text running past the page edge, which every render clips away), stamp it, and run the five overlay checks of the pdf-visual-verification capability against the original PDF, the output and the overlay page. It SHALL return the report and treat the fill as failed when any check is non-zero. The output file SHALL still be written so that the user can inspect it. The overlay's temporary directory SHALL be removed when filling ends.
 
 #### Scenario: Collision fails the fill and names the place
 
 - **GIVEN** an overlay that places text over a printed label
 - **WHEN** the form is filled
 - **THEN** the output file exists, the overlay-on-ink check is non-zero, and its band lies inside the label's bounding box
+
+#### Scenario: Text running past the page edge is refused
+
+- **GIVEN** an overlay with WWWWWWWW at (580,400) bp on an A4 page
+- **WHEN** the form is filled
+- **THEN** the call fails with an error stating the inked pixels outside the page, and no output is written
 
 #### Scenario: Text beyond A4 on a larger form passes in page mode original
 
@@ -115,12 +132,12 @@ The library SHALL check the resolution, the output path and the original before 
 
 ### Requirement: macdoc form subcommands
 
-macdoc SHALL provide `macdoc pdf form-skeleton --pdf <blank.pdf> --output <file.tex>`, which refuses to overwrite an existing output file even when it appears while the skeleton is generated and prints nothing on stderr when it succeeds, and `macdoc pdf form-fill <file.tex>` with `--out` (default: the .tex path with a .pdf extension), `--page a4|original` (default a4), `--dpi` (default 144), `--engine` (default xelatex) and `--diff-dir`. form-fill SHALL read the blank form path from the `\BlankForm` macro, resolving a relative path against the .tex file's directory, print the output path and size and each check result, and exit with status 0 only when every check passes. When the output would be the blank form or the .tex, it SHALL print an error and exit with a non-zero status without writing.
+macdoc SHALL provide `macdoc pdf form-skeleton --pdf <blank.pdf> --output <file.tex>`, which refuses to overwrite an existing output file even when it appears while the skeleton is generated and prints nothing on stderr when it succeeds, and `macdoc pdf form-fill <file.tex>` with `--output` (a file; default: the .tex path with a .pdf extension), `--page a4|original` (default a4), `--dpi` (default 144), `--engine` (default xelatex) and `--diff-dir`. form-fill SHALL read the blank form path from the `\BlankForm` macro, resolving a relative path against the .tex file's directory, report each written file on stderr, print the output size and each check result, and exit with status 0 only when every check passes. Errors SHALL be reported in Traditional Chinese on stderr. When the output would be the blank form or the .tex, or names an existing directory, it SHALL print an error and exit with a non-zero status without writing.
 
 #### Scenario: form-fill reports and exits cleanly on a clean overlay
 
 - **WHEN** `macdoc pdf form-fill` runs on a skeleton whose filled fields do not touch the form
-- **THEN** it prints the output path, prints 0 for each check and exits with status 0
+- **THEN** it reports the output path on stderr, prints 0 for each of the five checks and exits with status 0
 
 #### Scenario: form-skeleton does not overwrite
 
