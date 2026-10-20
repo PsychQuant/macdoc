@@ -266,9 +266,27 @@ macdoc pdf status --project textbook-latex
 # 偵測 PDF 來源格式（LaTeX / Word / 掃描件）
 macdoc pdf detect-source --project textbook-latex
 
-# 比較原始 PDF 與重製 PDF 的相似度
-macdoc pdf compare --project textbook-latex
+# 比較原始 PDF 與重製 PDF：文字層、字型，以及頁面幾何（各頁尺寸、是否為精確 A4、尺寸不同的頁）
+macdoc pdf compare --original textbook.pdf --reproduced textbook-latex/main.pdf
 ```
+
+### 表單疊印與逐像素比對（`pdf form-skeleton` / `form-fill` / `visual-diff`）
+
+在空白 PDF 表單上疊印文字，原表不經過 TeX，填完後逐像素證明原表沒被動到。
+
+```bash
+# 從空白表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一行註解）
+macdoc pdf form-skeleton --pdf blank.pdf --output filled.tex
+
+# 編疊印層 → 1:1 蓋到原表副本 → 四項逐像素檢查（預設輸出 filled.pdf，精確 A4）
+macdoc pdf form-fill filled.tex --diff-dir diff/
+
+# 任意兩份 PDF 的逐像素比對（有號 RGB 差值，不設門檻）
+macdoc pdf visual-diff --original blank.pdf --output filled.pdf --overlay overlay.pdf
+```
+
+四項檢查（疊印以外的差異、原表變亮、疊印壓到原表、裁掉的邊條有墨）全部為 0 才以 0 結束；
+`--diff-dir` 寫出 `diff_signed.png`、`diff_abs.png`、`diff.bin`、`report.json`。
 
 ### AI 設定（`config`）
 
