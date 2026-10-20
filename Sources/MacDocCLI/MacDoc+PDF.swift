@@ -9,7 +9,7 @@ extension MacDoc {
     struct PDF: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "pdf",
-            abstract: "PDF → LaTeX pipeline 工具",
+            abstract: "PDF → LaTeX pipeline、表單疊印與逐像素比對工具",
             subcommands: [
                 Init.self,
                 Segment.self,
@@ -27,6 +27,9 @@ extension MacDoc {
                 CompileCheck.self,
                 Consolidate.self,
                 Compare.self,
+                VisualDiff.self,
+                FormSkeletonCommand.self,
+                FormFillCommand.self,
                 DetectSource.self,
                 Status.self,
             ],
