@@ -26,7 +26,7 @@ macdoc already has `macdoc pdf compare` (text-only, in PsychQuant/pdf-to-latex-s
 
 ### Separate public packages consumed by URL dependency
 
-pdf-visual-diff-swift and pdf-form-fill-swift are new public repositories under PsychQuant, consumed by macdoc with `.package(url:from:)`. Alternatives: keeping them as in-tree path packages (rejected: three consumers outside the macdoc CLI) or adding them as git submodules (rejected: SwiftPM already pins versions in Package.resolved; a submodule pointer would be a second source of truth). The verification core is a separate package from form filling because pdf-to-latex-swift needs only the core and must not depend on form filling.
+pdf-visual-diff-swift and pdf-form-fill-swift are new public repositories under PsychQuant, consumed by macdoc with `.package(url:_:)` and `.upToNextMinor(from:)`, because a 0.x minor version may break the API. Alternatives: keeping them as in-tree path packages (rejected: three consumers outside the macdoc CLI) or adding them as git submodules (rejected: SwiftPM already pins versions in Package.resolved; a submodule pointer would be a second source of truth). The verification core is a separate package from form filling because pdf-to-latex-swift needs only the core and must not depend on form filling.
 
 ### CoreGraphics rasterization as the single renderer
 
@@ -54,7 +54,7 @@ The compiler copies the source into a fresh temporary directory as `overlay.tex`
 
 ### Page geometry layer in the pdf-to-latex-swift comparator
 
-`PDFComparator` gains a geometry section computed with the core's page-geometry classifier: page sizes as displayed (after /Rotate) grouped by exact size, classification (exact A4, near A4, other) and the indices of pages whose sizes are not identical between the two documents. Sizes are classified regardless of orientation, all sizes of both documents print at one precision chosen so that different sizes never look alike, mismatched pages are listed with both sizes, and the summary states the page-size verdict. The existing report fields keep their meaning; the JSON report gains a new optional field. Released as pdf-to-latex-swift 0.6.0 and corrected in 0.6.1 and 0.6.2.
+`PDFComparator` gains a geometry section computed with the core's page-geometry classifier: page sizes as displayed (after /Rotate) grouped by exact size, classification (exact A4, near A4, other) and the indices of pages whose sizes are not identical between the two documents. Sizes are classified regardless of orientation, all sizes of both documents print at one precision chosen so that different sizes never look alike, mismatched pages are listed with both sizes, and the summary states the page-size verdict. The existing report fields keep their meaning; the JSON report gains a new optional field. Released as pdf-to-latex-swift 0.6.0, corrected in 0.6.1 to 0.6.3, and in 0.7.0, which also relabels the typography section's paper line.
 
 ### Raw difference artifact format
 
@@ -62,13 +62,13 @@ diff.bin stores D as little-endian Int16 in row-major height × width × 3 order
 
 ### Release order and audit gate
 
-The repositories are created, hardened according to macdoc's SECURITY.md baseline and audited with macdoc's audit script before their first tag. Order: pdf-visual-diff-swift 0.1.0, then pdf-form-fill-swift 0.1.0 and pdf-to-latex-swift 0.6.0, then macdoc switches its dependencies and regenerates Package.resolved. Verification round 1 fixes ship as pdf-visual-diff-swift 0.2.0, pdf-form-fill-swift 0.2.0 and pdf-to-latex-swift 0.6.1; round 2 fixes as pdf-visual-diff-swift 0.3.0, pdf-form-fill-swift 0.3.0 and pdf-to-latex-swift 0.6.2. Dependencies on these 0.x packages use `.upToNextMinor(from:)`, because a 0.x minor version may break the API.
+The repositories are created, hardened according to macdoc's SECURITY.md baseline and audited with macdoc's audit script before their first tag. Order: pdf-visual-diff-swift 0.1.0, then pdf-form-fill-swift 0.1.0 and pdf-to-latex-swift 0.6.0, then macdoc switches its dependencies and regenerates Package.resolved. Verification round 1 fixes ship as pdf-visual-diff-swift 0.2.0, pdf-form-fill-swift 0.2.0 and pdf-to-latex-swift 0.6.1; round 2 fixes as pdf-visual-diff-swift 0.3.0, pdf-form-fill-swift 0.3.0 and pdf-to-latex-swift 0.6.2; round 3 as 0.4.0, 0.4.0 and 0.6.3; round 4 as pdf-visual-diff-swift 0.5.0, pdf-form-fill-swift 0.5.0/0.5.1 and pdf-to-latex-swift 0.7.0. Dependencies on these 0.x packages use `.upToNextMinor(from:)`, because a 0.x minor version may break the API.
 
 ## Implementation Contract
 
 **pdf-visual-diff-swift (library product PDFVisualDiff):**
 
-- `PageRaster.render(page:dpi:)` and `PageRaster.render(url:pageIndex:dpi:)` return width, height, dpi and RGB bytes; deterministic; resolutions above `PageRaster.maxDPI` (2400) and bitmaps above `PageRaster.maxPixelCount` (100 million) are refused; `PageRaster(width:height:dpi:pageSize:pixels:) throws` refuses an empty or inconsistent buffer.
+- `PageRaster.render(page:dpi:)` and `PageRaster.render(url:pageIndex:dpi:)` return width, height, dpi and RGB bytes; deterministic; resolutions above `PageRaster.maxDPI` (2400) and bitmaps above `PageRaster.maxPixelCount` (100 million) are refused; `PageRaster(width:height:dpi:pageSize:pixels:) throws` refuses an empty or inconsistent buffer, a resolution outside 1–2400 dpi and a page size that is not positive and finite.
 - `SignedDiff(original:output:)` exposes width, height, Int16 values, changed-pixel count, per-channel true minimum and maximum, and `sizesMatch` (same bp page size and same raster size).
 - `OverlayVerifier.verify(original:output:overlay:)` returns a report with the five counts and bands (top, bottom, left, right in bp, pixel count) and `passed`.
 - `PreservedRegions.check(_:diff:) throws` takes rectangles in bp with a top-left origin and returns per-rectangle changed and unchecked pixel counts (saturating at 2^62); rectangles with a non-finite coordinate or edge are refused.

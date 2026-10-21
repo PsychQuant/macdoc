@@ -239,7 +239,7 @@ final class PDFFormCommandTests {
 
     // MARK: form-fill
 
-    @Test("form-fill on a clean overlay prints the output and four zero checks", .enabled(if: xelatexAvailable, "xelatex not found"))
+    @Test("form-fill on a clean overlay reports the output and five zero checks", .enabled(if: xelatexAvailable, "xelatex not found"))
     func formFillClean() throws {
         let dir = try directory()
         try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
@@ -398,7 +398,29 @@ final class PDFFormCommandTests {
         #expect(skeleton.exitCode == 0, "stderr: \(skeleton.stderr)")
         let result = try CLITestHelper.run(["pdf", "form-fill", tex.path, "--page", "original"], timeout: 120)
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
-        #expect(result.stdout.contains("(exactA4)"))
+        #expect(result.stdout.contains("(exactA4, landscape)"))
+    }
+
+    @Test("form-fill refuses a --diff-dir whose report.json is the --output")
+    func formFillArtifactIsOutput() throws {
+        let dir = try directory()
+        try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
+        let tex = dir.appendingPathComponent("filled.tex")
+        try Self.overlayTeX("").write(to: tex, atomically: true, encoding: .utf8)
+        let diff = dir.appendingPathComponent("diff")
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path, "--output", diff.appendingPathComponent("Report.json").path,
+                                            "--diff-dir", diff.path], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("會蓋掉成品"), "stderr: \(result.stderr)")
+    }
+
+    @Test("visual-diff rejects a --preserve with an empty field")
+    func visualDiffEmptyField() throws {
+        let dir = try directory()
+        let a = try Self.pdf([(Self.a4, [])], at: dir.appendingPathComponent("a.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", a.path, "--preserve", "1,,2,3,4"])
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("--preserve"))
     }
 
     // MARK: compare geometry

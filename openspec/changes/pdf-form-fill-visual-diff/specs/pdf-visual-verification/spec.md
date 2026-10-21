@@ -6,7 +6,7 @@ Threshold-free pixel verification for any PDF produced from another PDF: both do
 
 ### Requirement: Deterministic page rasterization
 
-The verification library SHALL render a PDF page with CoreGraphics into an 8-bit sRGB RGB buffer on a white background, aligned to the page's top-left corner, at a caller-chosen resolution in dots per inch (default 144). Rendering the same page of the same file twice SHALL produce byte-identical buffers. The library SHALL refuse with an error, instead of crashing, a resolution that is not a finite number above 0 and at most 2400 dpi, a bitmap larger than 100 million pixels, and a page with a non-zero rotation.
+The verification library SHALL render a PDF page with CoreGraphics into an 8-bit sRGB RGB buffer on a white background, aligned to the page's top-left corner, at a caller-chosen resolution in dots per inch (default 144). Rendering the same page of the same file twice SHALL produce byte-identical buffers. The library SHALL refuse with an error, instead of crashing, a resolution that is not a finite number from 1 to 2400 dpi, a bitmap larger than 100 million pixels, and a page with a non-zero rotation.
 
 #### Scenario: Same page renders identically twice
 
@@ -92,7 +92,7 @@ Given an original PDF page, an output page, and the overlay rendered alone on a 
 
 ### Requirement: Preserved regions
 
-The library SHALL accept a list of preserved rectangles in bp with a top-left origin and SHALL require D to be 0 in all channels for every pixel inside each rectangle, and every such pixel to lie inside the compared area. A rectangle with a non-finite coordinate or no area SHALL be refused with an error naming its index. For each rectangle the result SHALL give the index, the number of differing pixels and the number of pixels outside the compared area; it SHALL pass only when both are 0.
+The library SHALL accept a list of preserved rectangles in bp with a top-left origin and SHALL require D to be 0 in all channels for every pixel inside each rectangle, and every such pixel to lie inside the compared area. A rectangle with a non-finite coordinate or edge, or no area, SHALL be refused with an error naming its index. A rectangle that does not lie wholly on the compared area SHALL fail, however far away it is. For each rectangle the result SHALL give the index, the number of differing pixels and the number of pixels outside the compared area; it SHALL pass only when both are 0.
 
 #### Scenario: One changed pixel inside a preserved region fails
 
@@ -191,7 +191,7 @@ macdoc SHALL provide `macdoc pdf visual-diff` taking `--original`, `--reproduced
 
 ### Requirement: Page geometry in macdoc pdf compare
 
-`macdoc pdf compare` SHALL report, in addition to its existing text comparison, the page size in bp of every page of both documents as displayed (after the page's rotation), grouped by exact size, whether each size is exact A4, near A4 or other in either orientation, and the indices of pages whose displayed sizes are not identical between the original and the reproduced document, each listed with both of its sizes. All sizes of both documents SHALL be printed with the fewest decimals (2, 4, …, 16) at which different sizes never print alike. The summary SHALL state the page-size verdict (OK, or MISMATCH with the pages), next to the existing paper-class line, which is labelled as a class rather than a size. The existing text-layer report SHALL remain unchanged.
+`macdoc pdf compare` SHALL report, in addition to its existing text comparison, the page size in bp of every page of both documents as displayed (after the page's rotation), grouped by exact size, whether each size is exact A4, near A4 or other in either orientation, and the indices of pages whose displayed sizes are not identical between the original and the reproduced document, the first ten of them listed with both of their sizes. All sizes of both documents SHALL be printed with the fewest decimals (2, 4, …, 16) at which different sizes never print alike, or in exact notation when even 16 do not. The summary SHALL state the page-size verdict (OK, or MISMATCH with the pages), next to the existing paper-class line; both paper lines (SUMMARY and the typography section) are labelled as a class rather than a size. The existing text-layer report SHALL remain unchanged.
 
 #### Scenario: Size mismatch is listed
 

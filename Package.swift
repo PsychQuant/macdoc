@@ -13,12 +13,12 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/common-converter-swift.git", from: "0.5.0"),
         .package(url: "https://github.com/PsychQuant/word-to-md-swift.git", from: "1.1.0"),
         .package(name: "MarkerWordConverter", path: "packages/marker-word-converter-swift"),
-        // 0.6.0 (macdoc#240): PDFComparator page-geometry layer.
-        .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", .upToNextMinor(from: "0.6.3")),
+        // 0.6.0+ (macdoc#240): PDFComparator page-geometry layer.
+        .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", .upToNextMinor(from: "0.7.0")),
         // macdoc#240: threshold-free pixel verification and blank-form filling
         // (`macdoc pdf visual-diff`, `form-skeleton`, `form-fill`).
-        .package(url: "https://github.com/PsychQuant/pdf-visual-diff-swift.git", .upToNextMinor(from: "0.4.0")),
-        .package(url: "https://github.com/PsychQuant/pdf-form-fill-swift.git", .upToNextMinor(from: "0.4.0")),
+        .package(url: "https://github.com/PsychQuant/pdf-visual-diff-swift.git", .upToNextMinor(from: "0.5.0")),
+        .package(url: "https://github.com/PsychQuant/pdf-form-fill-swift.git", .upToNextMinor(from: "0.5.0")),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
         .package(name: "WordToHTML", path: "packages/word-to-html-swift"),
         .package(name: "HTMLToWord", path: "packages/html-to-word-swift"),

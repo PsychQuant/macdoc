@@ -21,7 +21,8 @@ enum FormCommandSupport {
 
     /// "x0,y0,x1,y1" in bp → rectangle with a top-left origin.
     static func parseRect(_ text: String) throws -> CGRect {
-        let values = text.split(separator: ",").map { Double($0.trimmingCharacters(in: .whitespaces)) }
+        let values = text.split(separator: ",", omittingEmptySubsequences: false)
+            .map { Double($0.trimmingCharacters(in: .whitespaces)) }
         guard values.count == 4, let x0 = values[0], let y0 = values[1], let x1 = values[2], let y1 = values[3],
               [x0, y0, x1, y1].allSatisfy(\.isFinite), x1 > x0, y1 > y0 else {
             throw ValidationError("--preserve 需要四個有限數 x0,y0,x1,y1（bp，x1 > x0、y1 > y0），收到：\(text)")
@@ -49,24 +50,25 @@ enum FormCommandSupport {
         for digits in stride(from: 2, through: 16, by: 2) where a == b || size(a, decimals: digits) != size(b, decimals: digits) {
             return (size(a, decimals: digits), size(b, decimals: digits))
         }
-        return (size(a, decimals: 16), size(b, decimals: 16))
+        // Shortest notation that reads back to the same value.
+        func exact(_ s: CGSize) -> String { "\(Double(s.width)) × \(Double(s.height)) bp" }
+        return (exact(a), exact(b))
     }
 
     /// The A4 classification of a size in either orientation, as
-    /// `macdoc pdf compare` reports it.
+    /// `macdoc pdf compare` reports it, marked when the page is landscape
+    /// (page mode a4 normalizes only to portrait A4).
     static func classification(_ size: CGSize) -> String {
-        PageGeometry.classify(CGSize(width: min(size.width, size.height), height: max(size.width, size.height))).rawValue
+        let portrait = CGSize(width: min(size.width, size.height), height: max(size.width, size.height))
+        let name = PageGeometry.classify(portrait).rawValue
+        return size.width > size.height ? "\(name), landscape" : name
     }
 
     /// Refuses a diff directory whose artifacts would replace one of `inputs`.
     static func refuseArtifactCollisions(in directory: URL, inputs: [(URL, String)]) throws {
-        for artifact in DiffArtifacts.paths(in: directory) {
-            let path = artifact.resolvingSymlinksInPath().standardizedFileURL.path
-            for (input, role) in inputs where input.resolvingSymlinksInPath().standardizedFileURL.path == path {
-                FileHandle.standardError.write(Data("錯誤：差值產物 \(artifact.path) 會蓋掉\(role)；請換一個 --diff-dir\n".utf8))
-                throw ExitCode.failure
-            }
-        }
+        guard let hit = DiffArtifacts.collision(in: directory, with: inputs) else { return }
+        FileHandle.standardError.write(Data("錯誤：差值產物 \(hit.artifact.path) 會蓋掉\(hit.role)；請換一個 --diff-dir\n".utf8))
+        throw ExitCode.failure
     }
 
     /// The status line macdoc prints on stderr after writing a file or directory.
@@ -130,8 +132,25 @@ enum FormCommandSupport {
             throw ExitCode.failure
         } catch let error as CocoaError {
             let path = error.filePath ?? error.userInfo[NSFilePathErrorKey] as? String ?? "（路徑不明）"
-            FileHandle.standardError.write(Data("錯誤：無法讀寫檔案：\(path)（\(error.localizedDescription)）\n".utf8))
+            FileHandle.standardError.write(Data("錯誤：無法讀寫檔案：\(path)（\(reason(for: error))）\n".utf8))
             throw ExitCode.failure
+        } catch let error as POSIXError {
+            FileHandle.standardError.write(Data("錯誤：系統呼叫失敗（錯誤代碼 \(error.code.rawValue)）\n".utf8))
+            throw ExitCode.failure
+        }
+    }
+
+    /// A Chinese reason for the common file-system failures; other codes are
+    /// named by number, never by the system-language description.
+    static func reason(for error: CocoaError) -> String {
+        switch error.code {
+        case .fileNoSuchFile, .fileReadNoSuchFile: return "找不到檔案或資料夾"
+        case .fileWriteNoPermission, .fileReadNoPermission: return "沒有權限"
+        case .fileWriteVolumeReadOnly: return "磁碟區是唯讀的"
+        case .fileWriteOutOfSpace: return "磁碟空間不足"
+        case .fileWriteFileExists: return "檔案已存在"
+        case .fileWriteInvalidFileName, .fileReadInvalidFileName: return "檔名無效"
+        default: return "錯誤代碼 \(error.code.rawValue)"
         }
     }
 
@@ -186,7 +205,9 @@ enum FormCommandSupport {
             let names = ["output": "成品", "blank form": "空白表單", ".tex source": ".tex 原始檔"]
             return "差值產物 \(path) 會蓋掉\(names[role] ?? role)；請換一個 --diff-dir"
         case .unreadableSource(let path):
-            return "無法讀取 .tex：\(path)"
+            return "無法以 UTF-8 讀取 .tex：\(path)"
+        case .overlayTextOffPage(let count):
+            return "疊印層有 \(count) 處繪圖落在頁外超過一頁的地方，任何算繪都看不到；請檢查欄位座標"
         case .outputWriteFailed(let path):
             return "無法寫入：\(path)"
         }
