@@ -232,5 +232,6 @@ macdoc word render 範本-slot.mdocx.swift --to-docx 已填-1.docx
 
 - [`macdoc`](../macdoc/SKILL.md) skill — `word reverse` / `word render` 的命令與選項參考
 - che-word-mcp skill — 三個 MCP 工具的參數與回傳格式參考
+- che-word-mcp plugin 的 `track-changes-edit` skill — 要**給人審閱**的修改（追蹤修訂、逐字標記、每處附註解）走那裡。slot 會把段落坍縮成一個 run、不留修訂，只適合可重現的範本填寫
 
 本 skill 管**工作流**（照什麼順序做、怎麼判讀、能期待什麼）；那兩份管各自面的**命令/工具參考**。要查某個選項怎麼寫，去那兩份。
