@@ -21,7 +21,8 @@ Spec (JSON):
          "comment": "<reason, quoting the source>",
          "changes": [{"old": "<text, unique in the paragraph>", "new": "<replacement>"}]}
       ],
-      "comments": [{"paragraph": "<paraId>" or "find": "...", "text": "<question>"}]
+      "comments": [{"paragraph": "<paraId>" or "find": "...", "text": "<question>",
+                    "anchor": "<optional: text unique in the paragraph; omit to comment the whole paragraph>"}]
     }
 
 Stopgap until che-word-mcp writes tracked replacements itself
@@ -43,6 +44,7 @@ COMMENTS_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relations
 COMMENTS_CT = "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"
 PARA = re.compile(r"<w:p[ >](?:(?!</w:p>).)*?</w:p>", re.S)
 RUN = re.compile(r"<w:r(?: [^>]*)?>(?:(?!</w:r>).)*?</w:r>", re.S)
+REF_RUN = re.compile(r"<w:r(?: [^>]*)?>(?:<w:rPr>(?:(?!</w:r>).)*?</w:rPr>)?<w:commentReference [^>]*/></w:r>", re.S)
 RUN_SHAPE = re.compile(
     r"(<w:r(?: [^>]*)?>)(<w:rPr>.*?</w:rPr>)?((?:<w:lastRenderedPageBreak/>)?)"
     r"<w:t(?: [^>]*)?>([^<]*)</w:t></w:r>", re.S)
@@ -176,7 +178,7 @@ def revise_paragraph(p, groups, writer):
                 if last_op[o[3]] is o:
                     out.append(range_end(o[3]))
 
-    for m in RUN.finditer(p):
+    for m in text_runs(p):
         out.append(p[last:m.start()])
         last = m.end()
         ot, rpr, pre, t = parse_run(m.group(0))
@@ -199,6 +201,49 @@ def revise_paragraph(p, groups, writer):
     if cur is None:
         raise SpecError("target paragraph has no text runs")
     at_point(len(text), *cur)
+    out.append(p[last:])
+    return "".join(out)
+
+
+def text_runs(p):
+    """Runs that carry text. Comment-reference runs hold none and stay as inter-run content."""
+    return [m for m in RUN.finditer(p) if not REF_RUN.fullmatch(m.group(0))]
+
+
+def comment_anchor(p, anchor, text, writer):
+    """Wrap the one occurrence of `anchor` in a comment range; the text is unchanged."""
+    full = plain(p)
+    count = full.count(anchor)
+    if not anchor or count != 1:
+        raise SpecError(f"anchor {anchor!r}: {'not found' if not count else f'{count} matches'} in the paragraph")
+    lo = full.index(anchor)
+    hi = lo + len(anchor)
+    cid = writer.new_comment(text)
+    out, last, pos, opened, closed = [], 0, 0, False, False
+    for m in text_runs(p):
+        out.append(p[last:m.start()])
+        last = m.end()
+        ot, rpr, pre, t = parse_run(m.group(0))
+        a, b = pos, pos + len(t)
+        pos = b
+        cuts = sorted({a, b} | {c for c in (lo, hi) if a < c < b})
+        if len(cuts) <= 2:  # run not split: keep its bytes
+            if a == lo and not opened:
+                out.append(range_start(cid))
+                opened = True
+            out.append(m.group(0))
+            if b == hi and opened and not closed and a < b:
+                out.append(range_end(cid))
+                closed = True
+            continue
+        for x, y in zip(cuts, cuts[1:]):
+            if x == lo and not opened:
+                out.append(range_start(cid))
+                opened = True
+            out.append(writer.run(ot, rpr, t[x - a:y - a], pre=pre if x == a else ""))
+            if y == hi and not closed:
+                out.append(range_end(cid))
+                closed = True
     out.append(p[last:])
     return "".join(out)
 
@@ -272,13 +317,23 @@ def build(spec, parts):
     writer = Writer(spec.get("author", "Reviewer"), spec.get("date") or
                     datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     max(used) + 1000, max(used))
-    original, expected, by_para = xml, {}, {}
-    starts = [m.start() for m in PARA.finditer(xml)]
+    original, expected, by_para, commented = xml, {}, {}, []
     for rev in spec.get("revisions", []):
         if not rev.get("comment"):
             raise SpecError("every revision group needs a 'comment' giving its reason and source")
         if not rev.get("changes"):
             raise SpecError("revision group has no 'changes'")
+    comments = spec.get("comments", [])
+    for c in comments:
+        if not c.get("text"):
+            raise SpecError("comment entry needs 'text'")
+    # Anchored comments go on first, against the original text; revisions then skip their markers.
+    for c in (c for c in comments if "anchor" in c):
+        m = locate(xml, c)
+        commented.append([p.start() for p in PARA.finditer(xml)].index(m.start()))
+        xml = xml[:m.start()] + comment_anchor(m.group(0), c["anchor"], c["text"], writer) + xml[m.end():]
+    starts = [m.start() for m in PARA.finditer(xml)]
+    for rev in spec.get("revisions", []):
         m = locate(xml, rev)
         by_para.setdefault(m.start(), []).append((rev["comment"], rev["changes"]))
     for start in sorted(by_para, reverse=True):
@@ -289,10 +344,7 @@ def build(spec, parts):
                 want = want.replace(pair["old"], pair["new"], 1)
         expected[starts.index(start)] = want
         xml = xml[:m.start()] + revise_paragraph(m.group(0), by_para[start], writer) + xml[m.end():]
-    commented = []
-    for c in spec.get("comments", []):
-        if not c.get("text"):
-            raise SpecError("comment entry needs 'text'")
+    for c in (c for c in comments if "anchor" not in c):
         m = locate(xml, c)
         commented.append([p.start() for p in PARA.finditer(xml)].index(m.start()))
         xml = xml[:m.start()] + comment_paragraph(m.group(0), c["text"], writer) + xml[m.end():]

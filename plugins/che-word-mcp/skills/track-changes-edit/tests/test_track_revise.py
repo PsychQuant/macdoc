@@ -201,6 +201,43 @@ class TrackRevise(unittest.TestCase):
         self.assertIn("<w:commentRangeStart", p)
         self.assertEqual(text_of(p), "這段不需要修改。")
 
+    def test_anchored_comment_covers_exactly_the_anchor(self):
+        proc = run(self.spec(comments=[{"paragraph": "00000001", "anchor": "下次會面說明",
+                                        "text": "這裡想請作者確認。"}]), self.src, self.dst)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        p = para(part(self.dst, "word/document.xml"), "00000001")
+        self.assertNotIn("<w:ins ", p)
+        self.assertNotIn("<w:del ", p)
+        m = re.search(r'<w:commentRangeStart w:id="(\d+)"/>(.*?)<w:commentRangeEnd w:id="\1"/>', p, re.S)
+        self.assertIsNotNone(m)
+        self.assertEqual(text_of(m.group(2)), "下次會面說明")
+        self.assertEqual(text_of(p), "小組選定甲案，並於下次會面說明甲案進度。")
+        self.assertIn('<w:color w:val="0000FF"/>', m.group(2))
+
+    def test_anchored_comment_across_runs_and_with_a_revision(self):
+        proc = run(self.spec(
+            revisions=[{"paragraph": "00000002", "comment": "依據原文第三節。",
+                        "changes": [{"old": "負擔", "new": "分擔"}]}],
+            comments=[{"paragraph": "00000002", "anchor": "由 甲方", "text": "主詞是否正確？"}]),
+            self.src, self.dst)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        p = para(part(self.dst, "word/document.xml"), "00000002")
+        self.assertEqual(accept_all(p), "費用由 甲方分擔。")
+        self.assertEqual(reject_all(p), "費用由 甲方負擔。")
+        comments = part(self.dst, "word/comments.xml")
+        self.assertEqual(len(re.findall(r"<w:comment ", comments)), 2)
+        cid = re.search(r'<w:comment w:id="(\d+)"[^>]*>(?:(?!</w:comment>).)*主詞是否正確', comments, re.S).group(1)
+        m = re.search(rf'<w:commentRangeStart w:id="{cid}"/>(.*?)<w:commentRangeEnd w:id="{cid}"/>', p, re.S)
+        self.assertEqual(text_of(m.group(1)), "由 甲方")
+        self.assertIn("<w:b/>", m.group(1))
+
+    def test_refuses_an_anchor_that_is_not_unique(self):
+        proc = run(self.spec(comments=[{"paragraph": "00000001", "anchor": "甲案", "text": "x"}]),
+                   self.src, self.dst)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("anchor", proc.stderr)
+        self.assertFalse(self.dst.exists())
+
     def test_other_paragraphs_are_byte_identical(self):
         run(self.spec([{"paragraph": "00000001", "comment": "x", "changes": [{"old": "選定", "new": "評估"}]}]),
             self.src, self.dst)

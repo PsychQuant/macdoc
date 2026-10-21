@@ -87,12 +87,14 @@ python3 scripts/track_revise.py spec.json 原檔.docx 新檔名.docx
     }
   ],
   "comments": [
-    {"find": "某段落中唯一出現的文字", "text": "這段是否保留，想請您決定；我沒有修改。"}
+    {"find": "某段落中唯一出現的文字", "text": "這段是否保留，想請您決定；我沒有修改。"},
+    {"paragraph": "<paraId>", "anchor": "要提問的那一句", "text": "來源寫「……」，此處是否改寫，想請您決定；我沒有修改。"}
   ]
 }
 ```
 
 - 段落用 `paragraph`（`w14:paraId`，可用 che-word-mcp 的 `get_paragraphs` 查）或 `find`（只出現在一個段落的文字）指定。
+- 註解不帶 `anchor` 時掛在整段；帶 `anchor` 時只掛在段落中**恰好出現一次**的那段文字上，文字本身不變。段落很長、只想問其中一句時用 `anchor`。
 - `old` 必須在該段落中**恰好出現一次**；寫長一點直到唯一。
 - 每組修訂**必須**有 `comment`，沒有就拒絕執行。
 - 輸出路徑已存在就拒絕；不會寫回原檔。
