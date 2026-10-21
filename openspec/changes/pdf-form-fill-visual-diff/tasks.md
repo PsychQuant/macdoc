@@ -66,3 +66,8 @@
 - [x] 9.2 Form filling (pdf-form-fill-swift 0.6.0): the content-stream scan is bounded by the crop box, follows `TJ` displacements with font size and horizontal scale, ignores unpainted paths, counts cycles, deep nesting and form budget overruns as outside, and releases content streams; a label with TeX caret notation stays in its comment; verified by Round5FixTests and the existing xelatex fills.
 - [x] 9.3 Compare (pdf-to-latex-swift 0.7.1, 0.7.2): both paper lines built by tested functions; requires pdf-visual-diff-swift 0.6.0; verified by PaperClassLineTests and the full suite.
 - [x] 9.4 macdoc CLI: Chinese messages for artifact write and encoding failures (reason by error code), the 1–2400 dpi range and off-page drawing; README overlay example runs xelatex twice; verified by PDFFormCommandTests (28).
+
+## 10. Verification round 6 fixes
+
+- [x] 10.1 Form filling (pdf-form-fill-swift 0.7.0): the content-stream scan places every glyph from font widths and the full text state saved by `q`/`Q` and form XObjects, reports only drawing more than half a page off the page, honours clips and form bounding boxes, counts distinct forms on its budget, resolves a form's missing resources from its caller, and reports undecidable parts as `overlayUnverifiable`; overlays with annotations are refused; verified by Round6FixTests (including xelatex fills with full-width punctuation and kerned text near the margin, and mutation checks on glyph advance and state restore).
+- [x] 10.2 macdoc CLI: Chinese messages for unverifiable and annotated overlays; README, CONVERSIONS, the form-fill discussion and cli-spec say drawing, not only text, may not leave the page; verified by PDFFormCommandTests (29).

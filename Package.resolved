@@ -113,8 +113,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/pdf-form-fill-swift.git",
       "state" : {
-        "revision" : "86c7e26bc9f2cb46978e92a335ebf57beb930afe",
-        "version" : "0.6.0"
+        "revision" : "7de70d86923780b50750d2545546d3300e4bc337",
+        "version" : "0.7.0"
       }
     },
     {

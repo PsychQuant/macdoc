@@ -267,6 +267,20 @@ final class PDFFormCommandTests {
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("filled.pdf").path))
     }
 
+    @Test("form-fill refuses an overlay with a link and writes nothing", .enabled(if: xelatexAvailable, "xelatex not found"))
+    func formFillAnnotatedOverlay() throws {
+        let dir = try directory()
+        try Self.pdf([(Self.nearA4, Self.form)], at: dir.appendingPathComponent("blank.pdf"))
+        let tex = dir.appendingPathComponent("filled.tex")
+        let source = Self.overlayTeX("\\at{148}{100}{12}{\\href{https://example.org}{X}};")
+            .replacingOccurrences(of: "\\pagestyle{empty}", with: "\\usepackage{hyperref}\n\\pagestyle{empty}")
+        try source.write(to: tex, atomically: true, encoding: .utf8)
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("錯誤：疊印層帶有 1 個註解"), "stderr: \(result.stderr)")
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("filled.pdf").path))
+    }
+
     @Test("form-fill refuses a default output that is the blank form itself and leaves it untouched")
     func formFillDefaultOutputIsBlankForm() throws {
         let dir = try directory()
