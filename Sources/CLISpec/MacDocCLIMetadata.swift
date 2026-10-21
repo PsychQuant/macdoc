@@ -119,7 +119,7 @@ public enum MacDocCLIMetadata {
         CLISpecMetadata.CommandInfo(
             path: "macdoc pdf form-skeleton",
             status: .active,
-            notes: ["Reads the printed labels of a blank PDF form with PDFKit and writes a .tex overlay skeleton; never overwrites an existing file (#240)."]
+            notes: ["Reads the printed labels of a blank PDF form with PDFKit and writes a .tex overlay skeleton to --output (never overwriting an existing file) or, without --output, to stdout with an absolute blank-form path (#240)."]
         ),
         CLISpecMetadata.CommandInfo(
             path: "macdoc pdf form-fill",
@@ -349,7 +349,7 @@ public enum MacDocCLIMetadata {
         ),
         CLISpecMetadata.ExternalDependency(
             id: "tex", kind: .cli,
-            purpose: "latexmk and pdflatex from a TeX distribution compile the assembled or accumulated LaTeX.",
+            purpose: "latexmk and pdflatex from a TeX distribution compile the assembled or accumulated LaTeX; xelatex with the tikz and xeCJK packages compiles form-fill overlays.",
             install: "MacTeX or TeX Live"
         ),
         CLISpecMetadata.ExternalDependency(

@@ -50,7 +50,7 @@ The skeleton generator reads page 1 with PDFKit, splits its text into lines, tak
 
 ### Overlay compilation in a temporary directory
 
-The compiler copies the source into a fresh temporary directory as `overlay.tex`, so the file name never reaches TeX's command line, and runs the engine with `-no-shell-escape -interaction=nonstopmode -halt-on-error` and `-output-directory` set to that directory, twice, with the source file's directory as the working directory so relative paths resolve. A symbolic link to the .tex is followed and its contents are copied. A run that does not finish within the timeout (120 s) is stopped together with the helpers it started; `discard` removes only a directory the compiler created directly in the temporary directory. On failure the directory is removed and the end of the log is carried in the error; on success the caller removes it after stamping. The engine defaults to `xelatex` found on PATH; an explicit path is accepted.
+The compiler copies the source into a fresh temporary directory as `overlay.tex`, so the file name never reaches TeX's command line, and runs the engine with `-no-shell-escape -interaction=nonstopmode -halt-on-error` and `-output-directory` set to that directory, twice, with the source file's directory as the working directory so relative paths resolve. A symbolic link to the .tex is followed and its contents are copied. A run that does not finish within the timeout (120 s) is stopped with its whole process tree (frozen, then killed from the leaves up); `discard` removes only a directory recorded when this process created it, and the directory is created with mode 0700. On failure the directory is removed and the end of the log is carried in the error; on success the caller removes it after stamping. The engine defaults to `xelatex` found on PATH; an explicit path is accepted.
 
 ### Page geometry layer in the pdf-to-latex-swift comparator
 
@@ -71,7 +71,8 @@ The repositories are created, hardened according to macdoc's SECURITY.md baselin
 - `PageRaster.render(page:dpi:)` and `PageRaster.render(url:pageIndex:dpi:)` return width, height, dpi and RGB bytes; deterministic; resolutions above `PageRaster.maxDPI` (2400) and bitmaps above `PageRaster.maxPixelCount` (100 million) are refused; `PageRaster(width:height:dpi:pageSize:pixels:) throws` refuses an empty or inconsistent buffer.
 - `SignedDiff(original:output:)` exposes width, height, Int16 values, changed-pixel count, per-channel true minimum and maximum, and `sizesMatch` (same bp page size and same raster size).
 - `OverlayVerifier.verify(original:output:overlay:)` returns a report with the five counts and bands (top, bottom, left, right in bp, pixel count) and `passed`.
-- `PreservedRegions.check(_:diff:) throws` takes rectangles in bp with a top-left origin and returns per-rectangle changed and unchecked pixel counts; non-finite rectangles are refused.
+- `PreservedRegions.check(_:diff:) throws` takes rectangles in bp with a top-left origin and returns per-rectangle changed and unchecked pixel counts (saturating at 2^62); rectangles with a non-finite coordinate or edge are refused.
+- `DiffArtifacts.fileNames` and `DiffArtifacts.paths(in:)` name the artifact destinations so callers can refuse collisions before writing.
 - `PageGeometry.a4`, `PageGeometry.classify(_:)` returning exact A4, near A4 or other, `PageGeometry.inkInRemovedStrip(url:pageIndex:target:dpi:)` / `inkInRemovedStrip(page:target:dpi:)`, and `PageGeometry.inkOutsideCropBox(page:dpi:)`.
 - `DiffArtifacts.write(diff:checks:preserved:identical:to:)` writes diff_signed.png, diff_abs.png, diff.bin and report.json with the results of the checks that ran, each written atomically.
 
@@ -104,7 +105,9 @@ The repositories are created, hardened according to macdoc's SECURITY.md baselin
 
 ## Migration Plan
 
-Additive. macdoc gains dependencies and subcommands; no existing command changes behavior except that compare prints an extra section. Rollback: revert the macdoc commits; the new packages remain available for other consumers.
+Additive. macdoc gains dependencies and subcommands. `macdoc pdf compare` changes in three ways: it prints a page-geometry section, its SUMMARY gains a page-size verdict and labels the existing paper line as a class, and its JSON report gains an optional `pageGeometry` field (older reports still decode). Rollback: revert the macdoc commits; the new packages remain available for other consumers.
+
+`form-skeleton` writes its text to stdout when `--output` is omitted, as macdoc's CLI rules ask; then `\BlankForm` holds an absolute path, because there is no output location to make it relative to.
 
 ## Open Questions
 

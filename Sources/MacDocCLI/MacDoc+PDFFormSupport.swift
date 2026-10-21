@@ -39,8 +39,34 @@ enum FormCommandSupport {
         return fileParts.dropFirst(dirParts.count).joined(separator: "/")
     }
 
-    static func size(_ size: CGSize) -> String {
-        String(format: "%.2f × %.2f bp", size.width, size.height)
+    static func size(_ size: CGSize, decimals: Int = 2) -> String {
+        String(format: "%.\(decimals)f × %.\(decimals)f bp", size.width, size.height)
+    }
+
+    /// Two sizes printed with the fewest decimals (2, 4, …, 16) at which
+    /// they differ when they are different.
+    static func distinctSizes(_ a: CGSize, _ b: CGSize) -> (String, String) {
+        for digits in stride(from: 2, through: 16, by: 2) where a == b || size(a, decimals: digits) != size(b, decimals: digits) {
+            return (size(a, decimals: digits), size(b, decimals: digits))
+        }
+        return (size(a, decimals: 16), size(b, decimals: 16))
+    }
+
+    /// The A4 classification of a size in either orientation, as
+    /// `macdoc pdf compare` reports it.
+    static func classification(_ size: CGSize) -> String {
+        PageGeometry.classify(CGSize(width: min(size.width, size.height), height: max(size.width, size.height))).rawValue
+    }
+
+    /// Refuses a diff directory whose artifacts would replace one of `inputs`.
+    static func refuseArtifactCollisions(in directory: URL, inputs: [(URL, String)]) throws {
+        for artifact in DiffArtifacts.paths(in: directory) {
+            let path = artifact.resolvingSymlinksInPath().standardizedFileURL.path
+            for (input, role) in inputs where input.resolvingSymlinksInPath().standardizedFileURL.path == path {
+                FileHandle.standardError.write(Data("錯誤：差值產物 \(artifact.path) 會蓋掉\(role)；請換一個 --diff-dir\n".utf8))
+                throw ExitCode.failure
+            }
+        }
     }
 
     /// The status line macdoc prints on stderr after writing a file or directory.
@@ -91,8 +117,8 @@ enum FormCommandSupport {
         return try body()
     }
 
-    /// Runs `body`; a library error is printed on stderr in Traditional
-    /// Chinese and turned into a failing exit status.
+    /// Runs `body`; a library or file-system error is printed on stderr in
+    /// Traditional Chinese and turned into a failing exit status.
     static func reportingErrors<T>(_ body: () throws -> T) throws -> T {
         do {
             return try body()
@@ -101,6 +127,10 @@ enum FormCommandSupport {
             throw ExitCode.failure
         } catch let error as PDFVisualDiffError {
             FileHandle.standardError.write(Data("錯誤：\(message(for: error))\n".utf8))
+            throw ExitCode.failure
+        } catch let error as CocoaError {
+            let path = error.filePath ?? error.userInfo[NSFilePathErrorKey] as? String ?? "（路徑不明）"
+            FileHandle.standardError.write(Data("錯誤：無法讀寫檔案：\(path)（\(error.localizedDescription)）\n".utf8))
             throw ExitCode.failure
         }
     }
@@ -146,12 +176,17 @@ enum FormCommandSupport {
         case .blankFormNotFound(let path):
             return "找不到空白表單：\(path)"
         case .unsafeBlankFormPath(let path):
-            return "空白表單的路徑含有 TeX 會誤讀的字元（\\ { } % # ^ 或控制字元）：\(path.debugDescription)；請先改檔名"
+            return "空白表單的路徑含有 TeX 會誤讀的字元（\\ { } % # ^ 或控制字元）：\(path.debugDescription)；請改檔名或所在資料夾名稱"
         case let .outputIsInput(path, role):
             let names = ["blank form": "空白表單", ".tex source": ".tex 原始檔", "compiled overlay": "編譯後的疊印層"]
             return "不能把成品寫在\(names[role] ?? role)上：\(path)；請用 --output 指定別的檔名"
         case .outputNotAFile(let path):
             return "成品路徑已存在且不是一般檔案（資料夾或符號連結）：\(path)；請用 --output 指定要寫出的 PDF 檔名"
+        case let .diffArtifactCollides(path, role):
+            let names = ["output": "成品", "blank form": "空白表單", ".tex source": ".tex 原始檔"]
+            return "差值產物 \(path) 會蓋掉\(names[role] ?? role)；請換一個 --diff-dir"
+        case .unreadableSource(let path):
+            return "無法讀取 .tex：\(path)"
         case .outputWriteFailed(let path):
             return "無法寫入：\(path)"
         }
@@ -173,6 +208,8 @@ enum FormCommandSupport {
             return String(format: "%.0f × %.0f 像素的點陣超過上限 %d 像素；請降低 --dpi", width, height, limit)
         case .invalidRegion(let index):
             return "保留區域 \(index) 必須是有限座標，且 x0 < x1、y0 < y1"
+        case let .invalidPageSize(width, height):
+            return "頁面尺寸必須是正的有限數，收到 \(width) × \(height) bp"
         case let .invalidRaster(width, height, bytes):
             return "點陣大小無效（\(width) × \(height)，\(bytes) bytes）"
         case .sizeMismatch(let detail):

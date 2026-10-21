@@ -277,6 +277,8 @@ macdoc pdf compare --original textbook.pdf --reproduced textbook-latex/main.pdf
 ```bash
 # 從空白表單產生 .tex 疊印骨架（bp、原點左上；每個印刷標籤一個欄位巨集與一行註解）
 macdoc pdf form-skeleton --pdf blank.pdf --output filled.tex
+# 不給 --output 時寫到 stdout（\BlankForm 用絕對路徑）
+macdoc pdf form-skeleton --pdf blank.pdf > filled.tex
 
 # 編疊印層 → 1:1 蓋到原表副本 → 五項逐像素檢查（預設輸出 filled.pdf，精確 A4）
 macdoc pdf form-fill filled.tex --diff-dir diff/
@@ -288,6 +290,7 @@ macdoc pdf form-fill filled.tex --output filled-final.pdf
 macdoc pdf form-fill large.tex --page original
 
 # 任意兩份 PDF 的逐像素比對（有號 RGB 差值，不設門檻）
+# overlay.pdf 是只含打字內容的疊印層，例如 xelatex filled.tex 編出的 PDF
 macdoc pdf visual-diff --original blank.pdf --reproduced filled.pdf --overlay overlay.pdf
 ```
 

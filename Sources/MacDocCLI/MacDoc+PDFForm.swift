@@ -44,6 +44,11 @@ extension MacDoc.PDF {
             let reproducedURL = try FormCommandSupport.inputURL(reproduced)
             let overlayURL = try overlay.map(FormCommandSupport.inputURL)
             let regions = try preserve.map(FormCommandSupport.parseRect)
+            if let diffDir {
+                // The artifacts must not replace a PDF this command reads.
+                let inputs = [(originalURL, "原始 PDF"), (reproducedURL, "要檢查的 PDF")] + (overlayURL.map { [($0, "疊印層 PDF")] } ?? [])
+                try FormCommandSupport.refuseArtifactCollisions(in: FormCommandSupport.absoluteURL(diffDir), inputs: inputs)
+            }
             let passed = try FormCommandSupport.reportingErrors {
                 try compare(originalURL, reproducedURL, overlayURL, regions)
             }
@@ -87,10 +92,10 @@ extension MacDoc.PDF {
             var identical: Bool?
             if overlayURL == nil && regions.isEmpty {
                 let same = diff.changedPixelCount == 0 && diff.sizesMatch
+                let sizes = FormCommandSupport.distinctSizes(originalRaster.pageSize, reproducedRaster.pageSize)
                 let reason = diff.sizesMatch
                     ? "\(diff.changedPixelCount) px differ"
-                    : "page sizes differ (\(FormCommandSupport.size(originalRaster.pageSize)) vs "
-                        + "\(FormCommandSupport.size(reproducedRaster.pageSize))); "
+                    : "page sizes differ (\(sizes.0) vs \(sizes.1)); "
                         + "\(diff.changedPixelCount) px differ in the common region"
                 print("\(same ? "✓" : "✗") identical: \(reason)")
                 identical = same
@@ -109,34 +114,44 @@ extension MacDoc.PDF {
     struct FormSkeletonCommand: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "form-skeleton",
-            abstract: "從空白 PDF 表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一個欄位巨集與一行註解）。"
+            abstract: "從空白 PDF 表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一個欄位巨集與一行註解）。",
+            discussion: """
+            不給 --output 時骨架寫到 stdout，\\BlankForm 用空白表單的絕對路徑；給 --output 時寫成檔案
+            （已存在時不覆寫），\\BlankForm 用相對於該檔的路徑。
+            """
         )
 
         @Option(name: .long, help: "空白 PDF 表單。")
         var pdf: String
 
-        @Option(name: .long, help: "要寫出的 .tex；已存在時不覆寫。")
-        var output: String
+        @Option(name: .long, help: "要寫出的 .tex（預設：寫到 stdout）；已存在時不覆寫。")
+        var output: String?
 
         mutating func run() throws {
             let form = try FormCommandSupport.inputURL(pdf)
-            let tex = FormCommandSupport.absoluteURL(output)
-            guard !FileManager.default.fileExists(atPath: tex.path) else {
+            let tex = output.map(FormCommandSupport.absoluteURL)
+            if let tex, FileManager.default.fileExists(atPath: tex.path) {
                 throw ValidationError("輸出檔已存在，不覆寫：\(tex.path)")
             }
-            let reference = FormCommandSupport.relativePath(of: form, from: tex.deletingLastPathComponent())
+            let reference = tex.map { FormCommandSupport.relativePath(of: form, from: $0.deletingLastPathComponent()) } ?? form.path
             let skeleton = try FormCommandSupport.reportingErrors {
                 // PDFKit logs debug lines on stderr while it reads the page's text.
                 try FormCommandSupport.withStderrSilenced {
                     try FormSkeleton.generate(blankForm: form, reference: reference)
                 }
             }
-            try FileManager.default.createDirectory(at: tex.deletingLastPathComponent(), withIntermediateDirectories: true)
-            do {
-                // Refuses to replace a file created since the check above.
-                try Data(skeleton.utf8).write(to: tex, options: .withoutOverwriting)
-            } catch CocoaError.fileWriteFileExists {
-                throw ValidationError("輸出檔已存在，不覆寫：\(tex.path)")
+            guard let tex else {
+                print(skeleton, terminator: "")
+                return
+            }
+            try FormCommandSupport.reportingErrors {
+                try FileManager.default.createDirectory(at: tex.deletingLastPathComponent(), withIntermediateDirectories: true)
+                do {
+                    // Refuses to replace a file created since the check above.
+                    try Data(skeleton.utf8).write(to: tex, options: .withoutOverwriting)
+                } catch CocoaError.fileWriteFileExists {
+                    throw ValidationError("輸出檔已存在，不覆寫：\(tex.path)")
+                }
             }
             let labels = skeleton.split(separator: "\n").filter { $0.hasPrefix("% \\at{") }.count
             FormCommandSupport.reportWritten(tex, note: "\(labels) 個標籤；\\BlankForm = \(reference)")
@@ -186,7 +201,7 @@ extension MacDoc.PDF {
             }
             FormCommandSupport.reportWritten(result.output)
             if let diffDirectory { FormCommandSupport.reportWritten(diffDirectory) }
-            print("Page: \(FormCommandSupport.size(result.pageSize)) (\(PageGeometry.classify(result.pageSize).rawValue))")
+            print("Page: \(FormCommandSupport.size(result.pageSize)) (\(FormCommandSupport.classification(result.pageSize)))")
             print(String(format: "Changed pixels: %d at %.0f dpi", result.report.changedPixelCount, result.report.dpi))
             if !FormCommandSupport.printChecks(result.report.checks) { throw ExitCode.failure }
         }
