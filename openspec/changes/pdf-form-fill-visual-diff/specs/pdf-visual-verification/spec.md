@@ -147,7 +147,7 @@ The library SHALL define A4 as 210×297 mm, that is 595.2756×841.8898 bp, and S
 
 ### Requirement: Diff artifacts
 
-On request the library SHALL write four artifacts to a caller-chosen directory: diff_signed.png with each channel equal to 128 + D/2 clamped to 0–255; diff_abs.png with each channel equal to 255 − |D|; diff.bin holding D as little-endian signed 16-bit integers in row-major height × width × 3 order; and report.json with the dimensions, resolution, changed-pixel count, per-channel extremes and the result of every check that ran, including the identity check. Each artifact SHALL be written under a temporary name and renamed into place, so that an existing file or symbolic link of the same name is replaced and never written through.
+On request the library SHALL write four artifacts to a caller-chosen directory: diff_signed.png with each channel equal to 128 + D/2 clamped to 0–255; diff_abs.png with each channel equal to 255 − |D|; diff.bin holding D as little-endian signed 16-bit integers in row-major height × width × 3 order; and report.json with the dimensions, resolution, changed-pixel count, per-channel extremes and the result of every check that ran, including the identity check. Each artifact SHALL be written under a temporary name and renamed into place, so that an existing file or symbolic link of the same name is replaced and never written through. A failed write SHALL name the artifact's path and carry the Foundation error code, not system-language text, and an artifact that cannot be encoded SHALL be named.
 
 #### Scenario: Raw difference round-trips
 

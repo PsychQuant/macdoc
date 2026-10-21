@@ -290,8 +290,9 @@ macdoc pdf form-fill filled.tex --output filled-final.pdf
 macdoc pdf form-fill large.tex --page original
 
 # 任意兩份 PDF 的逐像素比對（有號 RGB 差值，不設門檻）
-# overlay.pdf 是只含打字內容的疊印層，例如 xelatex -jobname=overlay filled.tex 編出的 PDF
-# （不加 -jobname 會寫成 filled.pdf，蓋掉 form-fill 的成品）
+# overlay.pdf 是只含打字內容的疊印層，在 filled.tex 所在資料夾把
+# xelatex -jobname=overlay filled.tex 執行兩次編出（tikz 定位要第二次才正確；
+# 不加 -jobname 會寫成 filled.pdf，蓋掉 form-fill 的成品）
 macdoc pdf visual-diff --original blank.pdf --reproduced filled.pdf --overlay overlay.pdf
 ```
 

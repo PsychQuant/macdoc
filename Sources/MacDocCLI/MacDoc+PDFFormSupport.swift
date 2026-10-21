@@ -132,7 +132,7 @@ enum FormCommandSupport {
             throw ExitCode.failure
         } catch let error as CocoaError {
             let path = error.filePath ?? error.userInfo[NSFilePathErrorKey] as? String ?? "（路徑不明）"
-            FileHandle.standardError.write(Data("錯誤：無法讀寫檔案：\(path)（\(reason(for: error))）\n".utf8))
+            FileHandle.standardError.write(Data("錯誤：無法讀寫檔案：\(path)（\(reason(for: error.code))）\n".utf8))
             throw ExitCode.failure
         } catch let error as POSIXError {
             FileHandle.standardError.write(Data("錯誤：系統呼叫失敗（錯誤代碼 \(error.code.rawValue)）\n".utf8))
@@ -142,15 +142,15 @@ enum FormCommandSupport {
 
     /// A Chinese reason for the common file-system failures; other codes are
     /// named by number, never by the system-language description.
-    static func reason(for error: CocoaError) -> String {
-        switch error.code {
+    static func reason(for code: CocoaError.Code) -> String {
+        switch code {
         case .fileNoSuchFile, .fileReadNoSuchFile: return "找不到檔案或資料夾"
         case .fileWriteNoPermission, .fileReadNoPermission: return "沒有權限"
         case .fileWriteVolumeReadOnly: return "磁碟區是唯讀的"
         case .fileWriteOutOfSpace: return "磁碟空間不足"
         case .fileWriteFileExists: return "檔案已存在"
         case .fileWriteInvalidFileName, .fileReadInvalidFileName: return "檔名無效"
-        default: return "錯誤代碼 \(error.code.rawValue)"
+        default: return "錯誤代碼 \(code.rawValue)"
         }
     }
 
@@ -207,7 +207,7 @@ enum FormCommandSupport {
         case .unreadableSource(let path):
             return "無法以 UTF-8 讀取 .tex：\(path)"
         case .overlayTextOffPage(let count):
-            return "疊印層有 \(count) 處繪圖落在頁外超過一頁的地方，任何算繪都看不到；請檢查欄位座標"
+            return "疊印層有 \(count) 處繪圖落在頁外（或用了讀不完的表單物件），任何算繪都看不到；請檢查欄位座標"
         case .outputWriteFailed(let path):
             return "無法寫入：\(path)"
         }
@@ -222,7 +222,7 @@ enum FormCommandSupport {
         case .unsupportedRotation(let degrees):
             return "頁面旋轉了 \(degrees)°；只能比對未旋轉的頁面"
         case .invalidResolution(let dpi):
-            return "解析度必須是大於 0、不超過 \(Int(PageRaster.maxDPI)) 的有限 dpi，收到 \(dpi)"
+            return "解析度必須介於 \(Int(PageRaster.minDPI)) 到 \(Int(PageRaster.maxDPI)) dpi，收到 \(dpi)"
         case let .bitmapContextUnavailable(width, height):
             return "無法配置 \(width) × \(height) 像素的點陣"
         case let .bitmapTooLarge(width, height, limit):
@@ -237,8 +237,10 @@ enum FormCommandSupport {
             return "兩份點陣對不齊：\(detail)"
         case .inkInRemovedStrip(let pixels):
             return "校正成 A4 會裁掉 \(pixels) 個有墨的像素"
-        case .artifactWriteFailed(let detail):
-            return "無法寫出差值產物：\(detail)"
+        case let .artifactWriteFailed(path, code):
+            return "無法寫出差值產物：\(path)（\(code.map(reason(for:)) ?? "原因不明")）"
+        case .artifactEncodingFailed(let name):
+            return "無法編碼差值產物 \(name)"
         }
     }
 }

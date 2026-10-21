@@ -59,3 +59,10 @@
 - [x] 8.2 Form filling (pdf-form-fill-swift 0.5.0, 0.5.1): drawing more than a page beyond the overlay's edge is refused from its content stream; artifact collisions use the core check and are re-checked once the output exists; a timeout signals the engine's process group; replacing an output keeps its permissions; unsafe characters include line and paragraph separators; verified by Round4FixTests and ContentExtentTests.
 - [x] 8.3 Compare (pdf-to-latex-swift 0.7.0): both paper lines labelled as a class; exact notation when 16 decimals do not separate sizes; verified by PageGeometryComparisonTests and the full suite.
 - [x] 8.4 macdoc CLI: core collision check in visual-diff; Chinese file-system reasons by code; empty `--preserve` fields rejected; landscape marked; exact size fallback; README examples that overwrote files corrected; verified by PDFFormCommandTests (27).
+
+## 9. Verification round 5 fixes
+
+- [x] 9.1 Core (pdf-visual-diff-swift 0.6.0): `artifactWriteFailed(path:code:)` carries the Foundation error code instead of system text; `artifactEncodingFailed` names the artifact; verified by Round5FixTests.
+- [x] 9.2 Form filling (pdf-form-fill-swift 0.6.0): the content-stream scan is bounded by the crop box, follows `TJ` displacements with font size and horizontal scale, ignores unpainted paths, counts cycles, deep nesting and form budget overruns as outside, and releases content streams; a label with TeX caret notation stays in its comment; verified by Round5FixTests and the existing xelatex fills.
+- [x] 9.3 Compare (pdf-to-latex-swift 0.7.1, 0.7.2): both paper lines built by tested functions; requires pdf-visual-diff-swift 0.6.0; verified by PaperClassLineTests and the full suite.
+- [x] 9.4 macdoc CLI: Chinese messages for artifact write and encoding failures (reason by error code), the 1–2400 dpi range and off-page drawing; README overlay example runs xelatex twice; verified by PDFFormCommandTests (28).

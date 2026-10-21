@@ -315,7 +315,7 @@ final class PDFFormCommandTests {
         try Self.overlayTeX("").write(to: tex, atomically: true, encoding: .utf8)
         let result = try CLITestHelper.run(["pdf", "form-fill", tex.path, "--dpi", "0"], timeout: 120)
         #expect(result.exitCode != 0)
-        #expect(result.stderr.contains("錯誤：解析度必須是"))
+        #expect(result.stderr.contains("錯誤：解析度必須介於 1 到 2400 dpi"))
         #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("filled.pdf").path))
     }
 
@@ -424,6 +424,21 @@ final class PDFFormCommandTests {
     }
 
     // MARK: compare geometry
+
+    @Test("visual-diff reports a failed artifact write in Chinese, without system text")
+    func visualDiffArtifactWriteFailure() throws {
+        let dir = try directory()
+        let a = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("a.pdf"))
+        let b = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("b.pdf"))
+        let blocker = dir.appendingPathComponent("not-a-directory")
+        try Data("x".utf8).write(to: blocker)
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path,
+                                            "--diff-dir", blocker.path])
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("錯誤：無法寫出差值產物：\(blocker.path)（"), "stderr: \(result.stderr)")
+        #expect(!result.stderr.contains("couldn"))
+        #expect(!result.stderr.contains("原因不明"))
+    }
 
     @Test("compare prints the page-geometry section with mismatched pages")
     func compareGeometry() throws {
