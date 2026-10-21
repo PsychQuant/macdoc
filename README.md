@@ -264,11 +264,43 @@ macdoc pdf consolidate --project textbook-latex
 macdoc pdf status --project textbook-latex
 
 # 偵測 PDF 來源格式（LaTeX / Word / 掃描件）
-macdoc pdf detect-source --project textbook-latex
+macdoc pdf detect-source textbook.pdf
 
-# 比較原始 PDF 與重製 PDF 的相似度
-macdoc pdf compare --project textbook-latex
+# 比較原始 PDF 與重製 PDF：文字層、字型，以及頁面幾何（各頁尺寸、是否為精確 A4、尺寸不同的頁）
+macdoc pdf compare --original textbook.pdf --reproduced textbook-latex/main.pdf
 ```
+
+### 表單疊印與逐像素比對（`pdf form-skeleton` / `form-fill` / `visual-diff`）
+
+在空白 PDF 表單上疊印文字，原表不經過 TeX，填完後逐像素證明原表沒被動到。
+
+```bash
+# 從空白表單產生 .tex 疊印骨架（bp、原點左上；每個印刷標籤一個欄位巨集與一行註解）
+macdoc pdf form-skeleton --pdf blank.pdf --output filled.tex
+# 不給 --output 時寫到 stdout（\BlankForm 用絕對路徑）；用 > 轉向會覆寫既有檔案，要防覆寫請用 --output
+macdoc pdf form-skeleton --pdf blank.pdf | less
+
+# 編疊印層 → 1:1 蓋到原表副本 → 五項逐像素檢查（預設輸出 filled.pdf，精確 A4）
+macdoc pdf form-fill filled.tex --diff-dir diff/
+
+# 指定成品檔名（--output 必須是檔案，不能是資料夾）
+macdoc pdf form-fill filled.tex --output filled-final.pdf
+
+# 不接近 A4 的表單：骨架已用原表尺寸，保留原表尺寸填
+macdoc pdf form-fill large.tex --page original
+
+# 任意兩份 PDF 的逐像素比對（有號 RGB 差值，不設門檻）
+# overlay.pdf 是只含打字內容的疊印層，在 filled.tex 所在資料夾把
+# xelatex -jobname=overlay filled.tex 執行兩次編出（tikz 定位要第二次才正確；
+# 不加 -jobname 會寫成 filled.pdf，蓋掉 form-fill 的成品）
+macdoc pdf visual-diff --original blank.pdf --reproduced filled.pdf --overlay overlay.pdf
+```
+
+五項檢查（疊印以外的差異、原表變亮、疊印壓到原表、裁掉的邊條有墨、打的字沒進成品）全部為 0 才以 0 結束；
+`--diff-dir` 寫出 `diff_signed.png`、`diff_abs.png`、`diff.bin`、`report.json`。多行欄位用
+`\atbox{x}{y}{寬}{字級}{文字}`，在寬度內自動換行。成品不能是原表或 .tex 本身；旋轉或帶註解（連結、表單欄位）
+的原表會被拒絕；疊印層的繪圖超出頁緣時也拒絕（離頁緣一頁內逐像素檢查，更遠的從內容串流找），因為被裁掉的部分任何算繪都看不到，帶註解的疊印層同樣拒絕。寫出的檔案在 stderr 報「已寫入」，
+錯誤訊息為繁體中文。.tex 視為可信任的輸入：TeX 能讀使用者能讀的任何檔案，只填自己寫或看過的疊印層。
 
 ### AI 設定（`config`）
 

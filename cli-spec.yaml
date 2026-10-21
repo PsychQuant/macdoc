@@ -81,9 +81,9 @@ commands:
         - "Output handling is per route: see `output` on each entry of `conversions`."
       docs: [".claude/rules/cli-design/convert-entry-point.md", CONVERSIONS.md]
   - path: "macdoc pdf"
-    abstract: "PDF → LaTeX pipeline 工具"
+    abstract: "PDF → LaTeX pipeline、表單疊印與逐像素比對工具"
     default_subcommand: status
-    subcommands: [init, segment, render, ocr, migrate-figures, blocks, transcribe, transcribe-pages, resume, chapters, assemble, normalize, fix-envs, compile-check, consolidate, compare, detect-source, status]
+    subcommands: [init, segment, render, ocr, migrate-figures, blocks, transcribe, transcribe-pages, resume, chapters, assemble, normalize, fix-envs, compile-check, consolidate, compare, visual-diff, form-skeleton, form-fill, detect-source, status]
   - path: "macdoc pdf init"
     abstract: "建立 PDF 轉 LaTeX 專案資料夾與 manifest。"
     options:
@@ -585,7 +585,7 @@ commands:
       notes:
         - "Runs the mechanical clean-up, then hands remaining compile errors to the AI CLI chosen by --agent or `macdoc config ai`; --dry-run skips the agent."
   - path: "macdoc pdf compare"
-    abstract: "比較原始 PDF 和重製 PDF 的相似度（章節對齊、詞彙覆蓋、序列相似度）。"
+    abstract: "比較原始 PDF 和重製 PDF：章節對齊、詞彙覆蓋、序列相似度，以及頁面幾何（各頁尺寸、是否為精確 A4、尺寸不同的頁）。"
     options:
       - names: ["--original"]
         value_name: original
@@ -599,6 +599,93 @@ commands:
         value_name: output
         required: false
         help: "輸出目錄（存放 JSON 報告）。"
+  - path: "macdoc pdf visual-diff"
+    abstract: "逐像素比較兩份 PDF 的第一頁（有號 RGB 差值，不設門檻）。"
+    discussion: "兩份 PDF 用 CoreGraphics 以同一解析度算繪、對齊左上角，逐像素逐通道相減（D = reproduced − original）。\n給 --overlay（單獨算繪的疊印層）時跑五項疊印檢查；給 --preserve 時檢查這些區域 D 全為 0，\n且區域整個落在比對範圍內；兩者都沒給時，檢查兩頁尺寸相同且沒有任何像素不同。所有檢查都通過才以 0 結束。"
+    options:
+      - names: ["--original"]
+        value_name: original
+        required: true
+        help: "原始 PDF。"
+      - names: ["--reproduced"]
+        value_name: reproduced
+        required: true
+        help: "由原始 PDF 產生、要檢查的 PDF。"
+      - names: ["--overlay"]
+        value_name: overlay
+        required: false
+        help: "單獨算繪的疊印層 PDF；給了才跑五項疊印檢查。"
+      - names: ["--preserve"]
+        value_name: preserve
+        required: false
+        repeating: true
+        help: "必須完全不變的區域 x0,y0,x1,y1（bp，原點左上），可重複。"
+      - names: ["--dpi"]
+        value_name: dpi
+        required: false
+        default: "144.0"
+        help: "算繪解析度（dpi）。"
+      - names: ["--diff-dir"]
+        value_name: diff-dir
+        required: false
+        help: "寫出 diff_signed.png、diff_abs.png、diff.bin、report.json 的資料夾。"
+    project:
+      status: active
+      notes:
+        - "Renders the first page of both PDFs with CoreGraphics and compares them pixel by pixel without thresholds (#240); exits non-zero when an applicable check fails."
+  - path: "macdoc pdf form-skeleton"
+    abstract: "從空白 PDF 表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一個欄位巨集與一行註解）。"
+    discussion: "不給 --output 時骨架寫到 stdout，\\BlankForm 用空白表單的絕對路徑；給 --output 時寫成檔案\n（已存在時不覆寫），\\BlankForm 用相對於該檔的路徑。"
+    options:
+      - names: ["--pdf"]
+        value_name: pdf
+        required: true
+        help: "空白 PDF 表單。"
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "要寫出的 .tex（預設：寫到 stdout）；已存在時不覆寫。"
+    project:
+      status: active
+      notes:
+        - "Reads the printed labels of a blank PDF form with PDFKit and writes a .tex overlay skeleton to --output (never overwriting an existing file) or, without --output, to stdout with an absolute blank-form path (#240)."
+  - path: "macdoc pdf form-fill"
+    abstract: "編譯疊印層、1:1 蓋到空白表單副本上，並與原表逐像素比對（五項檢查）。"
+    discussion: "空白表單取自 .tex 的 \\BlankForm（相對路徑以 .tex 所在資料夾為準）。原表不經過 TeX：\n疊印層以 xelatex 編兩次後，用 CoreGraphics 1:1 蓋到原表副本上。--page a4（預設）把接近 A4 的原表\n對齊左上校正成精確 A4（210×297 mm），不縮放；裁掉的邊條若有墨則拒絕。--page original 保留原表尺寸。\n疊印層的頁面必須與成品同尺寸（form-skeleton 依原表大小寫好），繪圖不能超出頁緣，也不能帶註解。--output 必須是檔案，\n不能是資料夾、符號連結、原表或 .tex；多頁、旋轉或帶註解（連結、表單欄位）的原表會被拒絕。\n五項檢查都是 0 才以 0 結束；即使檢查失敗，成品仍會寫出供檢視。"
+    arguments:
+      - name: tex
+        required: true
+        help: "疊印層 .tex。"
+    options:
+      - names: ["--output"]
+        value_name: output
+        required: false
+        help: "要寫出的成品 PDF 檔（預設：.tex 同名的 .pdf）。"
+      - names: ["--page"]
+        value_name: page
+        required: false
+        default: a4
+        values: [a4, original]
+        help: "頁面尺寸：a4（預設）或 original。"
+      - names: ["--dpi"]
+        value_name: dpi
+        required: false
+        default: "144.0"
+        help: "驗證用的算繪解析度（dpi）。"
+      - names: ["--engine"]
+        value_name: engine
+        required: false
+        default: xelatex
+        help: "TeX 引擎名稱或路徑。"
+      - names: ["--diff-dir"]
+        value_name: diff-dir
+        required: false
+        help: "寫出差值產物的資料夾。"
+    project:
+      status: active
+      dependencies: [tex]
+      notes:
+        - "Compiles the overlay with xelatex (twice, no shell escape, 120 s timeout), stamps it 1:1 onto a copy of the blank form and verifies every pixel; the output is written even when a check fails (#240)."
   - path: "macdoc pdf detect-source"
     abstract: "偵測 PDF 的來源格式（LaTeX、Word、掃描件等）。"
     arguments:
@@ -1192,9 +1279,9 @@ external_dependencies:
     used_by: ["HTML → PDF"]
   - id: tex
     kind: cli
-    purpose: "latexmk and pdflatex from a TeX distribution compile the assembled or accumulated LaTeX."
+    purpose: "latexmk and pdflatex from a TeX distribution compile the assembled or accumulated LaTeX; xelatex with the tikz and xeCJK packages compiles form-fill overlays."
     install: "MacTeX or TeX Live"
-    used_by: ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate"]
+    used_by: ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate", "macdoc pdf form-fill"]
   - id: ai-cli
     kind: cli
     purpose: "codex, claude or gemini CLI, delegated for block/page transcription and compile-error repair."

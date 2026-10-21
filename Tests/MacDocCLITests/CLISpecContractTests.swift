@@ -231,7 +231,7 @@ struct CLISpecContractTests {
         #expect(playwright.usedBy == ["HTML → PDF"])
         #expect(document.externalDependencies.allSatisfy { !$0.usedBy.isEmpty })
         let tex = try #require(document.externalDependencies.first { $0.dependency.id == "tex" })
-        #expect(tex.usedBy == ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate"])
+        #expect(tex.usedBy == ["macdoc pdf assemble", "macdoc pdf compile-check", "macdoc pdf consolidate", "macdoc pdf form-fill"])
     }
 
     // #216 / #218: --css (on `convert`) and --host/--model (on `pdf ocr`)

@@ -47,6 +47,7 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 │       ├── MacDoc.swift       # 主命令（Convert + PDF + Bib + Config + OCR + Docx + Word 子命令群）
 │       ├── MacDoc+Convert.swift # Convert 統一轉換入口（17 種轉換，textutil-compatible）
 │       ├── MacDoc+PDF.swift   # PDF 子命令群（Phase 1 pipeline）
+│       ├── MacDoc+PDFForm.swift / MacDoc+PDFFormSupport.swift  # pdf form-skeleton / form-fill / visual-diff（#240）
 │       ├── MacDoc+PDF+Phase2.swift # PDF Phase 2 consolidation 子命令
 │       ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown/JSON）
 │       ├── MacDoc+Config.swift# Config 子命令群（AI 設定管理）
@@ -94,6 +95,8 @@ che-word-mcp ────────┘                       ├──→ ooxm
   └──→ ooxml-swift (直接讀寫)                 └──→ markdown-swift         marker-swift
                                                                         surya-swift
 macdoc CLI ──→ pdf-to-latex-swift (PDFToLaTeXCore)                      pdf-to-latex-swift
+macdoc CLI ──→ pdf-form-fill-swift ──→ pdf-visual-diff-swift (form overlay + pixel verification, #240)
+pdf-to-latex-swift ──→ pdf-visual-diff-swift (page geometry in compare)
 macdoc CLI ──→ bib-apa-to-html-swift ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ bib-apa-to-md-swift  ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ word-builder-swift ──→ ooxml-swift (fluent Swift API for .docx, 1:1 mirror of docx.js)
@@ -263,16 +266,17 @@ swift package clean && swift build
   - `LaTeXEnvChecker` — `\begin`/`\end` 配對檢查與修復
   - `TexCompileChecker` — pdflatex log 解析（支援 `!` 和 file-line-error 格式）
   - `Consolidator` — 機械步驟 + agent 迭代修復 orchestrator
-- **依賴**：swift-argument-parser
+  - `PageGeometryComparison` — compare 的頁面幾何層（各頁尺寸、A4 分類、尺寸不同的頁；#240）
+- **依賴**：swift-argument-parser、pdf-visual-diff-swift（頁面幾何）
 - **平台**：macOS 14+
 
 #### macdoc (CLI)
 - **用途**：CLI 工具，整合各套件功能
 - **Convert**：統一轉換入口（`macdoc convert --to <format> <file>`），textutil-compatible 語法，17 種轉換
-- **PDF**：簡化 pipeline（init → render → ocr → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）。舊的 block-level transcribe 已 deprecated，改用整頁 GLM-OCR。
+- **PDF**：簡化 pipeline（init → render → ocr → chapters → assemble）+ Phase 2（normalize → fix-envs → compile-check → consolidate）。舊的 block-level transcribe 已 deprecated，改用整頁 GLM-OCR。另有表單疊印與逐像素比對（form-skeleton → form-fill，visual-diff；#240），compare 會列頁面幾何。
 - **Bib**：BibLaTeX → APA 7 HTML/Markdown（to-html, to-md, list，支援 --key 過濾）
 - **Config**：AI 後端設定管理
-- **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + ArgumentParser
+- **依賴**：word-to-md-swift + marker-word-converter-swift + word-to-html-swift + html-to-word-swift + md-to-word-swift + pdf-to-md-swift + pdf-to-docx-swift + marker-swift + pdf-to-latex-swift + html-to-md-swift + md-to-html-swift + srt-to-html-swift + bib-apa-to-html-swift + bib-apa-to-json-swift + bib-apa-to-md-swift + pdf-visual-diff-swift + pdf-form-fill-swift + ArgumentParser
 
 #### che-word-mcp（245 工具）
 - **用途**：Word 文件處理 MCP，讓 Claude 能讀取和分析 Word 文件
@@ -421,6 +425,8 @@ swift build
 | `packages/pptx-swift` | https://github.com/PsychQuant/pptx-swift.git | PresentationML (.pptx) 解析與生成（v0.1.0+；v0.2.0 起有公分↔EMU 幾何模組與圖片原生比例，#90） |
 | `packages/pdf-to-latex-swift` | https://github.com/PsychQuant/pdf-to-latex-swift.git | PDF → LaTeX pipeline (consumed via remote url dep since #79) |
 | `packages/ocr-swift` | https://github.com/PsychQuant/ocr-swift.git | OCR pipeline (MLX + Ollama backends, PDFKit extractor; consumed via remote url dep since #79) |
+| (remote only) | https://github.com/PsychQuant/pdf-visual-diff-swift.git | Threshold-free pixel verification of PDFs: signed RGB difference, overlay checks, preserved regions, A4 geometry (#240) |
+| (remote only) | https://github.com/PsychQuant/pdf-form-fill-swift.git | Blank-form overlay filling: skeleton, xelatex overlay, 1:1 stamping, built-in verification (#240) |
 | `mcp/che-word-mcp` | https://github.com/PsychQuant/che-word-mcp.git | Word MCP（submodule） |
 | `mcp/che-pdf-mcp` | https://github.com/PsychQuant/che-pdf-mcp.git | PDF MCP（submodule） |
 | `mcp/che-pptx-mcp` | https://github.com/PsychQuant/che-pptx-mcp.git | PPTX MCP（submodule） |
@@ -438,6 +444,7 @@ swift build
 - `Sources/MacDocCLI/MacDoc+Word.swift` - `macdoc word reverse <docx> --to-mdocx <out> [--from-oplog] [--force] [--coverage] [--paragraphs-only] [--slot name=paraId]…`（docx → `.mdocx.swift` 腳本反向轉換；transcoder 本體在 ooxml-swift 的 `ScriptExporter`/`ScriptImporter`）。**預設 full-fidelity**（format-alignment-engine Phase C #130）：全 parts 騎在腳本上（raw channel byte-equal floor）+ typed DSL 升級（`ReverseExtractor` 的 trial-rebuild byte-equal gate 通過才升級，涵蓋 run rPr / paragraph pPr / sections / canonical tables 五層）；執行腳本重建出 Stage B byte-equal 的 docx。**真實 Word 文件的 document.xml 現在會升級**（word-canonical-forms #131，ooxml-swift v1.4.0）：新增 Word-canonical 詞彙（root namespace 雲、rsid 家族、`xml:space`、inline passthrough markers（bookmark/proofErr）、pPr/rPr 長尾、docGrid/section-type/pgSz、CRLF prolog）後，`90_template_ja.docx`（JPA 日文學術 template）的 document.xml 由 0% 升到 **per-part 100%**（aggregate 53.5%，餘量為尚無 typed 表示的 sibling parts）。`--paragraphs-only` 退回舊的段落 text+styleId 反向（無 byte-equal 保證）；有 oplog sidecar 時仍優先匯出現況 log。`--coverage` 印出 dual-track 覆蓋率報告：每個 part 的 DSL/raw split + aggregate %（DSL 份額 = byte-equal 證明過的 typed 重建；raw = 逐字搬運；基線數字見 [docs/format-alignment-baselines.md](docs/format-alignment-baselines.md)）。`--slot name=paraId`（可重複，Phase D + #131）：指定段落的文字成為腳本的 Swift 函式參數；**DSL-spellable 段落**走 script-text 參數，**raw-form 格式化段落**（真實 template 常見）走 op-level 替換（`// @slot` directive + 替換 `setRuns` run text；**多 run 段落**自 ooxml-swift v3.8.0 起也可指定（#131 / ooxml-swift PR #92）：新文字放進第一個非空白的 carrier run、其餘 run 文字清空但保留格式，呼叫端無法指定 carrier），**raw-channel 文件**（整個 document.xml 落 raw，如含表格的官方表單）走 carried XML 內 paraId 定位的 run 級手術（`// @slot-raw` directive；#171，ooxml-swift v3.5.0——結構感知定位、identity-shortcut default、fail-loud import＋術後 well-formedness 驗證；fail-loud 涵蓋格式錯誤的 `// @slot-raw`、找不到／重複／不在段落上的 paraId、缺 call-site 值——但 directive 被刪掉、或寫成 importer 不認得的 `// @` 關鍵字時，對應參數沒被綁定，render 仍沉默輸出預設值，見 PsychQuant/ooxml-swift#95；CLI 需 0.8.0+，0.7.0 會把 `// @slot-raw` 當註解，見 #198），三者都 strict mode 明確指定、不推斷；無 slot 時腳本逐字重建 byte-equal。**能拼寫 ≠ 理解渲染效果**（render-effect-semantics 第三層）：typed 欄位對排版的實際效果由 [docs/render-effect-registry.md](docs/render-effect-registry.md) 台帳記錄——每條 entry 須經 gated perturbation probe（`RUN_WORD_INTEGRATION=1 swift test --filter RenderEffectProbeTests`，真實 Word 渲染 + PDFKit 幾何量測）驗證方標 `verified`（no probe, no claim）；slot 換內容另有渲染驗收（RealTemplateUpgradeTests scenario (d)：頁數/頁框/被替換頁行距結構不變、未動頁 pixel-equal）
 - `Sources/MacDocCLI/MacDoc+Convert.swift` - Convert 統一轉換入口（17 種轉換，textutil-compatible）
 - `Sources/MacDocCLI/MacDoc+PDF.swift` - PDF 子命令（簡化 pipeline: ocr + Phase 2 consolidation）
+- `Sources/MacDocCLI/MacDoc+PDFForm.swift`、`MacDoc+PDFFormSupport.swift` - `pdf form-skeleton` / `form-fill` / `visual-diff`（#240；核心在 pdf-visual-diff-swift、pdf-form-fill-swift）
 - `Sources/MacDocCLI/MacDoc+OCR.swift` - deprecation shim（#145）：`macdoc ocr` 已移除，印遷移訊息指向 bestocr 並以 exit 2 結束。通用文字辨識歸 PsychQuant/bestOCR 單點；pdf-to-latex 內部頁級 OCR（PageOCRRunner）不受影響，其委派屬第二期（bestOCR#55 介面定案後）
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
