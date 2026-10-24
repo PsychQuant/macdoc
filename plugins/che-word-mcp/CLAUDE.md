@@ -40,6 +40,7 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 | Skill | 用途 |
 |-------|------|
 | `che-word-mcp` | 工作流指南：Direct vs Session 模式、tool 分類、Track Changes 寫側合約（`as_revision` + `track_changes_not_enabled` 例外）、SDT 控件、author resolution chain、常見 workflow（contract redline、multi-author review、fillable form） |
+| `track-changes-edit` | 用追蹤修訂改別人的文件：可直接修訂的只有兩類（與來源牴觸的事實、錯字），其餘用註解提問；查證時搜尋只定位、讀段落才定案；逐字標記、每處附註解。附 `scripts/track_revise.py`（JSON spec → 修訂＋註解，寫檔前驗證全部拒絕＝原稿），在 PsychQuant/che-word-mcp#276、#292、#296 修好前代替 `insert_text_as_revision` |
 
 ## Two Operating Modes
 

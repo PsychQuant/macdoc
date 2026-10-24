@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.8.1] - 2026-10-21
+
+### Added
+
+- 新 skill `track-changes-edit`：用追蹤修訂改別人的文件時的判斷與標記紀律（可直接修訂的封閉兩類、其餘用註解提問；查證時搜尋只定位、讀段落才定案；逐字標記；每處修訂附註解）。附 `scripts/track_revise.py`：讀 JSON spec，逐字 diff 每組 old/new，寫入 `<w:del>`／`<w:ins>` 與註解，寫檔前驗證全部拒絕＝原稿、全部接受＝預期、其餘段落逐位元組不變；輸出路徑已存在即拒絕，含 DOCTYPE／ENTITY 宣告的 XML 直接拒絕。註解可整段掛，或用 `anchor` 只掛在段落中唯一出現的一段文字上；原本就帶註解的段落也能修訂。測試用合成文件（20 項）。在 PsychQuant/che-word-mcp#276、#292、#296 修好前代替 `insert_text_as_revision`（PsychQuant/macdoc#242）。
+
+### Changed
+
+- shell 4.8.0 → 4.8.1，`binary_version` 維持 4.8.0。macdoc plugin 的 `swiftify` skill〈相關〉段加上指向 `track-changes-edit` 的說明。
+
 ## [4.8.0] - 2026-09-28
 
 ### Security
