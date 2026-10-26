@@ -213,8 +213,8 @@ enum FormCommandSupport {
         case .overlayUnverifiable(let parts):
             return "疊印層有 \(parts) 處無法定位，無法確認是否畫到頁外（字型沒有字寬資料、讀不完的表單物件、"
                 + "找不到的資源名稱、讀不到的運算元，或無法解析的內容）；請簡化疊印層"
-        case .unstampable(let reason):
-            return "無法把 PDF 的物件複製到成品（\(reason)），這份表單無法照原樣蓋印"
+        case .unstampable(let refusal):
+            return "無法把 PDF 的物件複製到成品（\(reason(for: refusal))），這份表單無法照原樣蓋印"
         case .textOutsideNodes(let characters):
             return "疊印層有寫在節點外的文字（\(characters.joined(separator: " "))），不會印出；"
                 + "請放進 \\at 節點或刪除（多打的 ; 也算）"
@@ -226,6 +226,32 @@ enum FormCommandSupport {
                 + "請從 .tex 移除（例如 hyperref 的連結與表單欄位）"
         case .outputWriteFailed(let path):
             return "無法寫入：\(path)"
+        }
+    }
+
+    /// Why stamping was refused, in Chinese; the library's own text is English.
+    static func reason(for refusal: StampRefusal) -> String {
+        switch refusal {
+        case .unreadable(let kind):
+            switch kind {
+            case .name: return "有讀不到的名稱"
+            case .string: return "有讀不到的字串"
+            case .number: return "有讀不到的數字"
+            case .array: return "有讀不到的陣列"
+            case .dictionary: return "有讀不到的字典"
+            case .stream: return "有讀不到的串流"
+            case .unknown: return "有無法辨識類型的物件"
+            }
+        case .externalStream: return "有資料存放在外部檔案的串流"
+        case .undecodableStream: return "有無法解碼的串流"
+        case .nestedTooDeep(let limit): return "物件巢狀超過 \(limit) 層"
+        case .nonFiniteNumber: return "有無限大或不是數值的數字"
+        case .tooLarge(let limit): return String(format: "複製的內容會超過 %g MB 的上限", Double(limit) / 1_048_576)
+        case .compressionFailed: return "串流壓縮失敗"
+        case .overlayHasLayers: return "疊印層有自己的圖層，無法和原表的圖層合併"
+        case .undecodableOverlayContent: return "疊印層的頁面內容無法解碼"
+        case .contentEntryNotStream: return "頁面內容清單裡有不是串流的項目"
+        case .unwrittenObject(let number): return "第 \(number) 號物件保留了卻沒有寫出，這是程式內部的錯誤，請回報"
         }
     }
 

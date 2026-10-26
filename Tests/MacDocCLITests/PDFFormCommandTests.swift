@@ -490,4 +490,51 @@ final class PDFFormCommandTests {
         #expect(result.stdout.contains("612.00 × 792.00 bp  other"))
         #expect(result.stdout.contains("Pages whose size differs: 3"))
     }
+
+    @Test("visual-diff reports an unusable resolution in Chinese instead of stopping", arguments: ["-inf", "nan", "-1e300"])
+    func visualDiffUnusableResolution(dpi: String) throws {
+        let dir = try directory()
+        let a = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("a.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", a.path, "--dpi=\(dpi)"])
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("錯誤：解析度必須介於 1 到 2400 dpi"), "exit \(result.exitCode), stderr: \(result.stderr)")
+    }
+
+    /// A blank form drawing an image whose data lives in another file (/F):
+    /// its objects cannot be copied, so it cannot be stamped.
+    static func externalStreamForm(at url: URL) throws {
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2756 841.8898] /Contents 4 0 R "
+                + "/Resources << /XObject << /Im0 5 0 R >> >> >>",
+            "<< /Length 27 >>\nstream\n0 0 0 rg 100 100 20 20 re f\nendstream",
+            "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceGray "
+                + "/F (elsewhere.bin) /Length 0 >>\nstream\n\nendstream",
+        ]
+        var pdf = "%PDF-1.4\n"
+        var offsets: [Int] = []
+        for (i, body) in objects.enumerated() {
+            offsets.append(pdf.utf8.count)
+            pdf += "\(i + 1) 0 obj\n\(body)\nendobj\n"
+        }
+        let xref = pdf.utf8.count
+        pdf += "xref\n0 \(objects.count + 1)\n0000000000 65535 f \n"
+        for offset in offsets { pdf += String(format: "%010d 00000 n \n", offset) }
+        pdf += "trailer\n<< /Size \(objects.count + 1) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n"
+        try Data(pdf.utf8).write(to: url)
+    }
+
+    @Test("form-fill words a refused stamp's reason in Chinese", .enabled(if: xelatexAvailable, "xelatex not found"))
+    func formFillUnstampableInChinese() throws {
+        let dir = try directory()
+        try Self.externalStreamForm(at: dir.appendingPathComponent("blank.pdf"))
+        let tex = dir.appendingPathComponent("filled.tex")
+        try Self.overlayTeX("").write(to: tex, atomically: true, encoding: .utf8)
+        let result = try CLITestHelper.run(["pdf", "form-fill", tex.path], timeout: 120)
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("（有資料存放在外部檔案的串流）"), "stderr: \(result.stderr)")
+        #expect(!result.stderr.contains("external"))
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("filled.pdf").path))
+    }
 }

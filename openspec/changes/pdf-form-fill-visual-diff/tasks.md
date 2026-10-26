@@ -104,3 +104,10 @@
 - [x] 14.4 Slack (pdf-visual-diff-swift 0.6.3): an edge within the slack is used as the page edge directly; verified by Round7FixTests (A4 at 127 and 254 dpi).
 - [x] 14.6 Extra Q (pdf-form-fill-swift 0.9.0): the original content's lowest save level is pre-filled with q, so an extra Q cannot pop the wrapper and leave state in force for the overlay; verified by Round10FixTests, with a deterministic test of strokes across power-of-two device rows in page mode a4.
 - [x] 14.5 Release pdf-visual-diff-swift 0.6.3 and pdf-form-fill-swift 0.9.0, move macdoc's requirements to them and regenerate Package.resolved (after the maintainer confirms).
+
+## 15. Verification round 10 (Codex) fixes
+
+- [x] 15.1 Canvas helper (pdf-visual-diff-swift 0.6.4): `PageRaster.canvasHeight(heights:dpi:)` gives 1 for a resolution or height no render accepts, so the render reports it; `macdoc pdf visual-diff --dpi=-inf` printed a Swift fatal error before; verified by Round10CodexFixTests and the CLI test with -inf, nan and -1e300.
+- [x] 15.2 Overlay height (pdf-form-fill-swift 0.10.0): FormFiller adds the compiled overlay's height to the shared canvas and redraws the original on the taller canvas before the output is written; guarded by Round10CodexFixTests at 127, 144 and 254 dpi, where a TeX-written 841.89 bp overlay is one row taller than an exact A4 page. No pixel difference was observed from the shorter canvas before the change, with lines or with curves; the change closes the gap in the shared-canvas contract.
+- [x] 15.3 Refusal reasons (pdf-form-fill-swift 0.10.0, macdoc): `FormFillError.unstampable` carries a `StampRefusal` case instead of English text, and macdoc words each case in Chinese; verified by Round10CodexFixTests and the CLI test with a blank form whose image data lives in another file.
+- [ ] 15.4 Release pdf-visual-diff-swift 0.6.4 and pdf-form-fill-swift 0.10.0, move macdoc's requirements to them and regenerate Package.resolved (after the maintainer confirms).
