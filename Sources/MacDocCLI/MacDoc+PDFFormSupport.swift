@@ -158,6 +158,8 @@ enum FormCommandSupport {
         switch error {
         case .unreadablePDF(let path):
             return "無法開啟 PDF：\(path)"
+        case .lockedPDF(let path):
+            return "PDF 需要密碼才能讀取：\(path)；請先移除密碼"
         case .emptyPDF(let path):
             return "PDF 沒有任何頁面：\(path)"
         case .multiPageOriginal(let pages):
@@ -184,7 +186,7 @@ enum FormCommandSupport {
         case .rotatedOriginal(let degrees):
             return "原表頁面旋轉了 \(degrees)°；只支援未旋轉的頁面"
         case .annotatedOriginal(let count):
-            return "原表帶有 \(count) 個註解（連結、表單欄位或註記）；疊印只重繪頁面內容，"
+            return "原表帶有 \(count) 個註解（連結、表單欄位或註記）；蓋印只複製頁面內容，"
                 + "這些註解會遺失而逐像素檢查看不到，請先將 PDF 平面化"
         case .rotatedOverlay(let degrees):
             return "疊印層頁面旋轉了 \(degrees)°；只支援未旋轉的疊印層"
@@ -213,11 +215,14 @@ enum FormCommandSupport {
                 + "找不到的資源名稱、讀不到的運算元，或無法解析的內容）；請簡化疊印層"
         case .unstampable(let reason):
             return "無法把 PDF 的物件複製到成品（\(reason)），這份表單無法照原樣蓋印"
+        case .textOutsideNodes(let characters):
+            return "疊印層有寫在節點外的文字（\(characters.joined(separator: " "))），不會印出；"
+                + "請放進 \\at 節點或刪除（多打的 ; 也算）"
         case .missingCharacters(let characters):
             return "疊印層的字型沒有這些字：\(characters.joined(separator: " "))，xelatex 已把它們略過；"
                 + "請改用含有這些字的字型（例如 \\setCJKmainfont，或設定後備字型）"
         case .annotatedOverlay(let count):
-            return "疊印層帶有 \(count) 個註解（連結或表單欄位）；疊印只重繪頁面內容，這些註解會遺失，"
+            return "疊印層帶有 \(count) 個註解（連結或表單欄位）；蓋印只複製頁面內容，這些註解會遺失，"
                 + "請從 .tex 移除（例如 hyperref 的連結與表單欄位）"
         case .outputWriteFailed(let path):
             return "無法寫入：\(path)"

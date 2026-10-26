@@ -17,8 +17,8 @@ let package = Package(
         .package(url: "https://github.com/PsychQuant/pdf-to-latex-swift.git", .upToNextMinor(from: "0.7.2")),
         // macdoc#240: threshold-free pixel verification and blank-form filling
         // (`macdoc pdf visual-diff`, `form-skeleton`, `form-fill`).
-        .package(url: "https://github.com/PsychQuant/pdf-visual-diff-swift.git", .upToNextMinor(from: "0.6.2")),
-        .package(url: "https://github.com/PsychQuant/pdf-form-fill-swift.git", .upToNextMinor(from: "0.8.0")),
+        .package(url: "https://github.com/PsychQuant/pdf-visual-diff-swift.git", .upToNextMinor(from: "0.6.3")),
+        .package(url: "https://github.com/PsychQuant/pdf-form-fill-swift.git", .upToNextMinor(from: "0.9.0")),
         .package(name: "PDFToMD", path: "packages/pdf-to-md-swift"),
         .package(name: "WordToHTML", path: "packages/word-to-html-swift"),
         .package(name: "HTMLToWord", path: "packages/html-to-word-swift"),

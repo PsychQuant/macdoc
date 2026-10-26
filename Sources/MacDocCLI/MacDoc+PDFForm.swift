@@ -57,8 +57,14 @@ extension MacDoc.PDF {
 
         /// Prints the comparison and returns whether every applicable check passed.
         private func compare(_ originalURL: URL, _ reproducedURL: URL, _ overlayURL: URL?, _ regions: [CGRect]) throws -> Bool {
-            let originalRaster = try PageRaster.render(url: originalURL, pageIndex: 0, dpi: dpi)
-            let reproducedRaster = try PageRaster.render(url: reproducedURL, pageIndex: 0, dpi: dpi)
+            // One bitmap height for every render compared: anti-aliasing is
+            // not invariant under the height, and the pages may differ in size.
+            let pages = try ([originalURL, reproducedURL] + (overlayURL.map { [$0] } ?? [])).map {
+                try PageRaster.page(url: $0, index: 0)
+            }
+            let canvas = PageRaster.canvasHeight(heights: pages.map { $0.getBoxRect(.cropBox).height }, dpi: dpi)
+            let originalRaster = try PageRaster.render(page: pages[0], dpi: dpi, canvasHeight: canvas)
+            let reproducedRaster = try PageRaster.render(page: pages[1], dpi: dpi, canvasHeight: canvas)
             print("Original:   \(originalURL.path) (\(FormCommandSupport.size(originalRaster.pageSize)))")
             print("Reproduced: \(reproducedURL.path) (\(FormCommandSupport.size(reproducedRaster.pageSize)))")
 
@@ -68,7 +74,7 @@ extension MacDoc.PDF {
             if let overlayURL {
                 let verification = try OverlayVerifier.verify(
                     original: originalRaster, output: reproducedRaster,
-                    overlay: PageRaster.render(url: overlayURL, pageIndex: 0, dpi: dpi))
+                    overlay: PageRaster.render(url: overlayURL, pageIndex: 0, dpi: dpi, canvasHeight: canvas))
                 diff = verification.diff
                 checks = verification.report.checks
             } else {

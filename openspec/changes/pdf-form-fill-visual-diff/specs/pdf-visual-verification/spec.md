@@ -6,7 +6,7 @@ Threshold-free pixel verification for any PDF produced from another PDF: both do
 
 ### Requirement: Deterministic page rasterization
 
-The verification library SHALL render a PDF page with CoreGraphics into an 8-bit sRGB RGB buffer on a white background, aligned to the page's top-left corner, at a caller-chosen resolution in dots per inch (default 144). Rendering the same page of the same file twice SHALL produce byte-identical buffers. The library SHALL refuse with an error, instead of crashing, a resolution that is not a finite number from 1 to 2400 dpi, a bitmap larger than 100 million pixels, and a page with a non-zero rotation.
+The verification library SHALL render a PDF page with CoreGraphics into an 8-bit sRGB RGB buffer on a white background, aligned to the page's top-left corner, at a caller-chosen resolution in dots per inch (default 144). Rendering the same page of the same file twice SHALL produce byte-identical buffers. Renders that are compared pixel by pixel SHALL be drawn on one bitmap height (the largest of the pages') and cropped to their own, because anti-aliasing is not invariant under the bitmap height. The library SHALL refuse with an error, instead of crashing, a resolution that is not a finite number from 1 to 2400 dpi, a bitmap larger than 100 million pixels, and a page with a non-zero rotation.
 
 #### Scenario: Same page renders identically twice
 
@@ -92,7 +92,7 @@ Given an original PDF page, an output page, and the overlay rendered alone on a 
 
 ### Requirement: Preserved regions
 
-The library SHALL accept a list of preserved rectangles in bp with a top-left origin and SHALL require D to be 0 in all channels for every pixel inside each rectangle, and every such pixel to lie inside the compared area. A rectangle with a non-finite coordinate or edge, or no area, SHALL be refused with an error naming its index. A rectangle that does not lie wholly on the page area both documents share, in bp, SHALL fail, however far away it is, including a rectangle that lies past the page edge but inside a raster rounded up to whole pixels; its pixels outside the compared area SHALL include the area past that page. A rectangle may reach up to 0.005 bp past the page edge, so that a page size printed to two decimals can be typed back. For each rectangle the result SHALL give the index, the number of differing pixels and the number of pixels outside the compared area; it SHALL pass only when both are 0.
+The library SHALL accept a list of preserved rectangles in bp with a top-left origin and SHALL require D to be 0 in all channels for every pixel inside each rectangle, and every such pixel to lie inside the compared area. A rectangle with a non-finite coordinate or edge, or no area, SHALL be refused with an error naming its index. A rectangle that does not lie wholly on the page area both documents share, in bp, SHALL fail, however far away it is, including a rectangle that lies past the page edge but inside a raster rounded up to whole pixels; its pixels outside the compared area SHALL include the area past that page. A rectangle may reach up to 0.005 bp past the page edge, so that a page size printed to two decimals can be typed back; such an edge SHALL be taken as the page edge, whatever the raster size. For each rectangle the result SHALL give the index, the number of differing pixels and the number of pixels outside the compared area; it SHALL pass only when both are 0.
 
 #### Scenario: One changed pixel inside a preserved region fails
 
