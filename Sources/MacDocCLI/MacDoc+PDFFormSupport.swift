@@ -238,12 +238,15 @@ enum FormCommandSupport {
             case .string: return "有讀不到的字串"
             case .number: return "有讀不到的數字"
             case .array: return "有讀不到的陣列"
+            case .arrayEntry: return "陣列裡有讀不到的項目"
             case .dictionary: return "有讀不到的字典"
             case .stream: return "有讀不到的串流"
             case .unknown: return "有無法辨識類型的物件"
             }
         case .externalStream: return "有資料存放在外部檔案的串流"
+        case .streamWithoutDictionary: return "有缺少串流字典的串流"
         case .undecodableStream: return "有無法解碼的串流"
+        case .unknownStreamFormat: return "有解碼後格式無法辨識的串流"
         case .nestedTooDeep(let limit): return "物件巢狀超過 \(limit) 層"
         case .nonFiniteNumber: return "有無限大或不是數值的數字"
         case .tooLarge(let limit): return String(format: "複製的內容會超過 %g MB 的上限", Double(limit) / 1_048_576)
