@@ -71,3 +71,9 @@
 
 - [x] 10.1 Form filling (pdf-form-fill-swift 0.7.0): the content-stream scan places every glyph from font widths and the full text state saved by `q`/`Q` and form XObjects, reports only drawing more than half a page off the page, honours clips and form bounding boxes, counts distinct forms on its budget, resolves a form's missing resources from its caller, and reports undecidable parts as `overlayUnverifiable`; overlays with annotations are refused; verified by Round6FixTests (including xelatex fills with full-width punctuation and kerned text near the margin, and mutation checks on glyph advance and state restore).
 - [x] 10.2 macdoc CLI: Chinese messages for unverifiable and annotated overlays; README, CONVERSIONS, the form-fill discussion and cli-spec say drawing, not only text, may not leave the page; verified by PDFFormCommandTests (29).
+
+## 11. Verification round 7 fixes
+
+- [x] 11.1 Core (pdf-visual-diff-swift 0.6.1): `SignedDiff.pageSize` records the page area both documents share; a preserved region past it fails even inside a rounded-up raster; verified by Round7FixTests.
+- [x] 11.2 Form filling (pdf-form-fill-swift 0.7.1): the scan's reach is 0.9 of a page, so a large glyph on the page is not refused; `gs` applies an ExtGState `/Font`; unreadable operands are unverifiable; verified by Round7FixTests (including an xelatex fill with a full stop at 400 bp).
+- [x] 11.3 macdoc CLI: requires the two releases; Chinese messages updated; `visual-diff` fails a preserved region just past the page edge; verified by PDFFormCommandTests (30).

@@ -113,8 +113,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/pdf-form-fill-swift.git",
       "state" : {
-        "revision" : "7de70d86923780b50750d2545546d3300e4bc337",
-        "version" : "0.7.0"
+        "revision" : "97892f6d8f4391262d03c32dc0440604b18dbcd4",
+        "version" : "0.7.1"
       }
     },
     {
@@ -131,8 +131,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/pdf-visual-diff-swift.git",
       "state" : {
-        "revision" : "8db445e6960dbbbb2e192d51d4bd011088a05dc6",
-        "version" : "0.6.0"
+        "revision" : "1593dd0151a8fdff2994dfbabbb399ecac3a1a40",
+        "version" : "0.6.1"
       }
     },
     {

@@ -454,6 +454,16 @@ final class PDFFormCommandTests {
         #expect(!result.stderr.contains("原因不明"))
     }
 
+    @Test("visual-diff fails a preserved region just past the page edge")
+    func visualDiffPreserveJustPastEdge() throws {
+        let dir = try directory()
+        let a = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("a.pdf"))
+        let b = try Self.pdf([(Self.a4, Self.form)], at: dir.appendingPathComponent("b.pdf"))
+        let result = try CLITestHelper.run(["pdf", "visual-diff", "--original", a.path, "--reproduced", b.path,
+                                            "--preserve", "595.3,10,595.4,20"])
+        #expect(result.exitCode != 0, "stdout: \(result.stdout)")
+    }
+
     @Test("compare prints the page-geometry section with mismatched pages")
     func compareGeometry() throws {
         let dir = try directory()

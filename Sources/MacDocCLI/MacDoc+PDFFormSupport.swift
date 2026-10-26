@@ -207,10 +207,10 @@ enum FormCommandSupport {
         case .unreadableSource(let path):
             return "無法以 UTF-8 讀取 .tex：\(path)"
         case .overlayTextOffPage(let count):
-            return "疊印層有 \(count) 處繪圖落在頁外超過半頁的地方，任何算繪都看不到；請檢查欄位座標"
+            return "疊印層有 \(count) 處繪圖落在頁外超過 0.9 頁的地方，任何算繪都看不到；請檢查欄位座標"
         case .overlayUnverifiable(let parts):
             return "疊印層有 \(parts) 處無法定位，無法確認是否畫到頁外（字型沒有字寬資料、讀不完的表單物件、"
-                + "找不到的物件名稱，或無法解析的內容）；請簡化疊印層"
+                + "找不到的資源名稱、讀不到的運算元，或無法解析的內容）；請簡化疊印層"
         case .annotatedOverlay(let count):
             return "疊印層帶有 \(count) 個註解（連結或表單欄位）；疊印只重繪頁面內容，這些註解會遺失，"
                 + "請從 .tex 移除（例如 hyperref 的連結與表單欄位）"

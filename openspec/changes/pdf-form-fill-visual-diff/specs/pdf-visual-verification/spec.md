@@ -92,7 +92,7 @@ Given an original PDF page, an output page, and the overlay rendered alone on a 
 
 ### Requirement: Preserved regions
 
-The library SHALL accept a list of preserved rectangles in bp with a top-left origin and SHALL require D to be 0 in all channels for every pixel inside each rectangle, and every such pixel to lie inside the compared area. A rectangle with a non-finite coordinate or edge, or no area, SHALL be refused with an error naming its index. A rectangle that does not lie wholly on the compared area SHALL fail, however far away it is. For each rectangle the result SHALL give the index, the number of differing pixels and the number of pixels outside the compared area; it SHALL pass only when both are 0.
+The library SHALL accept a list of preserved rectangles in bp with a top-left origin and SHALL require D to be 0 in all channels for every pixel inside each rectangle, and every such pixel to lie inside the compared area. A rectangle with a non-finite coordinate or edge, or no area, SHALL be refused with an error naming its index. A rectangle that does not lie wholly on the page area both documents share, in bp, SHALL fail, however far away it is, including a rectangle that lies past the page edge but inside a raster rounded up to whole pixels. For each rectangle the result SHALL give the index, the number of differing pixels and the number of pixels outside the compared area; it SHALL pass only when both are 0.
 
 #### Scenario: One changed pixel inside a preserved region fails
 
