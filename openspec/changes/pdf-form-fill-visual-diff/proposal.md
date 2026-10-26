@@ -12,7 +12,7 @@ Blank PDF forms often have to be filled repeatedly, and macdoc has no way to pro
 Documented assumptions (unattended run, to be challenged in review):
 - The subcommands live under the existing pdf command group, beside compare (Clarity Surface row 1, default).
 - The first version only emits a skeleton; automatic grid-line detection is out of scope (Clarity Surface row 3, default).
-- Stamping uses a CoreGraphics PDF context that redraws the page content as vector content with a translation only; it was verified at 0 differing pixels, so the object-level MediaBox alternative was not built. Originals whose annotations a redraw would drop are refused.
+- Stamping works at the PDF object level: the original page's content is copied unchanged and the overlay is added as a form XObject. (A CoreGraphics redraw was used first and replaced in verification round 8, because it changed how fine lines and curves render.) Originals whose annotations stamping would drop are refused.
 
 ## Non-Goals
 

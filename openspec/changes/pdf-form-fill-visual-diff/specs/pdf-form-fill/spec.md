@@ -69,7 +69,7 @@ The library SHALL compile the overlay .tex (following a symbolic link to the fil
 
 ### Requirement: One-to-one stamping with A4 normalization
 
-The library SHALL stamp the compiled overlay onto a copy of the original page so that both pages are placed with translation only, each clipped to its own crop box, and neither is scaled; the page content SHALL be redrawn as vector content, not rasterized. The overlay page SHALL be unrotated and have the output's page size within 0.01 bp. With page mode `a4` (default) a near-A4 original SHALL be normalized to exact A4 by keeping its top-left corner; with page mode `original` the original page size SHALL be kept. Before anything is written, originals with more than one page, a rotated page, or any annotation SHALL be rejected with an error stating the page count, the rotation or the annotation count, and an overlay with any annotation SHALL be rejected with an error stating the count, because stamping drops it. The output SHALL NOT be the original, the overlay or the .tex source, including through a symbolic link, and when it exists it SHALL be a regular file, not a directory or a symbolic link; such a path SHALL be rejected before anything is written. The output SHALL be moved into place in one atomic rename that can never replace a directory, keeping the permissions of an output it replaces. The original file SHALL never be modified.
+The library SHALL stamp the compiled overlay onto the original page so that both are placed with translation only and neither is scaled or redrawn: the original page's content streams and resources SHALL be copied unchanged (identical decoded data), clipped to the original's crop box, and the overlay SHALL be added as a form XObject; in page mode `a4` only the page box SHALL change, keeping the original's top-left corner. A PDF whose objects cannot be copied SHALL be refused with an error naming the reason. The overlay page SHALL be unrotated and have the output's page size within 0.01 bp. With page mode `a4` (default) a near-A4 original SHALL be normalized to exact A4 by keeping its top-left corner; with page mode `original` the original page size SHALL be kept. Before anything is written, originals with more than one page, a rotated page, or any annotation SHALL be rejected with an error stating the page count, the rotation or the annotation count, and an overlay with any annotation SHALL be rejected with an error stating the count, because stamping drops it. The output SHALL NOT be the original, the overlay or the .tex source, including through a symbolic link, and when it exists it SHALL be a regular file, not a directory or a symbolic link; such a path SHALL be rejected before anything is written. The output SHALL be moved into place in one atomic rename that can never replace a directory, keeping the permissions of an output it replaces. The original file SHALL never be modified.
 
 #### Scenario: Near-A4 original becomes exact A4 without moving the form
 
@@ -98,6 +98,18 @@ The library SHALL stamp the compiled overlay onto a copy of the original page so
 - **WHEN** stamping is requested on an original that carries one link annotation
 - **THEN** the call fails with an error stating 1 annotation
 
+#### Scenario: An annotated overlay is rejected
+
+- **GIVEN** an overlay page carrying one link annotation
+- **WHEN** stamping runs
+- **THEN** it reports one annotation on the overlay and writes nothing
+
+#### Scenario: Fine lines at fractional positions are not changed by stamping
+
+- **GIVEN** an exact A4 table form with 0.5 bp lines at fractional positions and an overlay typing one character away from the lines
+- **WHEN** the form is filled in page mode `a4` or `original`
+- **THEN** all five checks are 0
+
 #### Scenario: The overlay must have the output's size
 
 - **WHEN** an A4 overlay is stamped onto a 596×843 bp original in page mode `original`
@@ -105,7 +117,7 @@ The library SHALL stamp the compiled overlay onto a copy of the original page so
 
 ### Requirement: Built-in verification after filling
 
-The library SHALL check the resolution, the timeout, the output path and the original before compiling, render the original before writing the output, compile the overlay at the output's page size, refuse an overlay that draws outside its page (ink up to one page beyond each edge found pixel by pixel; from the overlay's content stream, at any distance, an em box around any visible glyph placed by the font's widths and the text state (including a font set by an ExtGState), a point of a painted path, an image corner or a shading lying more than 0.9 of a page beyond the crop box, unless a clip keeps it within that reach), refuse as unverifiable an overlay whose drawing cannot be placed (text in a font without width data, an unresolvable resource, an operator whose operands cannot be read, a content stream that fails to parse, a form XObject that cannot be read to the end through a cycle, nesting deeper than 16, more than 2000 distinct forms or more than 100000 form invocations), stamp it, and run the five overlay checks of the pdf-visual-verification capability against the original PDF, the output and the overlay page. It SHALL return the report and treat the fill as failed when any check is non-zero. The output file SHALL still be written so that the user can inspect it. The overlay's temporary directory SHALL be removed when filling ends.
+The library SHALL check the resolution, the timeout, the output path and the original before compiling, render the original before writing the output, compile the overlay at the output's page size, refuse an overlay that draws outside its page (ink up to one page beyond each edge found pixel by pixel; from the overlay's content stream, at any distance, a box around any visible glyph placed by the font's widths and the text state (including a font set by an ExtGState), taken from the font's /FontBBox or, without one, from one em before the pen to two after it, a point of a painted path, an image corner or the bounding box of a shading lying more than 0.9 of a page beyond the crop box, unless a clip keeps it within that reach; a clip with no path SHALL be ignored, as renderers ignore it), refuse as unverifiable an overlay whose drawing cannot be placed outside a clip within that reach (text in a font without width data or in a Type3 font, a shading without a bounding box, an unresolvable resource, an operator whose operands cannot be read, a content stream that fails to parse, a form XObject that cannot be read to the end through a cycle, nesting deeper than 16, more than 2000 distinct forms or more than 100000 form invocations), stamp it, and run the five overlay checks of the pdf-visual-verification capability against the original PDF, the output and the overlay page. It SHALL return the report and treat the fill as failed when any check is non-zero. The output file SHALL still be written so that the user can inspect it. The overlay's temporary directory SHALL be removed when filling ends.
 
 #### Scenario: Collision fails the fill and names the place
 
@@ -118,6 +130,24 @@ The library SHALL check the resolution, the timeout, the output path and the ori
 - **GIVEN** an overlay with WWWWWWWW at (580,400) bp on an A4 page
 - **WHEN** the form is filled
 - **THEN** the call fails with an error stating the inked pixels outside the page, and no output is written
+
+#### Scenario: A character the font lacks is refused
+
+- **GIVEN** an overlay typing a character that the overlay's font does not have
+- **WHEN** `FormFiller.fill` runs
+- **THEN** it reports the missing character and writes no output
+
+#### Scenario: A large glyph on the page is not refused
+
+- **GIVEN** an overlay with a full stop set at 600 bp at (100, 500) bp on an A4 page
+- **WHEN** `FormFiller.fill` runs
+- **THEN** no off-page drawing is reported and the fill passes
+
+#### Scenario: Drawing that cannot be placed is refused as unverifiable
+
+- **GIVEN** an overlay whose page content draws an XObject name that does not resolve
+- **WHEN** `FormFiller.fill` runs
+- **THEN** it reports the overlay as unverifiable and writes no output
 
 #### Scenario: Text beyond A4 on a larger form passes in page mode original
 

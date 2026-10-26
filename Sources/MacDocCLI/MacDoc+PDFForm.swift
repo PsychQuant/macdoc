@@ -117,7 +117,7 @@ extension MacDoc.PDF {
             abstract: "從空白 PDF 表單產生 .tex 疊印骨架（bp、原點左上，每個印刷標籤一個欄位巨集與一行註解）。",
             discussion: """
             不給 --output 時骨架寫到 stdout，\\BlankForm 用空白表單的絕對路徑；給 --output 時寫成檔案
-            （已存在時不覆寫），\\BlankForm 用相對於該檔的路徑。
+            （已存在時不覆寫）；空白表單在該檔所在資料夾底下時 \\BlankForm 用相對路徑，否則用絕對路徑。
             """
         )
 
@@ -165,7 +165,7 @@ extension MacDoc.PDF {
             abstract: "編譯疊印層、1:1 蓋到空白表單副本上，並與原表逐像素比對（五項檢查）。",
             discussion: """
             空白表單取自 .tex 的 \\BlankForm（相對路徑以 .tex 所在資料夾為準）。原表不經過 TeX：
-            疊印層以 xelatex 編兩次後，用 CoreGraphics 1:1 蓋到原表副本上。--page a4（預設）把接近 A4 的原表
+            疊印層以 xelatex 編兩次後，在 PDF 物件層級 1:1 疊到原表上（原表內容逐字複製，不重畫）。--page a4（預設）把接近 A4 的原表
             對齊左上校正成精確 A4（210×297 mm），不縮放；裁掉的邊條若有墨則拒絕。--page original 保留原表尺寸。
             疊印層的頁面必須與成品同尺寸（form-skeleton 依原表大小寫好），繪圖不能超出頁緣，也不能帶註解。--output 必須是檔案，
             不能是資料夾、符號連結、原表或 .tex；多頁、旋轉或帶註解（連結、表單欄位）的原表會被拒絕。

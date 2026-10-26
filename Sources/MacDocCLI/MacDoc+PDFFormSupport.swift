@@ -211,6 +211,11 @@ enum FormCommandSupport {
         case .overlayUnverifiable(let parts):
             return "疊印層有 \(parts) 處無法定位，無法確認是否畫到頁外（字型沒有字寬資料、讀不完的表單物件、"
                 + "找不到的資源名稱、讀不到的運算元，或無法解析的內容）；請簡化疊印層"
+        case .unstampable(let reason):
+            return "無法把 PDF 的物件複製到成品（\(reason)），這份表單無法照原樣蓋印"
+        case .missingCharacters(let characters):
+            return "疊印層的字型沒有這些字：\(characters.joined(separator: " "))，xelatex 已把它們略過；"
+                + "請改用含有這些字的字型（例如 \\setCJKmainfont，或設定後備字型）"
         case .annotatedOverlay(let count):
             return "疊印層帶有 \(count) 個註解（連結或表單欄位）；疊印只重繪頁面內容，這些註解會遺失，"
                 + "請從 .tex 移除（例如 hyperref 的連結與表單欄位）"
