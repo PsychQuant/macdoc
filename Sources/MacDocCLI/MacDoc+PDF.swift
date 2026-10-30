@@ -9,7 +9,7 @@ extension MacDoc {
     struct PDF: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "pdf",
-            abstract: "PDF → LaTeX pipeline 工具",
+            abstract: "PDF → LaTeX pipeline、表單疊印與逐像素比對工具",
             subcommands: [
                 Init.self,
                 Segment.self,
@@ -27,6 +27,9 @@ extension MacDoc {
                 CompileCheck.self,
                 Consolidate.self,
                 Compare.self,
+                VisualDiff.self,
+                FormSkeletonCommand.self,
+                FormFillCommand.self,
                 DetectSource.self,
                 Status.self,
             ],
@@ -910,7 +913,7 @@ extension MacDoc {
         struct Compare: AsyncParsableCommand {
             static let configuration = CommandConfiguration(
                 commandName: "compare",
-                abstract: "比較原始 PDF 和重製 PDF 的相似度（章節對齊、詞彙覆蓋、序列相似度）。"
+                abstract: "比較原始 PDF 和重製 PDF：章節對齊、詞彙覆蓋、序列相似度，以及頁面幾何（各頁尺寸、是否為精確 A4、尺寸不同的頁）。"
             )
 
             @Option(name: .long, help: "原始 PDF 路徑。")

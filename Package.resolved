@@ -109,12 +109,30 @@
       }
     },
     {
+      "identity" : "pdf-form-fill-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/pdf-form-fill-swift.git",
+      "state" : {
+        "revision" : "92deeace1465eaa6669ed89374f0913945780674",
+        "version" : "0.10.0"
+      }
+    },
+    {
       "identity" : "pdf-to-latex-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PsychQuant/pdf-to-latex-swift.git",
       "state" : {
-        "revision" : "7a9131da43df5bf4494cc44ac61bd7a417d82903",
-        "version" : "0.5.0"
+        "revision" : "24002598f134484c439e705066b1679ddf1aa896",
+        "version" : "0.7.2"
+      }
+    },
+    {
+      "identity" : "pdf-visual-diff-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PsychQuant/pdf-visual-diff-swift.git",
+      "state" : {
+        "revision" : "3da87e76844f4bc67343f150ca2d8ac898662d88",
+        "version" : "0.6.4"
       }
     },
     {

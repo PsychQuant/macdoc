@@ -43,6 +43,22 @@ claude-sonnet-4-6	1198
 API key 本身不代表允許送出當次檔案。Anthropic 的 estimate 不應與 bundled GPT-4o 的離線
 reference-vector 精確值混為一談。
 
+## PDF Form Filling and Pixel Verification（非格式轉換）
+
+`macdoc pdf form-skeleton`、`form-fill`、`visual-diff` 不在下方的 matrix 裡：它們不把一種格式轉成另一種，
+而是在空白 PDF 表單上疊印文字，並逐像素證明原表沒被動到（PsychQuant/macdoc#240）。
+
+| Command | Does | Boundary |
+|---|---|---|
+| `macdoc pdf form-skeleton --pdf blank.pdf --output filled.tex` | 不給 `--output` 時寫到 stdout（`\BlankForm` 用絕對路徑）。用 PDFKit 讀印刷標籤，寫出 .tex 疊印骨架（bp、原點左上，每個標籤一個欄位巨集與一行註解；接近 A4 的表單用 a4paper，其他用原表尺寸） | 不覆寫既有檔；路徑含 TeX 會誤讀的字元（`\ { } % # ^`、控制字元或換行／段落分隔字元）時拒絕；同一條基線上沒有空白分隔的標籤位置只是提示 |
+| `macdoc pdf form-fill filled.tex` | xelatex 編疊印層兩次 → 物件層級 1:1 疊到原表（原表內容逐字複製，不重畫）→ 五項逐像素檢查 | 原表不經過 TeX；`--page a4`（預設）把接近 A4 的原表對齊左上校正成精確 A4、不縮放，裁掉的邊條有墨則拒絕；`--page original` 保留原表尺寸。疊印層須與成品同尺寸、繪圖不能超出頁緣、不能帶註解；`--output` 必須是檔案，不能是資料夾、符號連結、原表或 .tex；多頁、旋轉、帶註解的原表拒絕 |
+| `macdoc pdf visual-diff --original a.pdf --reproduced b.pdf` | 兩份 PDF 第一頁的有號 RGB 差值，不設門檻 | 給 `--overlay` 跑五項疊印檢查、給 `--preserve` 檢查保留區域（區域超出頁面即不通過）；兩者都沒給時檢查兩頁尺寸相同且完全相同 |
+
+五項檢查：疊印以外的差異、原表變亮、疊印壓到原表、裁掉的邊條有墨、打的字沒進成品。全部為 0 才以 0 結束；
+form-fill 檢查失敗時仍會寫出成品供檢視。核心實作在
+[pdf-visual-diff-swift](https://github.com/PsychQuant/pdf-visual-diff-swift) 與
+[pdf-form-fill-swift](https://github.com/PsychQuant/pdf-form-fill-swift)。
+
 ## Cross Matrix (Source → Target)
 
 |  → Target | Markdown | HTML | Word (.docx) | LaTeX | JSON | PDF | SRT |
