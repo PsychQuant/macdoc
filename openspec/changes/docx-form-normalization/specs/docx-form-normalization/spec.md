@@ -1,0 +1,163 @@
+## Purpose
+
+Form normalization makes a filled Word form uniform after its values are in place: it classifies paragraphs by structural kind and applies string-level edits to the main document part (table field normalization, box glyph font, list-bullet tick, inheriting insert, removal and truncation) without re-serializing any part through the typed model, so raw-channel forms keep every byte outside the edited elements.
+
+## ADDED Requirements
+
+### Requirement: Paragraph kinds are assigned by structure from a closed enumeration
+
+The classifier SHALL assign every paragraph exactly one kind from the closed set `list-checkbox`, `checkbox-line`, `table-field`, `body`, taking the first kind whose condition holds in that order. `list-checkbox` SHALL hold when the paragraph's own `w:pPr` contains `w:numPr` and the `w:lvlText` of the referenced level in `word/numbering.xml` contains a box glyph. `checkbox-line` SHALL hold when the paragraph's visible text contains a box glyph. `table-field` SHALL hold when the paragraph has an enclosing `w:tc`. The box glyphs SHALL be exactly U+25A1, U+25A0, U+2610, U+2611 and U+2612. The classifier SHALL NOT infer any kind from the wording of a paragraph.
+
+#### Scenario: Paragraph in a table cell with a box glyph
+
+- **WHEN** a paragraph inside a `w:tc` has the visible text `□ 是　□ 否`
+- **THEN** its kind is `checkbox-line`, not `table-field`
+
+#### Scenario: Numbered paragraph whose bullet is a box
+
+- **WHEN** a paragraph's own `w:numPr` refers to `w:numId` 3 at `w:ilvl` 0, and numbering 3 maps to an abstract numbering whose level 0 has `w:lvlText w:val="□"`
+- **THEN** its kind is `list-checkbox`
+
+#### Scenario: Numbering inside a property change is not the paragraph's own
+
+- **WHEN** a paragraph has no `w:numPr` in its `w:pPr` but has one inside `w:pPrChange`
+- **THEN** its kind is not `list-checkbox`
+
+##### Example: kind table
+
+| Paragraph | Kind |
+| --- | --- |
+| top-level paragraph `申請人資料如下` | `body` |
+| paragraph inside a cell, text `王小明` | `table-field` |
+| paragraph inside a cell, text `□ 是　□ 否` | `checkbox-line` |
+| numbered paragraph whose level text is `□` | `list-checkbox` |
+| top-level paragraph `說明：請勿填寫本欄` | `body` |
+
+### Requirement: The classify command lists every addressable paragraph
+
+`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId`, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with tabs and newlines replaced by spaces. Paragraphs without a `w14:paraId` SHALL NOT be listed.
+
+#### Scenario: Two addressable paragraphs and one without an id
+
+- **WHEN** the main part holds a body paragraph `1A2B3C4D` with text `申請人`, a cell paragraph `5E6F7A8B` with text `王小明`, and a paragraph without `w14:paraId`
+- **THEN** stdout is exactly `1A2B3C4D\tbody\t申請人` followed by `5E6F7A8B\ttable-field\t王小明`, one per line
+
+### Requirement: Table field normalization makes designated fields uniform
+
+For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph's own `w:pStyle` and `w:ind`, set its own `w:jc` to `left`, set `w:sz` and `w:szCs` to the field size on the paragraph mark and on every run of the paragraph, set `w:vAlign` to `center` on the nearest enclosing `w:tc`, and remove every other direct-child paragraph of that cell that has no content and no `w:sectPr`. A paragraph has no content when it contains no `w:t` with text and none of `w:drawing`, `w:pict`, `w:object`, `w:sym`, `w:tab`, `w:br`, `w:fldChar`, `w:fldSimple`, `w:instrText`, `w:footnoteReference`, `w:endnoteReference`, `w:commentReference`, `m:oMath`, `m:oMathPara`. Sibling paragraphs SHALL NOT be removed when the cell contains a nested `w:tbl`. A designated paragraph without an enclosing `w:tc` SHALL be refused. Inserted elements SHALL follow ECMA-376 child order.
+
+#### Scenario: Field with style, indent and distributed alignment
+
+- **WHEN** a cell paragraph has `w:pStyle w:val="a3"`, `w:ind w:firstLine="480"`, `w:jc w:val="distribute"` and a run with `w:sz w:val="18"`, and it is designated with `--field-size 12`
+- **THEN** the paragraph has no `w:pStyle` and no `w:ind`, has `w:jc w:val="left"`, its mark and run carry `w:sz w:val="24"` and `w:szCs w:val="24"`, and its cell's `w:tcPr` contains `w:vAlign w:val="center"`
+
+#### Scenario: Empty sibling paragraph is removed but an image paragraph is kept
+
+- **WHEN** a designated field's cell also holds an empty paragraph and a paragraph containing only a `w:drawing`
+- **THEN** the empty paragraph is removed and the drawing paragraph is kept
+
+#### Scenario: Paragraph outside a table is refused
+
+- **WHEN** `--field` names a top-level body paragraph
+- **THEN** the command fails naming that paragraph id and writes no output
+
+### Requirement: The default field size is the most common designated size
+
+When `--field` is given without `--field-size`, the field size SHALL be the most common explicit `w:sz` value collected from the designated paragraphs, where each run with text contributes the value in its own `w:rPr` and a designated paragraph with no run with text contributes its paragraph-mark value. Ties SHALL go to the larger value. The chosen size SHALL be printed to stderr. When no explicit value is collected the command SHALL fail and ask for `--field-size`. `--field-size` SHALL accept points from 1 to 1638 in steps of 0.5 and be written as half-points.
+
+#### Scenario: Most common size wins
+
+- **WHEN** three designated fields have text runs with `w:sz` 18, 24 and 24 and no `--field-size` is given
+- **THEN** all three fields are set to `w:sz w:val="24"` and stderr names 12 pt as the chosen size
+
+##### Example: size resolution
+
+| Collected values | `--field-size` | Result |
+| --- | --- | --- |
+| 18, 24, 24 | (none) | 24 |
+| 18, 24 | (none) | 24 (tie, larger) |
+| 22, 22, 18 | 10.5 | 21 |
+| (none) | (none) | refused |
+| 18 | 10.3 | refused (not a step of 0.5) |
+
+### Requirement: Box glyphs are drawn in one font
+
+When `--checkbox-font <font>` is given, `macdoc word form apply` SHALL rewrite every run in the main part whose children are an optional `w:rPr` and exactly one `w:t` containing a box glyph, so that each maximal sequence of box glyphs becomes a run whose `w:rFonts` sets `w:ascii`, `w:hAnsi`, `w:eastAsia` and `w:cs` to the font, and the remaining text stays in runs with the original properties, in the original order. Runs containing a box glyph together with any other content child SHALL be left unchanged and counted on stderr.
+
+#### Scenario: Box after Latin text in one run
+
+- **WHEN** a run with `w:rFonts w:ascii="Times New Roman"` and `w:sz w:val="24"` holds the text `)  □`, and `--checkbox-font 標楷體` is given
+- **THEN** the paragraph holds a run with the original properties and text `)  ` followed by a run with text `□` whose `w:rFonts` sets all four attributes to `標楷體` and whose `w:sz` is still `24`
+
+### Requirement: A box that is a list bullet can be ticked
+
+For each `--tick-list <paraId>`, `macdoc word form apply` SHALL remove the paragraph's own `w:numPr` and insert, before the paragraph's first run, a run holding `■` whose `w:rPr` is copied from the first run with text, or from the paragraph mark without `w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` and `w:rPrChange` when no run has text. A paragraph without its own `w:numPr` SHALL be refused.
+
+#### Scenario: Tick a bulleted option
+
+- **WHEN** a numbered paragraph with text `第一個選項` is named by `--tick-list`
+- **THEN** it has no `w:numPr` and its visible text is `■第一個選項`
+
+### Requirement: Inserted paragraphs inherit the anchor's format
+
+For each `--insert-after <paraId>=<text>`, `macdoc word form apply` SHALL insert after the anchor a paragraph whose `w:pPr` is the anchor's own `w:pPr` without `w:numPr`, `w:sectPr` and `w:pPrChange`, holding one run whose `w:rPr` is the anchor's first run with text's `w:rPr` and whose text is the given text. Options naming the same anchor SHALL be inserted in the order given, each after the previous one. Text containing characters forbidden in XML 1.0 SHALL be refused.
+
+#### Scenario: Two paragraphs after one anchor
+
+- **WHEN** `--insert-after 1A2B3C4D=第一段` and `--insert-after 1A2B3C4D=第二段` are given
+- **THEN** the anchor is followed by a paragraph with text `第一段` and then a paragraph with text `第二段`, both carrying the anchor's paragraph and run formatting
+
+### Requirement: Paragraphs are removed only when named
+
+For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that is the only paragraph of its cell or that carries a `w:sectPr`.
+
+#### Scenario: Only paragraph of a cell
+
+- **WHEN** `--remove` names the only paragraph in a `w:tc`
+- **THEN** the command fails naming that paragraph id and writes no output
+
+### Requirement: Truncation keeps the section settings of the kept content
+
+For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` and not its first child. `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first `w:sectPr` found in the removed range the body's final `w:sectPr`.
+
+#### Scenario: Cut before a later section break
+
+- **WHEN** the body holds paragraphs P1, P2 (whose `w:pPr` carries section break S1), P3, P4 and the body's own `w:sectPr` S2, and `--truncate-from` names P2
+- **THEN** the body holds P1 followed by S1 as the body's final `w:sectPr`
+
+#### Scenario: Paragraph inside a table is refused
+
+- **WHEN** `--truncate-from` names a paragraph inside a `w:tc`
+- **THEN** the command fails naming that paragraph id and writes no output
+
+### Requirement: Apply is all-or-nothing
+
+`macdoc word form apply` SHALL check before editing that every named paragraph id is carried by exactly one `w:p`, and SHALL then run the operations in the order field, tick-list, insert, checkbox-font, remove, truncate. Any failure, including an operation precondition that becomes false after an earlier step, SHALL abort the command with a non-zero exit and a message naming the paragraph id, and the output path SHALL be left as it was. The command SHALL refuse an existing output unless `--force` is given, SHALL parse the edited main part as XML before writing, and SHALL write through a temporary file renamed into place. With no operation option the command SHALL fail with a usage error.
+
+#### Scenario: One bad id among several
+
+- **WHEN** `--field` names a valid cell paragraph and `--remove` names a paragraph id that does not exist
+- **THEN** the command exits non-zero naming the missing id and no output file exists
+
+#### Scenario: Existing output without force
+
+- **WHEN** the output path already holds a file and `--force` is not given
+- **THEN** the command fails and the file's bytes are unchanged
+
+### Requirement: Parts other than the main part are unchanged
+
+`macdoc word form apply` SHALL copy every zip entry other than `word/document.xml` with identical uncompressed content, and SHALL keep the entries in their original order.
+
+#### Scenario: Styles and numbering survive byte for byte
+
+- **WHEN** a form is processed with `--field` and `--checkbox-font`
+- **THEN** `word/styles.xml`, `word/numbering.xml` and every other entry except `word/document.xml` have the same bytes as in the input, in the same order
+
+### Requirement: Reverse names the follow-up for slots that need one
+
+In full-fidelity mode, `macdoc word reverse --slot <name>=<paraId>` SHALL classify each designated paragraph found in the source's main part and, for kinds `table-field`, `checkbox-line` and `list-checkbox`, print one stderr line naming the slot, the kind and the `macdoc word form apply` option that handles it. It SHALL print nothing for `body` slots, in paragraphs-only mode, or for ids not found in the main part.
+
+#### Scenario: Table field slot
+
+- **WHEN** a slot `applicant` designates a paragraph inside a table cell
+- **THEN** stderr carries one line naming `applicant`, `table-field` and `--field`, and the exported script is unchanged
