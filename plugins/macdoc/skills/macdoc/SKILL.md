@@ -22,7 +22,7 @@ description: |
 | `config` | 設定管理 | AI CLI 工具、OCR host/model 預設值、文件格式 profile |
 | `pdf` | PDF→LaTeX | 學術 PDF 處理（較少用） |
 | `bib` | BibLaTeX→APA | 參考文獻格式轉換 |
-| `word` | docx ⇄ `.mdocx.swift` 腳本 | 把文件變成可重播的重建腳本、再放回 docx |
+| `word` | docx ⇄ `.mdocx.swift` 腳本；表單整理（`word form`） | 把文件變成可重播的重建腳本、再放回 docx；填好的官方表單統一字級、置中與方框 |
 
 ---
 
@@ -151,6 +151,35 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 所以**先跑 `--coverage` 再決定期待值**——不要因為文件看起來簡單就假設會拿到可讀的 Swift。
 
 > 完整工作流（含 slot 填寫與 MCP 對應工具）見 [`swiftify`](../swiftify/SKILL.md) skill；本節只是命令參考。
+
+### word form — 表單整理（CLI 0.17.0+，尚未發布）
+
+render 填好值之後，範本本身的不一致（欄位字級 9／11／12 pt 混用、註解文字樣式、首行縮排、分散對齊、儲存格沒垂直置中、多餘空段落、方框跟 Latin 字同 run 而變小）會原樣留在輸出。`word form` 在 render **之後**整理這些，只改 `word/document.xml` 裡被點名的元素，其他 part 逐位元組不變；不經 typed 模型，所以落在 raw channel 的表單也不會被改寫正文（PsychQuant/macdoc#249）。
+
+```bash
+# 列出每個帶 w14:paraId 的段落與類型（stdout：paraId<TAB>類型<TAB>前 30 字）
+macdoc word form classify filled.docx
+
+# 整理（輸出已存在時預設拒絕，要 --force）
+macdoc word form apply filled.docx --to-docx final.docx \
+  --field <paraId> --field <paraId> [--field-size 12] \
+  --checkbox-font 標楷體 --tick-list <paraId> \
+  --insert-after <paraId>=<文字> --remove <paraId> --truncate-from <paraId>
+```
+
+類型是封閉列舉，依結構判定（依序取第一個符合的）：`list-checkbox`（段落自己的 `w:numPr` 指到的清單層級文字是方框）、`checkbox-line`（段落文字含 □ ■ ☐ ☑ ☒）、`table-field`（在表格儲存格內）、`body`（其餘）。**提示行不是類型**——「說明：」這類段落結構上和內文一樣，只能用 `--remove` 明確點名。
+
+| 選項 | 做什麼 | 什麼情況拒絕 |
+|------|--------|-------------|
+| `--field <paraId>` | 去掉段落樣式與縮排、靠左、段落標記與每個 run 同一字級、所在儲存格垂直置中、刪同格沒有內容的段落（格內有巢狀表格時不刪） | 段落不在儲存格內 |
+| `--field-size <pt>` | 填寫欄字級，0.5 為單位；省略時取指定欄位字級的眾數、同票取大，選定值印在 stderr | 不是 1–1638 之間 0.5 的倍數；省略時指定欄位都沒有明確字級 |
+| `--checkbox-font <字型>` | 全文只含一個 `w:t` 的 run 裡的方框拆成獨立 run，四種 script 都用該字型，其他格式（含字級）保留；另含其他內容的 run 不動並在 stderr 計數 | 字型名稱空白 |
+| `--tick-list <paraId>` | 方框是清單符號時（文字 slot 換不到）：拿掉清單編號，前面加 ■，格式取第一個有文字的 run | 段落沒有自己的 `w:numPr` |
+| `--insert-after <paraId>=<文字>` | 在錨點後插入一段，沿用錨點的段落格式（去掉清單編號、分節符）與第一個有文字的 run 的格式；同一錨點多次依序接續 | 文字含 XML 1.0 不允許的字元 |
+| `--remove <paraId>` | 刪除段落 | 儲存格唯一的段落；帶分節符的段落 |
+| `--truncate-from <paraId>` | 從本文這一段刪到結尾，被刪範圍裡第一個分節設定成為本文最後的分節設定 | 不是 `w:body` 的直屬段落；是本文第一個元素 |
+
+**全有全無**：所有 paraId 先對照原檔驗過（恰好一個 `w:p` 帶它），再依固定順序執行 field → tick-list → insert → checkbox-font → remove → truncate；任何一步失敗（包括前一步讓後一步的條件不再成立）都整次不寫檔，輸出路徑維持原狀。`word reverse --slot` 在 full-fidelity 模式下會為 `table-field`、`checkbox-line`、`list-checkbox` 的 slot 各印一行 note，指出對應的選項。MCP（che-word-mcp）目前沒有這些操作。
 
 ---
 

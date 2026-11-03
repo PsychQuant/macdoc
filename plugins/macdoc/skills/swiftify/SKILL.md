@@ -116,6 +116,34 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 **沒給參考檔就不會驗，也不會有任何驗證輸出。** MCP 這邊對應的是：回應**不會有** `verified` / `broken_parts` 欄位。只檢查 `broken_parts` 是否為空的 client 會把「沒驗」讀成「驗過且乾淨」——要判斷驗證結果，先確認 `verified` 欄位存在。
 
+### 6. Normalize — 整理已填的表單（選用，CLI 0.17.0+，尚未發布）
+
+slot 只換字，不碰段落所在的儲存格、方框的字型或周圍的段落，所以範本本身的不一致會留在填好的輸出裡：欄位字級不同、帶註解文字樣式或首行縮排、分散對齊、儲存格沒有垂直置中、多餘空段落把值擠到中線上方、方框跟 Latin 字同一個 run 時被畫得比較小。第 6 步在 render **之後**用 `macdoc word form apply` 整理（PsychQuant/macdoc#249）：
+
+```bash
+macdoc word form classify 已填-1.docx            # 每段的類型
+macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx \
+  --field <paraId> --field <paraId> --checkbox-font 標楷體
+```
+
+依段落類型分流（類型由 `word form classify` 列出；`word reverse --slot` 也會為需要整理的 slot 各印一行 note）：
+
+| 類型 | 是什麼 | 用哪個選項 |
+|------|--------|-----------|
+| `table-field` | 表格儲存格裡的填寫欄 | `--field <paraId>`（字級一致、靠左、垂直置中；字級用 `--field-size` 指定，省略時取指定欄位的眾數） |
+| `checkbox-line` | 文字裡含 □ ■ ☐ ☑ ☒ 的段落 | `--checkbox-font <字型>`（全文方框同一字型、一樣大；勾選本身仍用文字 slot 把 □ 換成 ■） |
+| `list-checkbox` | 方框是清單符號，文字 slot 換不到 | `--tick-list <paraId>`（拿掉清單編號，前面加 ■） |
+| `body` | 其餘段落 | 內容要多段時用 `--insert-after <paraId>=<文字>`，新段落沿用錨點的格式 |
+
+兩件事不是類型、要明確點名：給申請人看的提示行（「說明：」「本申請書內容須包含：」）用 `--remove <paraId>` 刪；和本案無關、接在後面的整張表用 `--truncate-from <paraId>` 從那裡截掉，會保留正確的分節設定。提示行不做自動判定：它和內文在結構上沒有差別，猜錯會刪掉要填的內容。
+
+邊界：
+
+- **第 5 步的 `--verify-against` 驗的是腳本**（整理之前），整理後的輸出本來就不會和範本 byte-equal。整理只改被點名的元素，`word/document.xml` 以外的 part 逐位元組不變。
+- **全有全無**：所有 paraId 先驗過才動手，任何一步失敗都不寫出檔案；輸出已存在時預設拒絕，覆寫要 `--force`（同第 4 步的同意規則）。
+- **MCP 那一面沒有這些操作**；要整理就用 CLI。
+- `macdoc docx apply` 的 `insert_paragraph` 走 typed 路徑、寫出的段落沒有格式；raw channel 的表單改用 `--insert-after`。
+
 ## 判讀 coverage：為什麼你的腳本可能不可讀
 
 腳本有兩條 channel：
@@ -224,6 +252,13 @@ macdoc word render 範本-slot.mdocx.swift --to-docx 重建-驗證.docx --verify
 #    （每次重建先選新的輸出路徑；覆寫必須另行取得精確同意）
 #    「已寫入」只代表寫出了檔案，不代表值有填進去——一定要做下面的核對
 macdoc word render 範本-slot.mdocx.swift --to-docx 已填-1.docx
+```
+
+填好之後版面若參差（字級不一、沒置中、方框大小不同），接第 6 步整理：
+
+```bash
+# 5. 整理填寫欄與方框（CLI 0.17.0+；輸出同樣用新路徑）
+macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx --field <paraId> --checkbox-font 標楷體
 ```
 
 第 3 步是這個工作流的核心保證：default 重播 byte-equal **證明**腳本除了 slot 之外逐位元組重建範本。第 4 步（填了新值）的輸出**不會**過 `--verify-against`——值變了，全包 byte-equal 必然不同；它的保證來自 render 本身：raw channel 的替換做完會驗 XML well-formedness，指定段落以外的 bytes 由第 3 步已證的腳本結構背書。要人工核對填了什麼，用 che-word-mcp 的 `compare_documents` 對照範本。
