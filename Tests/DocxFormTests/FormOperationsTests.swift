@@ -1,0 +1,313 @@
+// FormOperationsTests.swift — the operations of `word form apply` (#249).
+
+import XCTest
+@testable import DocxForm
+
+final class FormOperationsTests: XCTestCase {
+    private func apply(_ body: String, _ plan: FormPlan, numbering: [UInt8]? = nil) throws -> [UInt8] {
+        try plan.apply(toDocumentXML: TestXML.document(body)).documentXML
+    }
+
+    // MARK: Table field normalization makes designated fields uniform
+
+    func testFieldWithStyleIndentAndDistributedAlignment() throws {
+        let pPr = "<w:pPr><w:pStyle w:val=\"a3\"/><w:ind w:firstLine=\"480\"/><w:jc w:val=\"distribute\"/>"
+            + "<w:rPr><w:rFonts w:eastAsia=\"標楷體\"/><w:sz w:val=\"18\"/></w:rPr></w:pPr>"
+        let field = TestXML.paragraph("0000F001", pPr: pPr, TestXML.run("王小明", rPr: "<w:rPr><w:sz w:val=\"18\"/><w:lang w:eastAsia=\"zh-TW\"/></w:rPr>"))
+        let tcPr = "<w:tcPr><w:tcW w:w=\"2000\" w:type=\"dxa\"/><w:vAlign w:val=\"top\"/><w:hideMark/></w:tcPr>"
+        let out = try apply(TestXML.table([TestXML.cell(field, tcPr: tcPr)]),
+                            FormPlan(fields: ["0000F001"], fieldSize: try FieldSize.parse(points: "12")))
+        let paragraph = try TestXML.paragraphXML("0000F001", in: out)
+        XCTAssertFalse(paragraph.contains("w:pStyle"))
+        XCTAssertFalse(paragraph.contains("w:ind"))
+        XCTAssertFalse(paragraph.contains("distribute"))
+        XCTAssertEqual(try TestXML.childNames(of: "w:pPr", in: paragraph), ["w:jc", "w:rPr"])
+        XCTAssertTrue(paragraph.contains("<w:jc w:val=\"left\"/>"))
+        // Mark and run both sized, szCs right after sz and before w:lang.
+        XCTAssertEqual(try TestXML.childNames(of: "w:rPr", in: paragraph), ["w:rFonts", "w:sz", "w:szCs"])
+        let run = try XMLTagIndex(paragraph)
+        let runRPr = run.elements(named: "w:rPr").last!
+        XCTAssertEqual(run.children(of: runRPr).map { run.tags[$0].name }, ["w:sz", "w:szCs", "w:lang"])
+        XCTAssertEqual(paragraph.components(separatedBy: "<w:sz w:val=\"24\"/><w:szCs w:val=\"24\"/>").count - 1, 2)
+        // Cell vertically centred, vAlign before hideMark, old value gone.
+        let cell = try XMLTagIndex(out)
+        let tcPrIndex = cell.elements(named: "w:tcPr").first!
+        XCTAssertEqual(cell.children(of: tcPrIndex).map { cell.tags[$0].name }, ["w:tcW", "w:vAlign", "w:hideMark"])
+        XCTAssertTrue(TestXML.string(out).contains("<w:vAlign w:val=\"center\"/>"))
+        XCTAssertFalse(TestXML.string(out).contains("w:val=\"top\""))
+    }
+
+    func testFieldWithoutPropertiesGetsThemInSchemaOrder() throws {
+        let field = TestXML.paragraph("0000F002", TestXML.run("值"))
+        let out = try apply(TestXML.table([TestXML.cell(field, tcPr: "")]),
+                            FormPlan(fields: ["0000F002"], fieldSize: FieldSize(halfPoints: 22)))
+        let paragraph = try TestXML.paragraphXML("0000F002", in: out)
+        XCTAssertTrue(paragraph.hasPrefix("<w:p w14:paraId=\"0000F002\"><w:pPr><w:jc w:val=\"left\"/><w:rPr><w:sz w:val=\"22\"/>"))
+        XCTAssertTrue(paragraph.contains("<w:r><w:rPr><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t"))
+        XCTAssertTrue(TestXML.string(out).contains("<w:tc><w:tcPr><w:vAlign w:val=\"center\"/></w:tcPr><w:p"))
+    }
+
+    func testEmptySiblingIsRemovedButADrawingParagraphIsKept() throws {
+        let field = TestXML.paragraph("0000F003", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
+        let empty = TestXML.paragraph("0000E001", "<w:r><w:rPr><w:sz w:val=\"24\"/></w:rPr></w:r>")
+        let drawing = TestXML.paragraph("0000D001", "<w:r><w:drawing><wp:inline/></w:drawing></w:r>")
+        let sectionBreak = TestXML.paragraph("0000S001", pPr: "<w:pPr>\(TestXML.bodySection)</w:pPr>")
+        let out = try apply(TestXML.table([TestXML.cell(field + empty + drawing + sectionBreak)]),
+                            FormPlan(fields: ["0000F003"]))
+        let xml = TestXML.string(out)
+        XCTAssertFalse(xml.contains("0000E001"), "empty sibling removed")
+        XCTAssertTrue(xml.contains("0000D001"), "drawing paragraph kept")
+        XCTAssertTrue(xml.contains("0000S001"), "section-break paragraph kept")
+    }
+
+    func testCellWithNestedTableKeepsItsSiblings() throws {
+        let field = TestXML.paragraph("0000F004", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
+        let empty = TestXML.paragraph("0000E002")
+        let nested = TestXML.table([TestXML.cell(TestXML.paragraph("0000N001", TestXML.run("內層")))])
+        let out = try apply(TestXML.table([TestXML.cell(field + empty + nested + TestXML.paragraph(nil))]),
+                            FormPlan(fields: ["0000F004"]))
+        XCTAssertTrue(TestXML.string(out).contains("0000E002"))
+    }
+
+    func testFieldOutsideATableIsRefused() {
+        let body = TestXML.paragraph("0000F005", TestXML.run("本文", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
+        XCTAssertThrowsError(try apply(body, FormPlan(fields: ["0000F005"]))) {
+            XCTAssertEqual($0 as? FormError, .notInTableCell("0000F005"))
+        }
+    }
+
+    // MARK: The default field size is the most common designated size
+
+    private func fieldTable(_ sizes: [Int?]) -> (body: String, ids: [String]) {
+        var cells: [String] = []
+        var ids: [String] = []
+        for (k, size) in sizes.enumerated() {
+            let id = String(format: "0000A%03d", k)
+            ids.append(id)
+            let rPr = size.map { "<w:rPr><w:sz w:val=\"\($0)\"/></w:rPr>" } ?? ""
+            cells.append(TestXML.cell(TestXML.paragraph(id, TestXML.run("值\(k)", rPr: rPr))))
+        }
+        return (TestXML.table(cells), ids)
+    }
+
+    func testSizeResolutionTable() throws {
+        // (collected sizes, --field-size, expected half-points or nil for refusal)
+        let rows: [([Int?], String?, Int?)] = [
+            ([18, 24, 24], nil, 24),
+            ([18, 24], nil, 24),
+            ([22, 22, 18], "10.5", 21),
+            ([nil], nil, nil),
+        ]
+        for (sizes, given, expected) in rows {
+            let (body, ids) = fieldTable(sizes)
+            let plan = FormPlan(fields: ids, fieldSize: try given.map { try FieldSize.parse(points: $0) })
+            if let expected {
+                let result = try plan.apply(toDocumentXML: TestXML.document(body))
+                XCTAssertEqual(result.fieldSize?.halfPoints, expected, "\(sizes) \(String(describing: given))")
+                XCTAssertEqual(result.fieldSizeWasDerived, given == nil)
+                for id in ids {
+                    XCTAssertTrue(try TestXML.paragraphXML(id, in: result.documentXML)
+                        .contains("<w:sz w:val=\"\(expected)\"/>"), id)
+                }
+            } else {
+                XCTAssertThrowsError(try plan.apply(toDocumentXML: TestXML.document(body))) {
+                    XCTAssertEqual($0 as? FormError, .noFieldSize)
+                }
+            }
+        }
+        XCTAssertThrowsError(try FieldSize.parse(points: "10.3")) {
+            XCTAssertEqual($0 as? FormError, .invalidFieldSize("10.3"))
+        }
+    }
+
+    func testFieldSizeParsingBounds() throws {
+        XCTAssertEqual(try FieldSize.parse(points: "1").halfPoints, 2)
+        XCTAssertEqual(try FieldSize.parse(points: "1638").halfPoints, 3276)
+        for bad in ["0.5", "1638.5", "-12", "12pt", "", "1e1", "abc"] {
+            XCTAssertThrowsError(try FieldSize.parse(points: bad), bad)
+        }
+        XCTAssertEqual(FieldSize(halfPoints: 21).pointsDescription, "10.5 pt")
+        XCTAssertEqual(FieldSize(halfPoints: 24).pointsDescription, "12 pt")
+    }
+
+    func testFieldWithoutTextContributesItsMarkSize() throws {
+        let mark = "<w:pPr><w:rPr><w:sz w:val=\"20\"/></w:rPr></w:pPr>"
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000A100", pPr: mark))])
+        let result = try FormPlan(fields: ["0000A100"]).apply(toDocumentXML: TestXML.document(body))
+        XCTAssertEqual(result.fieldSize?.halfPoints, 20)
+    }
+
+    // MARK: Box glyphs are drawn in one font
+
+    func testBoxAfterLatinTextInOneRun() throws {
+        let rPr = "<w:rPr><w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\"/><w:sz w:val=\"24\"/></w:rPr>"
+        let body = TestXML.paragraph("0000C001", TestXML.run(")  \u{25A1}", rPr: rPr))
+        let out = try apply(body, FormPlan(checkboxFont: "標楷體"))
+        let paragraph = try TestXML.paragraphXML("0000C001", in: out)
+        let index = try XMLTagIndex(paragraph)
+        let runs = index.elements(named: "w:r")
+        XCTAssertEqual(runs.count, 2)
+        XCTAssertEqual(FormLocator.runText(runs[0], in: index), ")  ")
+        XCTAssertTrue(index.elementString(runs[0]).contains("Times New Roman"))
+        XCTAssertTrue(index.elementString(runs[0]).contains("xml:space=\"preserve\""))
+        XCTAssertEqual(FormLocator.runText(runs[1], in: index), "\u{25A1}")
+        let boxRun = index.elementString(runs[1])
+        XCTAssertTrue(boxRun.contains("<w:rFonts w:ascii=\"標楷體\" w:hAnsi=\"標楷體\" w:eastAsia=\"標楷體\" w:cs=\"標楷體\"/>"))
+        XCTAssertFalse(boxRun.contains("Times New Roman"))
+        XCTAssertTrue(boxRun.contains("<w:sz w:val=\"24\"/>"))
+        XCTAssertEqual(TestXML.string(Array(try TestXML.text("0000C001", in: out).utf8)), ")  \u{25A1}")
+    }
+
+    func testGlyphOnlyRunKeepsItsTextElementAndGetsTheFont() throws {
+        let body = TestXML.paragraph("0000C002", TestXML.run("\u{25A0}\u{25A1}"))
+        let out = try apply(body, FormPlan(checkboxFont: "標楷體"))
+        let paragraph = try TestXML.paragraphXML("0000C002", in: out)
+        XCTAssertEqual(paragraph.components(separatedBy: "<w:r>").count - 1, 1)
+        XCTAssertTrue(paragraph.contains("<w:rPr><w:rFonts w:ascii=\"標楷體\""))
+    }
+
+    func testRunWithOtherContentIsSkippedAndCounted() throws {
+        let run = "<w:r><w:tab/><w:t>\u{25A1}</w:t></w:r>"
+        let body = TestXML.paragraph("0000C003", run)
+        let result = try FormPlan(checkboxFont: "標楷體").apply(toDocumentXML: TestXML.document(body))
+        XCTAssertEqual(result.skippedCheckboxRuns, 1)
+        XCTAssertEqual(TestXML.string(result.documentXML), TestXML.string(TestXML.document(body)))
+    }
+
+    func testFontNameIsEscaped() throws {
+        let body = TestXML.paragraph("0000C004", TestXML.run("\u{25A1}"))
+        let out = try apply(body, FormPlan(checkboxFont: "A&B \"C\""))
+        XCTAssertTrue(TestXML.string(out).contains("w:ascii=\"A&amp;B &quot;C&quot;\""))
+    }
+
+    func testEmptyFontIsRefused() {
+        XCTAssertThrowsError(try apply(TestXML.paragraph("0000C005"), FormPlan(checkboxFont: ""))) {
+            XCTAssertEqual($0 as? FormError, .invalidFont(""))
+        }
+    }
+
+    func testSplitBoxesKeepsOrder() {
+        XCTAssertEqual(FormOperations.splitBoxes("a\u{25A1}\u{25A1}b\u{25A0}"), [
+            .init(text: "a", isBox: false), .init(text: "\u{25A1}\u{25A1}", isBox: true),
+            .init(text: "b", isBox: false), .init(text: "\u{25A0}", isBox: true),
+        ])
+    }
+
+    // MARK: A box that is a list bullet can be ticked
+
+    func testTickABulletedOption() throws {
+        let body = TestXML.paragraph("0000T001", pPr: TestXML.numbered,
+                                     TestXML.run("第一個選項", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
+        let out = try apply(body, FormPlan(tickList: ["0000T001"]))
+        let paragraph = try TestXML.paragraphXML("0000T001", in: out)
+        XCTAssertFalse(paragraph.contains("w:numPr"))
+        XCTAssertEqual(try TestXML.text("0000T001", in: out), "\u{25A0}第一個選項")
+        XCTAssertTrue(paragraph.contains("<w:r><w:rPr><w:sz w:val=\"24\"/></w:rPr><w:t>\u{25A0}</w:t></w:r>"))
+    }
+
+    func testTickWithoutTextRunsUsesTheCleanedMark() throws {
+        let pPr = "<w:pPr><w:numPr><w:numId w:val=\"3\"/></w:numPr><w:rPr><w:ins w:id=\"1\" w:author=\"x\"/><w:sz w:val=\"20\"/></w:rPr></w:pPr>"
+        let out = try apply(TestXML.paragraph("0000T002", pPr: pPr), FormPlan(tickList: ["0000T002"]))
+        let paragraph = try TestXML.paragraphXML("0000T002", in: out)
+        XCTAssertTrue(paragraph.contains("<w:r><w:rPr><w:sz w:val=\"20\"/></w:rPr><w:t>\u{25A0}</w:t></w:r>"))
+        XCTAssertEqual(paragraph.components(separatedBy: "w:ins").count - 1, 1, "only the mark keeps w:ins")
+    }
+
+    func testTickWithoutNumberingIsRefused() {
+        XCTAssertThrowsError(try apply(TestXML.paragraph("0000T003", TestXML.run("x")), FormPlan(tickList: ["0000T003"]))) {
+            XCTAssertEqual($0 as? FormError, .noOwnNumbering("0000T003"))
+        }
+    }
+
+    // MARK: Inserted paragraphs inherit the anchor's format
+
+    func testTwoParagraphsAfterOneAnchor() throws {
+        let pPr = "<w:pPr><w:pStyle w:val=\"Body\"/><w:numPr><w:numId w:val=\"3\"/></w:numPr><w:ind w:left=\"480\"/>\(TestXML.bodySection)</w:pPr>"
+        let anchor = TestXML.paragraph("0000I001", pPr: pPr, TestXML.run("錨點", rPr: "<w:rPr><w:rFonts w:eastAsia=\"標楷體\"/></w:rPr>"))
+        let after = TestXML.paragraph("0000I002", TestXML.run("後面"))
+        let out = try apply(anchor + after, FormPlan(insertions: [
+            FormInsertion(anchor: "0000I001", text: "第一段"),
+            FormInsertion(anchor: "0000I001", text: "第二段"),
+        ]))
+        let index = try XMLTagIndex(out)
+        let paragraphs = index.elements(named: "w:p")
+        XCTAssertEqual(paragraphs.map { FormClassifier.ownText(of: $0, in: index) }, ["錨點", "第一段", "第二段", "後面"])
+        for inserted in paragraphs[1...2] {
+            let xml = index.elementString(inserted)
+            XCTAssertTrue(xml.contains("<w:pStyle w:val=\"Body\"/>"))
+            XCTAssertTrue(xml.contains("<w:ind w:left=\"480\"/>"))
+            XCTAssertTrue(xml.contains("標楷體"))
+            XCTAssertFalse(xml.contains("w:numPr"))
+            XCTAssertFalse(xml.contains("w:sectPr"))
+        }
+    }
+
+    func testForbiddenCharacterIsRefused() {
+        let anchor = TestXML.paragraph("0000I003", TestXML.run("錨點"))
+        XCTAssertThrowsError(try apply(anchor, FormPlan(insertions: [FormInsertion(anchor: "0000I003", text: "a\u{0001}b")]))) {
+            XCTAssertEqual($0 as? FormError, .invalidText("0000I003"))
+        }
+    }
+
+    // MARK: Paragraphs are removed only when named
+
+    func testRemoveOnlyParagraphOfACellIsRefused() {
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000R001", TestXML.run("唯一")))])
+        XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R001"]))) {
+            XCTAssertEqual($0 as? FormError, .onlyParagraphInCell("0000R001"))
+        }
+    }
+
+    func testRemoveSectionBreakParagraphIsRefused() {
+        let body = TestXML.paragraph("0000R002", pPr: "<w:pPr>\(TestXML.bodySection)</w:pPr>")
+        XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R002"]))) {
+            XCTAssertEqual($0 as? FormError, .carriesSectionBreak("0000R002"))
+        }
+    }
+
+    func testRemoveNamedParagraph() throws {
+        let body = TestXML.paragraph("0000R003", TestXML.run("說明：請勿填寫")) + TestXML.paragraph("0000R004", TestXML.run("內容"))
+        let out = try apply(body, FormPlan(removals: ["0000R003"]))
+        XCTAssertFalse(TestXML.string(out).contains("0000R003"))
+        XCTAssertTrue(TestXML.string(out).contains("0000R004"))
+    }
+
+    // MARK: Truncation keeps the section settings of the kept content
+
+    private let s1 = "<w:sectPr><w:pgSz w:w=\"16838\" w:h=\"11906\" w:orient=\"landscape\"/></w:sectPr>"
+    private let s2 = "<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/></w:sectPr>"
+
+    private var sectionedBody: String {
+        TestXML.paragraph("0000P001", TestXML.run("P1"))
+            + TestXML.paragraph("0000P002", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P2"))
+            + TestXML.paragraph("0000P003", TestXML.run("P3"))
+            + TestXML.paragraph("0000P004", TestXML.run("P4"))
+            + s2
+    }
+
+    func testCutBeforeALaterSectionBreak() throws {
+        let out = try apply(sectionedBody, FormPlan(truncateFrom: "0000P002"))
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(TestXML.paragraph("0000P001", TestXML.run("P1")) + s1)))
+    }
+
+    func testCutInTheLastSectionKeepsTheBodySection() throws {
+        let out = try apply(sectionedBody, FormPlan(truncateFrom: "0000P003"))
+        let expected = TestXML.paragraph("0000P001", TestXML.run("P1"))
+            + TestXML.paragraph("0000P002", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P2")) + s2
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    func testTruncateInsideATableIsRefused() {
+        let body = TestXML.paragraph("0000P010", TestXML.run("前"))
+            + TestXML.table([TestXML.cell(TestXML.paragraph("0000P011", TestXML.run("表內")))]) + s2
+        XCTAssertThrowsError(try apply(body, FormPlan(truncateFrom: "0000P011"))) {
+            XCTAssertEqual($0 as? FormError, .notBodyChild("0000P011"))
+        }
+    }
+
+    func testTruncateAtTheFirstChildIsRefused() {
+        XCTAssertThrowsError(try apply(sectionedBody, FormPlan(truncateFrom: "0000P001"))) {
+            XCTAssertEqual($0 as? FormError, .firstBodyChild("0000P001"))
+        }
+    }
+}

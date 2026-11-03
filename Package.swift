@@ -62,10 +62,21 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ]
         ),
+        // macdoc#249: form normalization (`macdoc word form`). String-level
+        // edits of word/document.xml only — deliberately no OOXMLSwift
+        // dependency, so a raw-channel form is never re-serialized through
+        // the typed model.
+        .target(
+            name: "DocxForm",
+            dependencies: [
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ]
+        ),
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
                 "NotabilityContainerDetection",
+                "DocxForm",
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "WordToMD", package: "word-to-md-swift"),
@@ -98,6 +109,7 @@ let package = Package(
             dependencies: [
                 "MacDocCLI",
                 "NotabilityContainerDetection",
+                "DocxForm",
                 "CLISpec",
                 .product(name: "NoteCore", package: "note-core-swift"),
                 // Authoring API for building synthetic docx fixtures in tests
@@ -106,6 +118,13 @@ let package = Package(
                 .product(name: "TokenCounter", package: "TokenCounter"),
             ],
             exclude: ["README.md"]
+        ),
+        .testTarget(
+            name: "DocxFormTests",
+            dependencies: [
+                "DocxForm",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ]
         ),
     ]
 )
