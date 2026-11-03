@@ -19,7 +19,7 @@
 ## 4. Plan and package
 
 - [x] 4.1 Implement `FormPlan` so that apply is all-or-nothing (all paragraph ids are validated before any edit, operations run in a fixed order): validate every id up front, run field, tick-list, insert, checkbox-font, remove, truncate, re-check preconditions at each step, and parse the result with `XMLParser`. Verify: `FormPlanTests` cover one bad id among several (no result produced), a remove that becomes illegal after field normalization, and the order (a box inserted by tick-list is re-fonted).
-- [x] 4.2 Implement `DocxPackageRewriter` so that parts other than the main part are unchanged (string-level edits on the main part, never the typed model; output handling mirrors word render): read entries with ZIPFoundation, replace only `word/document.xml`, keep entry order and other contents, refuse an existing output without force, write to a temporary file in the destination directory and rename. Verify: `DocxPackageRewriterTests` round-trip a generated package and compare every other entry's bytes and order, and assert that a failed write leaves an existing output's bytes unchanged.
+- [x] 4.2 Implement `DocxPackage` (the package rewriter) so that parts other than the main part are unchanged (string-level edits on the main part, never the typed model; output handling mirrors word render): read entries with ZIPFoundation, replace only `word/document.xml`, keep entry order and other contents, refuse an existing output without force, write to a temporary file in the destination directory and rename. Verify: `DocxPackageTests` round-trip a generated package and compare every other entry's bytes and order, and assert that a failed write leaves an existing output's bytes unchanged.
 
 ## 5. Command line
 

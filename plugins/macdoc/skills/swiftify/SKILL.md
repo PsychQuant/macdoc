@@ -139,10 +139,11 @@ macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx \
 
 邊界：
 
-- **第 5 步的 `--verify-against` 驗的是腳本**（整理之前），整理後的輸出本來就不會和範本 byte-equal。整理只改被點名的元素，`word/document.xml` 以外的 part 逐位元組不變。
+- **第 5 步（Verify）的 `--verify-against` 驗的是腳本**（整理之前），整理後的輸出本來就不會和範本 byte-equal。整理只改被點名的元素，`word/document.xml` 以外的 part 內容逐位元組不變（zip 容器本身重新寫出）。
+- 點名靠 `w14:paraId`；沒有 paraId 的段落無法整理。符號字型（如 Wingdings）畫的方框不算方框，不會被分類成 checkbox。
 - **全有全無**：所有 paraId 先驗過才動手，任何一步失敗都不寫出檔案；輸出已存在時預設拒絕，覆寫要 `--force`（同第 4 步的同意規則）。
-- **MCP 那一面沒有這些操作**；要整理就用 CLI。
-- `macdoc docx apply` 的 `insert_paragraph` 走 typed 路徑、寫出的段落沒有格式；raw channel 的表單改用 `--insert-after`。
+- **MCP 那一面沒有這些操作**（PsychQuant/che-word-mcp#300）；要整理就用 CLI。整張表一次套用與刪除中間的整張表尚未支援（PsychQuant/macdoc#250）。
+- `macdoc docx apply` 的 `insert_paragraph` 走 typed 路徑、寫出的段落沒有格式（PsychQuant/macdoc#251）；raw channel 的表單改用 `--insert-after`。
 
 ## 判讀 coverage：為什麼你的腳本可能不可讀
 
@@ -257,7 +258,7 @@ macdoc word render 範本-slot.mdocx.swift --to-docx 已填-1.docx
 填好之後版面若參差（字級不一、沒置中、方框大小不同），接第 6 步整理：
 
 ```bash
-# 5. 整理填寫欄與方框（CLI 0.17.0+；輸出同樣用新路徑）
+# 5. 整理填寫欄與方框（即上面工作流的第 6 步；CLI 0.17.0+，輸出同樣用新路徑）
 macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx --field <paraId> --checkbox-font 標楷體
 ```
 

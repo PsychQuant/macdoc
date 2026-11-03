@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 新命令 `macdoc word form classify|apply`（需要下一版 CLI，預定 0.17.0；尚未發布）：render 之後整理填好的官方表單（PsychQuant/macdoc#249）。`classify` 列出每個帶 `w14:paraId` 的段落與類型（`list-checkbox` / `checkbox-line` / `table-field` / `body`，依結構判定、不靠字面）；`apply` 提供 `--field`（字級一致、靠左、垂直置中、刪同格空段落）、`--field-size`、`--checkbox-font`（方框同一字型、一樣大）、`--tick-list`、`--insert-after`（沿用錨點格式）、`--remove`、`--truncate-from`。只以字串修改 `word/document.xml` 裡被點名的元素，其他 part 逐位元組不變；所有 paraId 先驗、任一步失敗都不寫檔。
+- 新命令 `macdoc word form classify|apply`（需要下一版 CLI，預定 0.17.0；尚未發布）：render 之後整理填好的官方表單（PsychQuant/macdoc#249）。`classify` 列出每個帶 `w14:paraId` 的段落與類型（`list-checkbox` / `checkbox-line` / `table-field` / `body`，依結構判定、不靠字面）；`apply` 提供 `--field`（字級一致、靠左、垂直置中、刪同格空段落）、`--field-size`、`--checkbox-font`（方框同一字型、一樣大）、`--tick-list`、`--insert-after`（沿用錨點格式）、`--remove`、`--truncate-from`。只以字串修改 `word/document.xml` 裡被點名的元素，其他 part 的內容逐位元組不變（zip 容器重新寫出）；所有 paraId 先驗、互相衝突的點名整次拒絕、任一步失敗都不寫檔，非 `--force` 時輸出路徑在執行期間出現檔案也不覆寫。
 - `macdoc word reverse --slot`：slot 是 `table-field`、`checkbox-line` 或 `list-checkbox` 時，在 stderr 印一行 note 指出對應的 `word form apply` 選項。
 - skill：swiftify 加上第 6 步（表單整理）與類型→選項對照表；macdoc skill 加上 `word form` 命令參考。
 

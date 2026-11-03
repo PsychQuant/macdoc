@@ -30,9 +30,11 @@ public enum XMLScanError: Error, Equatable, CustomStringConvertible {
     case unterminated(at: Int)
     case unexpectedClose(name: String, at: Int)
     case unclosed(name: String)
+    case doctypeNotAllowed(at: Int)
 
     public var description: String {
         switch self {
+        case .doctypeNotAllowed(let at): return "位元組 \(at) 有 DOCTYPE 宣告（OPC 封裝的 part 不允許 DTD）"
         case .unterminated(let at): return "XML 標籤在位元組 \(at) 沒有結束"
         case .unexpectedClose(let name, let at): return "位元組 \(at) 的 </\(name)> 沒有對應的開始標籤"
         case .unclosed(let name): return "<\(name)> 沒有結束標籤"
@@ -65,7 +67,9 @@ public struct XMLTagIndex {
             if has(b, "<!--", at: i) { i = try skip(b, past: "-->", from: i + 4, tagStart: i); continue }
             if has(b, "<![CDATA[", at: i) { i = try skip(b, past: "]]>", from: i + 9, tagStart: i); continue }
             if has(b, "<?", at: i) { i = try skip(b, past: "?>", from: i + 2, tagStart: i); continue }
-            if has(b, "<!", at: i) { i = try skip(b, past: ">", from: i + 2, tagStart: i); continue }
+            // OPC forbids DTD declarations in package parts, and a DOCTYPE with
+            // an internal subset cannot be skipped by "next >"; refuse it.
+            if has(b, "<!", at: i) { throw XMLScanError.doctypeNotAllowed(at: i) }
 
             let isClose = i + 1 < n && b[i + 1] == slash
             var j = i + (isClose ? 2 : 1)
@@ -243,10 +247,47 @@ public struct XMLTagIndex {
         c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D
     }
 
-    /// Entity-decoded character content of an element that holds text only
-    /// (such as `w:t` or `w:instrText`).
+    /// Character content of an element that holds text only (such as `w:t`):
+    /// character data is entity-decoded, CDATA sections are taken literally
+    /// without their markers, comments and processing instructions are dropped.
     public func text(of i: Int) -> String {
-        XMLText.decode(string(contentRange(i)))
+        let range = contentRange(i)
+        var out = ""
+        var k = range.lowerBound
+        var runStart = k
+        func flush(_ end: Int) {
+            if end > runStart { out += XMLText.decode(string(runStart..<end)) }
+        }
+        while k < range.upperBound {
+            if Self.has(bytes, "<![CDATA[", at: k), let close = Self.find(bytes, "]]>", from: k + 9, before: range.upperBound) {
+                flush(k)
+                out += string((k + 9)..<close)
+                k = close + 3
+                runStart = k
+            } else if Self.has(bytes, "<!--", at: k), let close = Self.find(bytes, "-->", from: k + 4, before: range.upperBound) {
+                flush(k)
+                k = close + 3
+                runStart = k
+            } else if Self.has(bytes, "<?", at: k), let close = Self.find(bytes, "?>", from: k + 2, before: range.upperBound) {
+                flush(k)
+                k = close + 2
+                runStart = k
+            } else {
+                k += 1
+            }
+        }
+        flush(range.upperBound)
+        return out
+    }
+
+    private static func find(_ b: [UInt8], _ marker: String, from start: Int, before end: Int) -> Int? {
+        let m = Array(marker.utf8)
+        var i = start
+        while i + m.count <= end {
+            if has(b, marker, at: i) { return i }
+            i += 1
+        }
+        return nil
     }
 }
 

@@ -14,6 +14,8 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     case notInTableCell(String)
     case noOwnNumbering(String)
     case onlyParagraphInCell(String)
+    case cellWouldEndWithoutParagraph(String)
+    case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
     case notBodyChild(String)
     case firstBodyChild(String)
@@ -38,6 +40,10 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "段落 \(id) 沒有自己的清單編號（w:numPr），不能用 --tick-list"
         case .onlyParagraphInCell(let id):
             return "段落 \(id) 是儲存格裡唯一的段落，刪掉它會讓儲存格失效"
+        case .cellWouldEndWithoutParagraph(let id):
+            return "刪掉段落 \(id) 後，所在儲存格會以表格結尾；Word 要求儲存格最後一個元素是段落"
+        case .conflictingOperations(let id, let detail):
+            return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):
             return "段落 \(id) 帶有分節符（w:sectPr），刪掉它會改變分節設定"
         case .notBodyChild(let id):
@@ -92,7 +98,7 @@ struct XMLEditor {
                 : $0.range.isEmpty && !$1.range.isEmpty
         }
         for (a, b) in zip(ascending, ascending.dropFirst()) where a.range.upperBound > b.range.lowerBound {
-            preconditionFailure("overlapping form edits: \(a.range) and \(b.range)")
+            throw FormError.malformedResult("overlapping edits \(a.range) and \(b.range)")
         }
         var out = index.bytes
         for edit in ascending.reversed() {

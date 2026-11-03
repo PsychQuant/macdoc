@@ -73,7 +73,11 @@ public enum DocxPackage {
                 entries.append(Entry(path: entry.path, data: Data(), isDirectory: true, modificationDate: date))
                 continue
             }
-            guard entry.type == .file else { continue }
+            // A symbolic-link entry cannot be copied faithfully; refusing beats
+            // silently dropping it from an output that claims to keep every part.
+            guard entry.type == .file else {
+                throw DocxPackageError.unreadable("不支援的 entry 類型（\(entry.type)）：\(entry.path)")
+            }
             var data = Data()
             do {
                 _ = try archive.extract(entry, skipCRC32: false) { chunk in
@@ -142,8 +146,14 @@ public enum DocxPackage {
             .appendingPathComponent(".\(output.lastPathComponent).\(UUID().uuidString).tmp")
         do {
             try write(rewritten, to: temp)
-            if !force, fm.fileExists(atPath: output.path) { throw DocxPackageError.outputExists(output.path) }
-            guard rename(temp.path, output.path) == 0 else {
+            // Without --force the rename itself refuses an existing destination
+            // (RENAME_EXCL), so a file created after the first check is never
+            // replaced; with --force a plain rename replaces it atomically.
+            let status = force
+                ? rename(temp.path, output.path)
+                : renamex_np(temp.path, output.path, UInt32(RENAME_EXCL))
+            guard status == 0 else {
+                if !force, errno == EEXIST { throw DocxPackageError.outputExists(output.path) }
                 throw DocxPackageError.writeFailed(String(cString: strerror(errno)))
             }
         } catch {

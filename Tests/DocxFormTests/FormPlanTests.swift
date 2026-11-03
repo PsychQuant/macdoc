@@ -27,16 +27,44 @@ final class FormPlanTests: XCTestCase {
         }
     }
 
-    /// Removing F is legal against the original cell (F and an empty E), but
-    /// field normalization of F removes E first; the remove step must then
-    /// refuse instead of emptying the cell.
-    func testRemoveThatBecomesIllegalAfterFieldNormalization() {
-        let field = TestXML.paragraph("0000F002", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
-        let empty = TestXML.paragraph("0000E002")
-        let body = TestXML.table([TestXML.cell(field + empty)])
-        let plan = FormPlan(fields: ["0000F002"], removals: ["0000F002"])
+    /// Each removal is legal against the original two-paragraph cell, but
+    /// after the first one runs the second would empty the cell; the remove
+    /// step re-checks and refuses instead.
+    func testSecondRemovalInACellIsRefusedAfterTheFirst() {
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000R020", TestXML.run("一"))
+                                               + TestXML.paragraph("0000R021", TestXML.run("二")))])
+        let plan = FormPlan(removals: ["0000R020", "0000R021"])
         XCTAssertThrowsError(try plan.apply(toDocumentXML: TestXML.document(body))) {
-            XCTAssertEqual($0 as? FormError, .onlyParagraphInCell("0000F002"))
+            XCTAssertEqual($0 as? FormError, .onlyParagraphInCell("0000R021"))
+        }
+    }
+
+    func testRemovedParagraphNamedByAnotherOperationIsAConflict() {
+        let body = TestXML.paragraph("0000K001", TestXML.run("錨點")) + TestXML.paragraph("0000K002", TestXML.run("後"))
+        let plan = FormPlan(insertions: [FormInsertion(anchor: "0000K001", text: "新")], removals: ["0000K001"])
+        XCTAssertThrowsError(try plan.apply(toDocumentXML: TestXML.document(body))) {
+            guard case .conflictingOperations("0000K001", _) = $0 as? FormError else { return XCTFail("\($0)") }
+        }
+    }
+
+    func testNamedParagraphInsideTheTruncatedRangeIsAConflict() {
+        let body = TestXML.paragraph("0000K010", TestXML.run("留"))
+            + TestXML.paragraph("0000K011", TestXML.run("切點"))
+            + TestXML.paragraph("0000K012", TestXML.run("被切掉")) + TestXML.bodySection
+        let plan = FormPlan(insertions: [FormInsertion(anchor: "0000K012", text: "新")], truncateFrom: "0000K011")
+        XCTAssertThrowsError(try plan.apply(toDocumentXML: TestXML.document(body))) {
+            guard case .conflictingOperations("0000K012", _) = $0 as? FormError else { return XCTFail("\($0)") }
+        }
+        let selfCut = FormPlan(insertions: [FormInsertion(anchor: "0000K011", text: "新")], truncateFrom: "0000K011")
+        XCTAssertThrowsError(try selfCut.apply(toDocumentXML: TestXML.document(body))) {
+            guard case .conflictingOperations("0000K011", _) = $0 as? FormError else { return XCTFail("\($0)") }
+        }
+    }
+
+    func testOverlappingEditsThrowInsteadOfTrapping() throws {
+        var editor = try XMLEditor(Array("<a><b/></a>".utf8))
+        XCTAssertThrowsError(try editor.apply([.replace(0..<6, with: "x"), .replace(3..<7, with: "y")])) {
+            guard case .malformedResult = $0 as? FormError else { return XCTFail("\($0)") }
         }
     }
 

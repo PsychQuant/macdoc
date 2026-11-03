@@ -46,6 +46,17 @@ final class XMLTagIndexTests: XCTestCase {
         XCTAssertThrowsError(try XMLTagIndex("<a x=\"1>"))
     }
 
+    func testDoctypeIsRefused() {
+        XCTAssertThrowsError(try XMLTagIndex("<!DOCTYPE a [<!ENTITY x \">\">]><a/>")) {
+            guard case .doctypeNotAllowed = $0 as? XMLScanError else { return XCTFail("\($0)") }
+        }
+    }
+
+    func testTextTakesCDATALiterallyAndDropsComments() throws {
+        let index = try XMLTagIndex("<w:t>a&amp;<![CDATA[<b>&amp;]]><!-- c -->d</w:t>")
+        XCTAssertEqual(index.text(of: 0), "a&<b>&amp;d")
+    }
+
     func testTextIsEntityDecoded() throws {
         let index = try XMLTagIndex("<w:t>a&amp;b&#x25A1;&#9632;&lt;</w:t>")
         XCTAssertEqual(index.text(of: 0), "a&b\u{25A1}\u{25A0}<")

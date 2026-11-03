@@ -8,13 +8,13 @@
 import Foundation
 
 enum FormOperations {
-    /// Elements whose presence makes a paragraph "have content" for the
-    /// empty-sibling cleanup of a field cell (closed list; see the spec).
-    static let contentElements: Set<String> = [
-        "w:drawing", "w:pict", "w:object", "w:sym", "w:tab", "w:br", "w:fldChar", "w:fldSimple",
-        "w:instrText", "w:footnoteReference", "w:endnoteReference", "w:commentReference",
-        "m:oMath", "m:oMathPara",
-    ]
+    /// Children of a run that leave it empty (closed list; see the spec).
+    /// Anything else inside a run — text, a tab, a drawing, a field character,
+    /// a deleted-text record — is content.
+    static let emptyRunChildren: Set<String> = ["w:rPr", "w:lastRenderedPageBreak"]
+
+    /// Revision markers of a paragraph-mark `w:rPr`; copies must not carry them.
+    static let revisionMarks: Set<String> = ["w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:rPrChange"]
 
     // MARK: Lookup
 
@@ -36,15 +36,23 @@ enum FormOperations {
 
     static func checkTick(_ id: String, in index: XMLTagIndex) throws {
         let p = try locate(id, in: index)
-        guard ownNumPr(of: p, in: index) != nil else { throw FormError.noOwnNumbering(id) }
+        // numId 0 means "numbering removed", so it is not a list bullet to tick.
+        guard FormLocator.ownNumbering(of: p, in: index) != nil else { throw FormError.noOwnNumbering(id) }
     }
 
     static func checkRemove(_ id: String, in index: XMLTagIndex) throws {
         let p = try locate(id, in: index)
         if ownSectPr(of: p, in: index) != nil { throw FormError.carriesSectionBreak(id) }
         if let parent = index.tags[p].parent, index.tags[parent].name == "w:tc" {
-            let paragraphs = index.children(of: parent).filter { index.tags[$0].name == "w:p" }
+            let blocks = index.children(of: parent).filter { index.tags[$0].name != "w:tcPr" }
+            let paragraphs = blocks.filter { index.tags[$0].name == "w:p" }
             if paragraphs.count <= 1 { throw FormError.onlyParagraphInCell(id) }
+            // A cell must end with a paragraph; removing the last one after a
+            // nested table would leave it ending with the table.
+            let remaining = blocks.filter { $0 != p }
+            if let last = remaining.last, index.tags[last].name != "w:p" {
+                throw FormError.cellWouldEndWithoutParagraph(id)
+            }
         }
     }
 
@@ -77,16 +85,27 @@ enum FormOperations {
         return Int(value)
     }
 
-    /// True when the paragraph holds nothing visible: no `w:t` with text and
-    /// none of `contentElements` (outside its own `w:pPr`).
+    /// True unless the paragraph is provably empty. Empty is defined by a
+    /// closed list: apart from its own `w:pPr`, the paragraph holds only
+    /// `w:proofErr` markers and runs whose children are `w:rPr`,
+    /// `w:lastRenderedPageBreak` or a `w:t` with no text. Everything else —
+    /// bookmarks, comment ranges, tracked changes, hyperlinks, fields,
+    /// drawings, symbols — counts as content, so it is never deleted.
     static func hasContent(_ p: Int, in index: XMLTagIndex) -> Bool {
-        let pPr = ownPPr(of: p, in: index)
-        let pPrRange = pPr.map { index.elementRange($0) }
-        for d in index.descendants(of: p) {
-            if let pPrRange, pPrRange.contains(index.tags[d].start) { continue }
-            let name = index.tags[d].name
-            if contentElements.contains(name) { return true }
-            if name == "w:t", !index.text(of: d).isEmpty { return true }
+        for child in index.children(of: p) {
+            switch index.tags[child].name {
+            case "w:pPr", "w:proofErr":
+                continue
+            case "w:r":
+                for runChild in index.children(of: child) {
+                    let name = index.tags[runChild].name
+                    if emptyRunChildren.contains(name) { continue }
+                    if name == "w:t", index.text(of: runChild).isEmpty { continue }
+                    return true
+                }
+            default:
+                return true
+            }
         }
         return false
     }
@@ -264,9 +283,7 @@ enum FormOperations {
         if let first = FormLocator.firstTextRun(of: p, in: index) {
             runProperties = ownRPr(of: first, in: index).map { index.elementString($0) } ?? ""
         } else if let mark = ownRPr(of: pPr, in: index) {
-            let cleaned = try Fragment.removeChildren(index.elementString(mark),
-                                                      named: ["w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:rPrChange"])
-            runProperties = cleaned
+            runProperties = try Fragment.removeChildren(index.elementString(mark), named: revisionMarks)
         } else {
             runProperties = ""
         }
@@ -284,12 +301,22 @@ enum FormOperations {
         for text in texts where !XMLText.isAllowed(text) { throw FormError.invalidText(id) }
         let index = editor.index
         let anchor = try locate(id, in: index)
-        let pPr = try ownPPr(of: anchor, in: index).map {
-            try Fragment.removeChildren(index.elementString($0), named: ["w:numPr", "w:sectPr", "w:pPrChange"])
+        // The copy keeps the anchor's look but none of its one-off structure:
+        // no numbering, section break, page break before, or revision marks
+        // (copied revision marks would duplicate their w:id).
+        let pPr = try ownPPr(of: anchor, in: index).map { element -> String in
+            var fragment = try Fragment.removeChildren(index.elementString(element),
+                                                       named: ["w:numPr", "w:sectPr", "w:pPrChange", "w:pageBreakBefore"])
+            if try Fragment.child(fragment, named: "w:rPr") != nil {
+                fragment = try Fragment.updateChild(fragment, named: "w:rPr", followers: []) {
+                    try Fragment.removeChildren($0 ?? "<w:rPr></w:rPr>", named: revisionMarks)
+                }
+            }
+            return fragment
         } ?? ""
-        let rPr = FormLocator.firstTextRun(of: anchor, in: index)
+        let rPr = try FormLocator.firstTextRun(of: anchor, in: index)
             .flatMap { ownRPr(of: $0, in: index) }
-            .map { index.elementString($0) } ?? ""
+            .map { try Fragment.removeChildren(index.elementString($0), named: ["w:rPrChange"]) } ?? ""
         let paragraphs = texts.map { "<w:p>" + pPr + "<w:r>" + rPr + textElement($0) + "</w:r></w:p>" }.joined()
         try editor.apply([.insert(paragraphs, at: index.elementRange(anchor).upperBound)])
     }
@@ -307,11 +334,20 @@ enum FormOperations {
         let index = editor.index
         let cut = index.tags[p].start
         let bodyEnd = index.tags[index.tags[body].match!].start
-        let firstSection = index.tags.indices.first {
-            index.tags[$0].name == "w:sectPr" && index.tags[$0].kind != .close
-                && index.tags[$0].start >= cut && index.tags[$0].start < bodyEnd
+        // Only live section properties count: a body-level paragraph's own
+        // w:pPr/w:sectPr, or the body's own w:sectPr. A w:sectPr kept inside
+        // w:pPrChange is revision history and must not become the result.
+        var section = ""
+        for child in index.children(of: body) where index.tags[child].start >= cut {
+            if index.tags[child].name == "w:sectPr" {
+                section = index.elementString(child)
+                break
+            }
+            if index.tags[child].name == "w:p", let own = ownSectPr(of: child, in: index) {
+                section = index.elementString(own)
+                break
+            }
         }
-        let section = firstSection.map { index.elementString($0) } ?? ""
         try editor.apply([.replace(cut..<bodyEnd, with: section)])
     }
 }

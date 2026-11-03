@@ -2,6 +2,7 @@
 // the output handling of `word form apply` (#249).
 
 import XCTest
+import ZIPFoundation
 @testable import DocxForm
 
 final class DocxPackageTests: XCTestCase {
@@ -53,6 +54,36 @@ final class DocxPackageTests: XCTestCase {
             XCTAssertEqual($0 as? DocxPackageError, .outputExists(output.path))
         }
         XCTAssertEqual(try Data(contentsOf: output), Data("keep me".utf8))
+    }
+
+    /// A file that appears at the output path after the first existence
+    /// check is still not replaced without --force (exclusive rename).
+    func testOutputCreatedDuringTheRunIsNotReplaced() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        XCTAssertThrowsError(try DocxPackage.rewriteDocument(input: input, output: output, force: false) { document, _ in
+            try Data("someone else".utf8).write(to: output)
+            return document
+        }) {
+            XCTAssertEqual($0 as? DocxPackageError, .outputExists(output.path))
+        }
+        XCTAssertEqual(try Data(contentsOf: output), Data("someone else".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(), ["in.docx", "out.docx"])
+    }
+
+    func testSymbolicLinkEntryIsRefused() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let archive = try Archive(url: input, accessMode: .create)
+        try archive.addEntry(with: "word/document.xml", type: .file, uncompressedSize: Int64(4),
+                             provider: { _, _ in Data("<a/>".utf8) })
+        try archive.addEntry(with: "word/link", type: .symlink, uncompressedSize: Int64(9),
+                             provider: { _, _ in Data("/etc/host".utf8) })
+        XCTAssertThrowsError(try DocxPackage.read(from: input)) {
+            guard case .unreadable = $0 as? DocxPackageError else { return XCTFail("\($0)") }
+        }
     }
 
     func testForceReplacesTheOutput() throws {

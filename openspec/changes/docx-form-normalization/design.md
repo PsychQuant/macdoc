@@ -21,8 +21,8 @@ Constraints found while scouting:
 
 **Non-Goals:**
 
-- MCP parity. che-word-mcp's `execute_script` does not gain these operations; a follow-up can wrap the same library when needed.
-- Making docx-workflow's `insert_paragraph` inherit the anchor's format. It goes through the typed model; that change belongs to ooxml-swift's `OOXMLEdit.insertParagraph` and is tracked as a follow-up issue.
+- MCP parity. che-word-mcp's `execute_script` does not gain these operations; tracked in PsychQuant/che-word-mcp#300.
+- Making docx-workflow's `insert_paragraph` inherit the anchor's format. It goes through the typed model; that change belongs to ooxml-swift's `OOXMLEdit.insertParagraph` and is tracked in PsychQuant/macdoc#251.
 - Detecting instruction ("hint") paragraphs automatically. Removal is always explicit by paragraph id.
 - Changing raw-channel slot substitution semantics or the `// @slot-raw` directive grammar.
 - Headers, footers, footnotes and other parts. Only `word/document.xml` is edited.
@@ -103,4 +103,5 @@ When `--field` is given without `--field-size`, the size is the most common expl
 - [Removing a paragraph without text can remove content that is not text] → the no-content definition lists drawings, objects, symbols, fields, notes and math explicitly, and tests cover an image paragraph in a field cell.
 - [The default field size can surprise a caller] → the chosen size is printed, and `--field-size` overrides it.
 - [Two steps (render, then apply) instead of one] → the swiftify skill documents the order and the kind → option table.
-- [MCP callers do not get the operations] → recorded as a non-goal and a follow-up.
+- [MCP callers do not get the operations] → recorded as a non-goal; PsychQuant/che-word-mcp#300.
+- [The table-level default is per designated paragraph, and a whole table in the middle of the body cannot be removed] → needs a decision on scope (label cells, section handling); PsychQuant/macdoc#250.

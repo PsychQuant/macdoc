@@ -60,6 +60,19 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertTrue(xml.contains("0000S001"), "section-break paragraph kept")
     }
 
+    /// Empty is a closed list (empty runs, proofErr); bookmarks and tabs are content.
+    func testOnlyProvablyEmptySiblingsAreRemoved() throws {
+        let field = TestXML.paragraph("0000F010", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
+        let empty = TestXML.paragraph("0000E010", "<w:proofErr w:type=\"spellStart\"/><w:r><w:rPr/><w:t></w:t><w:lastRenderedPageBreak/></w:r>")
+        let bookmark = TestXML.paragraph("0000E011", "<w:bookmarkStart w:id=\"0\" w:name=\"x\"/><w:bookmarkEnd w:id=\"0\"/>")
+        let tab = TestXML.paragraph("0000E012", "<w:r><w:tab/></w:r>")
+        let deleted = TestXML.paragraph("0000E013", "<w:del w:id=\"1\" w:author=\"a\"><w:r><w:delText>舊</w:delText></w:r></w:del>")
+        let out = TestXML.string(try apply(TestXML.table([TestXML.cell(field + empty + bookmark + tab + deleted)]),
+                                           FormPlan(fields: ["0000F010"])))
+        XCTAssertFalse(out.contains("0000E010"))
+        for kept in ["0000E011", "0000E012", "0000E013"] { XCTAssertTrue(out.contains(kept), kept) }
+    }
+
     func testCellWithNestedTableKeepsItsSiblings() throws {
         let field = TestXML.paragraph("0000F004", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
         let empty = TestXML.paragraph("0000E002")
@@ -123,7 +136,7 @@ final class FormOperationsTests: XCTestCase {
     func testFieldSizeParsingBounds() throws {
         XCTAssertEqual(try FieldSize.parse(points: "1").halfPoints, 2)
         XCTAssertEqual(try FieldSize.parse(points: "1638").halfPoints, 3276)
-        for bad in ["0.5", "1638.5", "-12", "12pt", "", "1e1", "abc"] {
+        for bad in ["0.5", "1638.5", "-12", "12pt", "", "1e1", "abc", "12.5.3", "1..5", ".", "12.", ".5"] {
             XCTAssertThrowsError(try FieldSize.parse(points: bad), bad)
         }
         XCTAssertEqual(FieldSize(halfPoints: 21).pointsDescription, "10.5 pt")
@@ -174,6 +187,15 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertEqual(TestXML.string(result.documentXML), TestXML.string(TestXML.document(body)))
     }
 
+    func testCDATATextIsTakenLiterally() throws {
+        let body = TestXML.paragraph("0000C006", "<w:r><w:t><![CDATA[A\u{25A1}B]]></w:t></w:r>")
+        let out = try apply(body, FormPlan(checkboxFont: "標楷體"))
+        let index = try XMLTagIndex(out)
+        let runs = index.elements(named: "w:r")
+        XCTAssertEqual(runs.map { FormLocator.runText($0, in: index) }, ["A", "\u{25A1}", "B"])
+        XCTAssertFalse(TestXML.string(out).contains("CDATA"))
+    }
+
     func testFontNameIsEscaped() throws {
         let body = TestXML.paragraph("0000C004", TestXML.run("\u{25A1}"))
         let out = try apply(body, FormPlan(checkboxFont: "A&B \"C\""))
@@ -213,6 +235,13 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertEqual(paragraph.components(separatedBy: "w:ins").count - 1, 1, "only the mark keeps w:ins")
     }
 
+    func testTickWithNumberingIdZeroIsRefused() {
+        let pPr = "<w:pPr><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"0\"/></w:numPr></w:pPr>"
+        XCTAssertThrowsError(try apply(TestXML.paragraph("0000T004", pPr: pPr, TestXML.run("x")), FormPlan(tickList: ["0000T004"]))) {
+            XCTAssertEqual($0 as? FormError, .noOwnNumbering("0000T004"))
+        }
+    }
+
     func testTickWithoutNumberingIsRefused() {
         XCTAssertThrowsError(try apply(TestXML.paragraph("0000T003", TestXML.run("x")), FormPlan(tickList: ["0000T003"]))) {
             XCTAssertEqual($0 as? FormError, .noOwnNumbering("0000T003"))
@@ -242,6 +271,20 @@ final class FormOperationsTests: XCTestCase {
         }
     }
 
+    func testInsertDropsPageBreakAndRevisionMarks() throws {
+        let pPr = "<w:pPr><w:pageBreakBefore/><w:rPr><w:ins w:id=\"7\" w:author=\"a\"/><w:sz w:val=\"20\"/></w:rPr></w:pPr>"
+        let runRPr = "<w:rPr><w:b/><w:rPrChange w:id=\"8\" w:author=\"a\"><w:rPr/></w:rPrChange></w:rPr>"
+        let anchor = TestXML.paragraph("0000I010", pPr: pPr, TestXML.run("錨點", rPr: runRPr))
+        let out = try apply(anchor, FormPlan(insertions: [FormInsertion(anchor: "0000I010", text: "新段落")]))
+        let index = try XMLTagIndex(out)
+        let inserted = index.elementString(index.elements(named: "w:p")[1])
+        XCTAssertFalse(inserted.contains("w:pageBreakBefore"))
+        XCTAssertFalse(inserted.contains("w:ins"))
+        XCTAssertFalse(inserted.contains("w:rPrChange"))
+        XCTAssertTrue(inserted.contains("<w:sz w:val=\"20\"/>"))
+        XCTAssertTrue(inserted.contains("<w:b/>"))
+    }
+
     func testForbiddenCharacterIsRefused() {
         let anchor = TestXML.paragraph("0000I003", TestXML.run("錨點"))
         XCTAssertThrowsError(try apply(anchor, FormPlan(insertions: [FormInsertion(anchor: "0000I003", text: "a\u{0001}b")]))) {
@@ -262,6 +305,15 @@ final class FormOperationsTests: XCTestCase {
         let body = TestXML.paragraph("0000R002", pPr: "<w:pPr>\(TestXML.bodySection)</w:pPr>")
         XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R002"]))) {
             XCTAssertEqual($0 as? FormError, .carriesSectionBreak("0000R002"))
+        }
+    }
+
+    func testRemoveRefusedWhenTheCellWouldEndWithATable() {
+        let nested = TestXML.table([TestXML.cell(TestXML.paragraph("0000N010", TestXML.run("內層")))])
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000R010", TestXML.run("前")) + nested
+                                               + TestXML.paragraph("0000R011", TestXML.run("後")))])
+        XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R011"]))) {
+            XCTAssertEqual($0 as? FormError, .cellWouldEndWithoutParagraph("0000R011"))
         }
     }
 
@@ -295,6 +347,16 @@ final class FormOperationsTests: XCTestCase {
         let expected = TestXML.paragraph("0000P001", TestXML.run("P1"))
             + TestXML.paragraph("0000P002", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P2")) + s2
         XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    /// A w:sectPr kept in w:pPrChange is revision history, not a live break.
+    func testTruncateIgnoresSectionPropertiesInRevisionHistory() throws {
+        let old = "<w:sectPr><w:pgSz w:w=\"1\" w:h=\"1\"/></w:sectPr>"
+        let body = TestXML.paragraph("0000P020", TestXML.run("P1"))
+            + TestXML.paragraph("0000P021", pPr: "<w:pPr><w:pPrChange w:id=\"3\" w:author=\"a\"><w:pPr>\(old)</w:pPr></w:pPrChange></w:pPr>", TestXML.run("P2"))
+            + TestXML.paragraph("0000P022", TestXML.run("P3")) + s2
+        let out = try apply(body, FormPlan(truncateFrom: "0000P021"))
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(TestXML.paragraph("0000P020", TestXML.run("P1")) + s2)))
     }
 
     func testTruncateInsideATableIsRefused() {

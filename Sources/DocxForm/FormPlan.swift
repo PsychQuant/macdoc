@@ -17,8 +17,10 @@ public struct FieldSize: Equatable {
     /// Points from 1 to 1638 in steps of 0.5 (e.g. "12", "10.5").
     public static func parse(points raw: String) throws -> FieldSize {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        guard let value = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")),
-              trimmed.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) else {
+        // Whole-string match: Decimal(string:) accepts the longest valid
+        // prefix, so "12.5.3" would otherwise come back as 12.5.
+        guard trimmed.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
+              let value = Decimal(string: trimmed, locale: Locale(identifier: "en_US_POSIX")) else {
             throw FormError.invalidFieldSize(raw)
         }
         let doubled = value * 2
@@ -98,6 +100,7 @@ public struct FormPlan: Equatable {
             throw FormError.invalidText(insertion.anchor)
         }
         for id in namedIds { _ = try FormOperations.locate(id, in: editor.index) }
+        try checkConflicts(fields: fields, ticks: ticks, removals: removals, index: editor.index)
         for id in fields { try FormOperations.checkField(id, in: editor.index) }
         for id in ticks { try FormOperations.checkTick(id, in: editor.index) }
         for id in removals { try FormOperations.checkRemove(id, in: editor.index) }
@@ -138,6 +141,26 @@ public struct FormPlan: Equatable {
         try Self.checkWellFormed(editor.bytes)
         return FormResult(documentXML: editor.bytes, fieldSize: size, fieldSizeWasDerived: derived,
                           skippedCheckboxRuns: skipped)
+    }
+
+    /// Refuses plans whose later steps would silently undo earlier ones: a
+    /// removed paragraph that another operation also names, and any named
+    /// paragraph inside the range `--truncate-from` cuts away.
+    func checkConflicts(fields: [String], ticks: [String], removals: [String], index: XMLTagIndex) throws {
+        let edited = Set(fields + ticks + insertions.map(\.anchor))
+        if let id = removals.first(where: { edited.contains($0) }) {
+            throw FormError.conflictingOperations(id, detail: "--remove 會刪掉 --field / --tick-list / --insert-after 處理過的段落")
+        }
+        guard let cutId = truncateFrom else { return }
+        if edited.contains(cutId) || removals.contains(cutId) {
+            throw FormError.conflictingOperations(cutId, detail: "--truncate-from 會把這一段一起截掉")
+        }
+        let cut = index.tags[try FormOperations.locate(cutId, in: index)].start
+        for id in namedIds where id != cutId {
+            if index.tags[try FormOperations.locate(id, in: index)].start >= cut {
+                throw FormError.conflictingOperations(id, detail: "位在 --truncate-from \(cutId) 會截掉的範圍內")
+            }
+        }
     }
 
     static func checkWellFormed(_ bytes: [UInt8]) throws {
