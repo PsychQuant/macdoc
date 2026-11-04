@@ -95,6 +95,83 @@ final class DocxPackageTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: second), Data("someone else".utf8))
     }
 
+    /// A dangling symbolic link at the output is an existing output: the
+    /// fallback checks the link itself, not its (missing) target.
+    func testFallbackRefusesADanglingSymbolicLinkAtTheOutput() throws {
+        for code in [ENOTSUP, EINVAL] {
+            let dir = try tempDir()
+            let input = dir.appendingPathComponent("in.docx")
+            let output = dir.appendingPathComponent("out.docx")
+            let target = dir.appendingPathComponent("missing.docx").path
+            _ = try samplePackage(at: input)
+            let saved = DocxPackage.exclusiveRename
+            DocxPackage.exclusiveRename = { _, _ in errno = code; return -1 }
+            defer { DocxPackage.exclusiveRename = saved }
+            XCTAssertThrowsError(try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in
+                try FileManager.default.createSymbolicLink(atPath: output.path, withDestinationPath: target)
+                return d
+            }) {
+                XCTAssertEqual($0 as? DocxPackageError, .outputExists(output.path), "errno \(code)")
+            }
+            XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: output.path), target)
+        }
+    }
+
+    func testADanglingSymbolicLinkOutputIsRefusedBeforeAnyWork() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        try FileManager.default.createSymbolicLink(atPath: output.path, withDestinationPath: dir.appendingPathComponent("missing").path)
+        var transformed = false
+        XCTAssertThrowsError(try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in
+            transformed = true
+            return d
+        }) {
+            XCTAssertEqual($0 as? DocxPackageError, .outputExists(output.path))
+        }
+        XCTAssertFalse(transformed)
+    }
+
+    /// The temporary file lives in a private (0700) directory under a short
+    /// fixed name: its content is never readable by others while it is
+    /// written, and a long output name cannot push it past the name limit.
+    func testTemporaryFileIsPrivateAndShortAndLeavesNothingBehind() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let name = String(repeating: "表", count: 80) + ".docx"   // 245 bytes, a legal name
+        let output = dir.appendingPathComponent(name)
+        _ = try samplePackage(at: input)
+        var observed: (mode: Int, name: String)?
+        let saved = DocxPackage.exclusiveRename
+        DocxPackage.exclusiveRename = { from, to in
+            let parent = (from as NSString).deletingLastPathComponent
+            let mode = (try? FileManager.default.attributesOfItem(atPath: parent)[.posixPermissions] as? NSNumber)?.intValue
+            observed = (mode ?? -1, (from as NSString).lastPathComponent)
+            return saved(from, to)
+        }
+        defer { DocxPackage.exclusiveRename = saved }
+        try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in d }
+        XCTAssertEqual(observed?.mode, 0o700)
+        XCTAssertLessThanOrEqual(observed?.name.utf8.count ?? .max, 16)
+        XCTAssertEqual(try DocxPackage.read(from: output).count, 5)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(), ["in.docx", name].sorted())
+    }
+
+    func testFailedRenameLeavesNoTemporaryDirectory() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        let saved = DocxPackage.exclusiveRename
+        DocxPackage.exclusiveRename = { _, _ in errno = EIO; return -1 }
+        defer { DocxPackage.exclusiveRename = saved }
+        XCTAssertThrowsError(try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in d }) {
+            guard case .writeFailed = $0 as? DocxPackageError else { return XCTFail("\($0)") }
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["in.docx"])
+    }
+
     func testOutputKeepsTheInputPermissions() throws {
         let dir = try tempDir()
         let input = dir.appendingPathComponent("in.docx")

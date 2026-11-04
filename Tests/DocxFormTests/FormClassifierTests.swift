@@ -68,6 +68,26 @@ final class FormClassifierTests: XCTestCase {
         XCTAssertEqual(result.map(\.kind), [.tableField, .body])
     }
 
+    /// Balanced tags are not enough: a part an XML parser rejects (here a
+    /// duplicate attribute) is unreadable too.
+    func testNumberingThatIsNotWellFormedXMLIsUnreadable() throws {
+        let body = TestXML.paragraph("0000M003", pPr: TestXML.numbered, TestXML.run("選項"))
+        let duplicate = TestXML.string(TestXML.numbering())
+            .replacingOccurrences(of: "<w:lvlText w:val=\"\u{25A1}\"/>", with: "<w:lvlText w:val=\"\u{25A1}\" w:val=\"%1.\"/>")
+        XCTAssertFalse(FormClassifier.isReadableNumbering(Array(duplicate.utf8)))
+        let result = try FormClassifier.classify(documentXML: TestXML.document(body), numberingXML: Array(duplicate.utf8))
+        XCTAssertEqual(result.map(\.kind), [.body])
+    }
+
+    /// A paragraph in a text box anchored in a cell belongs to the text box.
+    func testTextBoxParagraphInsideACellIsNotATableField() throws {
+        let textBox = "<w:r><w:drawing><wp:inline><w:txbxContent>"
+            + TestXML.paragraph("000000C2", TestXML.run("方塊內")) + "</w:txbxContent></wp:inline></w:drawing></w:r>"
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("000000C1", TestXML.run("格內") + textBox))])
+        let result = try FormClassifier.classify(documentXML: TestXML.document(body), numberingXML: nil)
+        XCTAssertEqual(result.map(\.kind), [.tableField, .body])
+    }
+
     func testParagraphsWithoutParaIdAreNotListed() throws {
         let body = TestXML.paragraph(nil, TestXML.run("沒有 id")) + TestXML.paragraph("0000000A", TestXML.run("有 id"))
         let result = try FormClassifier.classify(documentXML: TestXML.document(body), numberingXML: nil)

@@ -97,6 +97,30 @@ final class FormOperationsTests: XCTestCase {
         }
     }
 
+    /// The size goes before extension elements, which Word writes last.
+    func testFieldSizeIsInsertedBeforeExtensionElements() throws {
+        // w:b precedes the size, so only the extension element can be a follower.
+        let rPr = "<w:rPr><w:b/><w14:ligatures w14:val=\"standard\"/></w:rPr>"
+        let field = TestXML.paragraph("0000F0E1", TestXML.run("值", rPr: rPr))
+        let out = try apply(TestXML.table([TestXML.cell(field)]),
+                            FormPlan(fields: ["0000F0E1"], fieldSize: try FieldSize.parse(points: "12")))
+        let paragraph = try TestXML.paragraphXML("0000F0E1", in: out)
+        let index = try XMLTagIndex(paragraph)
+        let runRPr = index.elements(named: "w:rPr").last!
+        XCTAssertEqual(index.children(of: runRPr).map { index.tags[$0].name }, ["w:b", "w:sz", "w:szCs", "w14:ligatures"])
+    }
+
+    /// A paragraph in a text box anchored in a cell is not a field of that
+    /// cell; styling the outer cell would change the wrong cell.
+    func testFieldInsideATextBoxInACellIsRefused() {
+        let textBox = "<w:r><w:drawing><wp:inline><w:txbxContent>"
+            + TestXML.paragraph("0000F0B2", TestXML.run("方塊內")) + "</w:txbxContent></wp:inline></w:drawing></w:r>"
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000F0B1", TestXML.run("標籤") + textBox))])
+        XCTAssertThrowsError(try apply(body, FormPlan(fields: ["0000F0B2"], fieldSize: try FieldSize.parse(points: "12")))) {
+            XCTAssertEqual($0 as? FormError, .notInTableCell("0000F0B2"))
+        }
+    }
+
     // MARK: The default field size is the most common designated size
 
     private func fieldTable(_ sizes: [Int?]) -> (body: String, ids: [String]) {
@@ -177,6 +201,22 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertFalse(boxRun.contains("Times New Roman"))
         XCTAssertTrue(boxRun.contains("<w:sz w:val=\"24\"/>"))
         XCTAssertEqual(TestXML.string(Array(try TestXML.text("0000C001", in: out).utf8)), ")  \u{25A1}")
+    }
+
+    /// A native checkbox content control redraws its glyph from the w14 state
+    /// fonts, so its run is left alone and counted.
+    func testNativeCheckboxControlIsLeftAloneAndCounted() throws {
+        let control = "<w:sdt><w:sdtPr><w14:checkbox><w14:checked w14:val=\"0\"/>"
+            + "<w14:checkedState w14:val=\"2612\" w14:font=\"MS Gothic\"/><w14:uncheckedState w14:val=\"2610\" w14:font=\"MS Gothic\"/>"
+            + "</w14:checkbox></w:sdtPr><w:sdtContent>"
+            + TestXML.run("\u{2610}", rPr: "<w:rPr><w:rFonts w:ascii=\"MS Gothic\" w:hint=\"eastAsia\"/></w:rPr>")
+            + "</w:sdtContent></w:sdt>"
+        let body = TestXML.paragraph("0000C0C1", control + TestXML.run(" 同意"))
+            + TestXML.paragraph("0000C0C2", TestXML.run("\u{25A1} 一般方框"))
+        let result = try FormPlan(checkboxFont: "標楷體").apply(toDocumentXML: TestXML.document(body))
+        XCTAssertEqual(result.skippedCheckboxRuns, 1)
+        XCTAssertTrue(try TestXML.paragraphXML("0000C0C1", in: result.documentXML).contains("w:hint=\"eastAsia\""))
+        XCTAssertTrue(try TestXML.paragraphXML("0000C0C2", in: result.documentXML).contains("w:eastAsia=\"標楷體\""))
     }
 
     func testGlyphOnlyRunKeepsItsTextElementAndGetsTheFont() throws {
@@ -384,10 +424,46 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(TestXML.paragraph("0000P001", TestXML.run("P1")) + s1)))
     }
 
-    func testCutInTheLastSectionKeepsTheBodySection() throws {
+    /// Cutting at the first paragraph of a section removes that whole section:
+    /// the kept content's last section break becomes the final one, so the
+    /// result does not end with an empty section (an extra blank page).
+    func testCutAtTheFirstParagraphOfASectionMovesTheKeptBreakToTheEnd() throws {
         let out = try apply(sectionedBody, FormPlan(truncateFrom: "0000P003"))
         let expected = TestXML.paragraph("0000P001", TestXML.run("P1"))
-            + TestXML.paragraph("0000P002", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P2")) + s2
+            + TestXML.paragraph("0000P002", pPr: "<w:pPr></w:pPr>", TestXML.run("P2")) + s1
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    func testCutInsideTheLastSectionKeepsTheBodySection() throws {
+        let out = try apply(sectionedBody, FormPlan(truncateFrom: "0000P004"))
+        let expected = TestXML.paragraph("0000P001", TestXML.run("P1"))
+            + TestXML.paragraph("0000P002", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P2"))
+            + TestXML.paragraph("0000P003", TestXML.run("P3")) + s2
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    /// The kept break may sit in a body-level content control; it still moves.
+    func testKeptBreakInsideABodyLevelContentControlMovesToTheEnd() throws {
+        let wrapped = "<w:sdt><w:sdtPr/><w:sdtContent>"
+            + TestXML.paragraph("0000P041", pPr: "<w:pPr><w:jc w:val=\"center\"/>\(s1)</w:pPr>", TestXML.run("控制項內"))
+            + "</w:sdtContent></w:sdt>"
+        let body = TestXML.paragraph("0000P040", TestXML.run("P1")) + wrapped
+            + TestXML.paragraph("0000P042", TestXML.run("下一份")) + s2
+        let out = try apply(body, FormPlan(truncateFrom: "0000P042"))
+        let expected = TestXML.paragraph("0000P040", TestXML.run("P1")) + "<w:sdt><w:sdtPr/><w:sdtContent>"
+            + TestXML.paragraph("0000P041", pPr: "<w:pPr><w:jc w:val=\"center\"/></w:pPr>", TestXML.run("控制項內"))
+            + "</w:sdtContent></w:sdt>" + s1
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    /// A table after the kept break belongs to the last section, which is not empty.
+    func testKeptTableAfterABreakKeepsTheRemovedRangeSection() throws {
+        let body = TestXML.paragraph("0000P050", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P1"))
+            + TestXML.table([TestXML.cell(TestXML.paragraph("0000P051", TestXML.run("表內")))])
+            + TestXML.paragraph("0000P052", TestXML.run("下一份")) + s2
+        let out = try apply(body, FormPlan(truncateFrom: "0000P052"))
+        let expected = TestXML.paragraph("0000P050", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P1"))
+            + TestXML.table([TestXML.cell(TestXML.paragraph("0000P051", TestXML.run("表內")))]) + s2
         XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
     }
 

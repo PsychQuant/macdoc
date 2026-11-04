@@ -6,7 +6,7 @@ Form normalization makes a filled Word form uniform after its values are in plac
 
 ### Requirement: Paragraph kinds are assigned by structure from a closed enumeration
 
-The classifier SHALL assign every paragraph exactly one kind from the closed set `list-checkbox`, `checkbox-line`, `table-field`, `body`, taking the first kind whose condition holds in that order. `list-checkbox` SHALL hold when the paragraph's own `w:pPr` contains `w:numPr` and the `w:lvlText` of the referenced level in `word/numbering.xml` contains a box glyph. `checkbox-line` SHALL hold when the paragraph's visible text contains a box glyph. `table-field` SHALL hold when the paragraph has an enclosing `w:tc`. The box glyphs SHALL be exactly U+25A1, U+25A0, U+2610, U+2611 and U+2612; box symbols drawn from symbol-font private-use code points are not box glyphs. A paragraph's visible text is the content of its own `w:t` elements (not those of paragraphs nested in text boxes), with entities decoded and CDATA sections taken literally. A `w:numId` of `0` means no numbering. The classifier SHALL NOT infer any kind from the wording of a paragraph.
+The classifier SHALL assign every paragraph exactly one kind from the closed set `list-checkbox`, `checkbox-line`, `table-field`, `body`, taking the first kind whose condition holds in that order. `list-checkbox` SHALL hold when the paragraph's own `w:pPr` contains `w:numPr` and the `w:lvlText` of the referenced level in `word/numbering.xml` contains a box glyph. `checkbox-line` SHALL hold when the paragraph's visible text contains a box glyph. `table-field` SHALL hold when the paragraph's nearest container, looking through `w:sdt`, `w:sdtContent` and `w:customXml` wrappers, is a `w:tc`; a paragraph in a text box belongs to the text box, not to the cell the text box sits in. The box glyphs SHALL be exactly U+25A1, U+25A0, U+2610, U+2611 and U+2612; box symbols drawn from symbol-font private-use code points are not box glyphs. A paragraph's visible text is the content of its own `w:t` elements (not those of paragraphs nested in text boxes), with entities decoded and CDATA sections taken literally. A `w:numId` of `0` means no numbering. The classifier SHALL NOT infer any kind from the wording of a paragraph.
 
 #### Scenario: Paragraph in a table cell with a box glyph
 
@@ -35,7 +35,7 @@ The classifier SHALL assign every paragraph exactly one kind from the closed set
 
 ### Requirement: The classify command lists every addressable paragraph
 
-`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId`, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with tabs and newlines replaced by spaces. Paragraphs without a `w14:paraId` SHALL NOT be listed. When `word/numbering.xml` cannot be parsed, the command SHALL still list every paragraph with list-checkbox detection disabled and SHALL name the numbering part on stderr.
+`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId`, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with every control character (Unicode general category Cc, including tab, line breaks and ESC) replaced by a space. Paragraphs without a `w14:paraId` SHALL NOT be listed. When `word/numbering.xml` is not well-formed XML (as judged by an XML parser, not only by tag pairing), the command SHALL still list every paragraph with list-checkbox detection disabled and SHALL name the numbering part on stderr.
 
 #### Scenario: Two addressable paragraphs and one without an id
 
@@ -44,7 +44,7 @@ The classifier SHALL assign every paragraph exactly one kind from the closed set
 
 ### Requirement: Table field normalization makes designated fields uniform
 
-For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph's own `w:pStyle` and `w:ind`, set its own `w:jc` to `left`, set `w:sz` and `w:szCs` to the field size on the paragraph mark and on every run of the paragraph, set `w:vAlign` to `center` on the nearest enclosing `w:tc`, and remove every other direct-child paragraph of that cell that is empty, carries no `w:sectPr`, and is not named by any operation of the same command. A paragraph is empty only when, apart from its own `w:pPr`, its children are `w:proofErr` markers and runs whose children are `w:rPr`, `w:lastRenderedPageBreak` or a `w:t` with no text; this is a closed list, and any other child (bookmarks, comment ranges, tracked changes, hyperlinks, fields, drawings, symbols, tabs, breaks) makes the paragraph non-empty. Sibling paragraphs SHALL NOT be removed when the cell contains a nested `w:tbl`, `w:sdt` or `w:customXml`. A designated paragraph without an enclosing `w:tc` SHALL be refused. Inserted elements SHALL follow ECMA-376 child order.
+For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph's own `w:pStyle` and `w:ind`, set its own `w:jc` to `left`, set `w:sz` and `w:szCs` to the field size on the paragraph mark and on every run of the paragraph, set `w:vAlign` to `center` on the nearest enclosing `w:tc`, and remove every other direct-child paragraph of that cell that is empty, carries no `w:sectPr`, and is not named by any operation of the same command. A paragraph is empty only when, apart from its own `w:pPr`, its children are `w:proofErr` markers and runs whose children are `w:rPr`, `w:lastRenderedPageBreak` or a `w:t` with no text; this is a closed list, and any other child (bookmarks, comment ranges, tracked changes, hyperlinks, fields, drawings, symbols, tabs, breaks) makes the paragraph non-empty. Sibling paragraphs SHALL NOT be removed when the cell contains a nested `w:tbl`, `w:sdt` or `w:customXml`. A designated paragraph whose nearest container (looking through `w:sdt`, `w:sdtContent` and `w:customXml`) is not a `w:tc` SHALL be refused, including a paragraph in a text box that sits in a cell. Inserted elements SHALL follow ECMA-376 child order.
 
 #### Scenario: Field with style, indent and distributed alignment
 
@@ -88,7 +88,7 @@ When `--field` is given without `--field-size`, the field size SHALL be the most
 
 ### Requirement: Box glyphs are drawn in one font
 
-When `--checkbox-font <font>` is given, `macdoc word form apply` SHALL rewrite every run in the main part whose children are an optional `w:rPr` and exactly one `w:t` containing a box glyph, so that each maximal sequence of box glyphs becomes a run whose `w:rFonts` sets `w:ascii`, `w:hAnsi`, `w:eastAsia` and `w:cs` to the font, and the remaining text stays in runs with the original properties, in the original order. A run that would have to be split and carries `w:rPrChange` SHALL be left unchanged and counted on stderr, so a tracked formatting change is neither duplicated nor discarded. Runs containing a box glyph together with any other content child SHALL be left unchanged and counted on stderr. An empty font name, or one containing characters forbidden by XML 1.0, SHALL be refused.
+When `--checkbox-font <font>` is given, `macdoc word form apply` SHALL rewrite every run in the main part whose children are an optional `w:rPr` and exactly one `w:t` containing a box glyph, so that each maximal sequence of box glyphs becomes a run whose `w:rFonts` sets `w:ascii`, `w:hAnsi`, `w:eastAsia` and `w:cs` to the font, and the remaining text stays in runs with the original properties, in the original order. A run that would have to be split and carries `w:rPrChange` SHALL be left unchanged and counted on stderr, so a tracked formatting change is neither duplicated nor discarded. Runs containing a box glyph together with any other content child, and runs inside a `w:sdt` whose `w:sdtPr` holds `w14:checkbox` (a native checkbox control redraws its glyph from the fonts of its checked and unchecked states), SHALL be left unchanged and counted on stderr. An empty font name, or one containing characters forbidden by XML 1.0, SHALL be refused.
 
 #### Scenario: Split run with a tracked formatting change
 
@@ -120,7 +120,7 @@ For each `--insert-after <paraId>=<text>`, `macdoc word form apply` SHALL insert
 
 ### Requirement: Paragraphs are removed only when named
 
-For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that carries a `w:sectPr`, and a paragraph inside a `w:tc` whose removal would leave that cell with no paragraph or ending with a block other than a paragraph, where the cell's blocks are counted through `w:sdt`/`w:sdtContent` and `w:customXml` wrappers.
+For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that carries a `w:sectPr`, and a paragraph inside a `w:tc` or `w:txbxContent` whose removal would leave that cell or text box with no paragraph or ending with a block other than a paragraph, where the cell's blocks are counted through `w:sdt`/`w:sdtContent` and `w:customXml` wrappers.
 
 #### Scenario: Cell would end with a nested table
 
@@ -139,12 +139,17 @@ For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragrap
 
 ### Requirement: Truncation keeps the section settings of the kept content
 
-For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` and not its first child. `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used.
+For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` and not its first child. `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used. When the last kept block (looking through body-level `w:sdt`) is a paragraph that carries its own `w:sectPr`, the cut removed whole sections: that `w:sectPr` SHALL be moved from the paragraph to the end of the body as its final `w:sectPr` and the removed range's section properties SHALL be dropped, so the result never ends with a section that has no content.
 
 #### Scenario: Cut before a later section break
 
 - **WHEN** the body holds paragraphs P1, P2 (whose `w:pPr` carries section break S1), P3, P4 and the body's own `w:sectPr` S2, and `--truncate-from` names P2
 - **THEN** the body holds P1 followed by S1 as the body's final `w:sectPr`
+
+#### Scenario: Cut at the first paragraph of a section
+
+- **WHEN** the body holds paragraphs P1, P2 (whose `w:pPr` carries section break S1), P3, P4 and the body's own `w:sectPr` S2, and `--truncate-from` names P3
+- **THEN** the body holds P1, P2 without its `w:sectPr`, and S1 as the body's final `w:sectPr`; S2 is gone and no empty final section remains
 
 #### Scenario: Section properties in revision history are ignored
 
@@ -158,7 +163,7 @@ For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body
 
 ### Requirement: Apply is all-or-nothing
 
-`macdoc word form apply` SHALL check before editing that every named paragraph id is carried by exactly one `w:p`, SHALL refuse a plan in which a paragraph named by `--remove` is also named by another operation, in which any other named paragraph lies inside the element of a paragraph named by `--remove` (for example a paragraph in a text box), or in which any named paragraph lies in the range `--truncate-from` cuts away (including the cut paragraph itself when another operation names it), and SHALL then run the operations in the order field, tick-list, insert, checkbox-font, remove, truncate. Any failure, including an operation precondition that becomes false after an earlier step, SHALL abort the command with a non-zero exit and a message naming the paragraph id, and the output path SHALL be left as it was. The command SHALL refuse an existing output unless `--force` is given, including a file that appears at the output path while the command runs (the final rename SHALL be exclusive without `--force`; on filesystems that do not support an exclusive rename the command SHALL fall back to an existence check immediately before a plain rename), SHALL parse the edited main part as XML before writing, and SHALL write through a temporary file that takes the input file's permission bits and is renamed into place. With no operation option the command SHALL fail with a usage error.
+`macdoc word form apply` SHALL check before editing that every named paragraph id is carried by exactly one `w:p`, SHALL refuse a plan in which a paragraph named by `--remove` is also named by another operation, in which any other named paragraph lies inside the element of a paragraph named by `--remove` (for example a paragraph in a text box), or in which any named paragraph lies in the range `--truncate-from` cuts away (including the cut paragraph itself when another operation names it), and SHALL then run the operations in the order field, tick-list, insert, checkbox-font, remove, truncate. Any failure, including an operation precondition that becomes false after an earlier step, SHALL abort the command with a non-zero exit and a message naming the paragraph id, and the output path SHALL be left as it was. The command SHALL refuse an existing output unless `--force` is given, including a file that appears at the output path while the command runs (the final rename SHALL be exclusive without `--force`; on filesystems that do not support an exclusive rename the command SHALL fall back to an existence check immediately before a plain rename; every existence check SHALL treat a symbolic link as existing even when its target is missing), SHALL parse the edited main part as XML before writing, and SHALL write through a temporary file inside a directory created with mode 0700 next to the output, under a short fixed name, that takes the input file's permission bits and is renamed into place; the directory SHALL be removed on every exit path. With no operation option the command SHALL fail with a usage error.
 
 #### Scenario: One bad id among several
 
@@ -191,7 +196,7 @@ For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body
 
 ### Requirement: Reverse names the follow-up for slots that need one
 
-In full-fidelity mode, `macdoc word reverse --slot <name>=<paraId>` SHALL classify each designated paragraph found in the source's main part and, for kinds `table-field`, `checkbox-line` and `list-checkbox`, print one stderr line naming the slot, the kind and the `macdoc word form apply` option that handles it. It SHALL print nothing for `body` slots, in paragraphs-only mode, or for ids not found in the main part.
+In full-fidelity mode, `macdoc word reverse --slot <name>=<paraId>` SHALL classify each designated paragraph found in the source's main part and, for kinds `table-field`, `checkbox-line` and `list-checkbox`, print one stderr line naming the slot, the kind and the `macdoc word form apply` option that handles it. It SHALL print nothing for `body` slots, in paragraphs-only mode, or for ids not found in the main part. When `word/numbering.xml` is not well-formed XML and at least one slot is designated, it SHALL print one stderr line naming the numbering part, as `classify` does.
 
 #### Scenario: Table field slot
 

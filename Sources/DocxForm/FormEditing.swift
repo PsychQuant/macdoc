@@ -146,7 +146,12 @@ enum Fragment {
             .map { .remove(index.elementRange($0)) }
         let followerSet = Set(followers)
         let survivors = index.children(of: root).filter { !removing.contains(index.tags[$0].name) }
-        let position = survivors.first { followerSet.contains(index.tags[$0].name) }
+        // Extension elements (w14:, w15:, …) come after every schema element,
+        // so they follow whatever is inserted whenever there is an order to keep.
+        let position = survivors.first {
+            let name = index.tags[$0].name
+            return followerSet.contains(name) || (!followers.isEmpty && !name.hasPrefix("w:"))
+        }
             .map { index.tags[$0].start }
             ?? index.tags[tag.match!].start
         if !snippet.isEmpty { edits.append(.insert(snippet, at: position)) }

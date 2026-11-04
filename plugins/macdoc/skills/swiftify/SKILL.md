@@ -130,8 +130,8 @@ macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx \
 
 | 類型 | 是什麼 | 用哪個選項 |
 |------|--------|-----------|
-| `table-field` | 表格儲存格裡的填寫欄 | `--field <paraId>`（字級一致、靠左、垂直置中；字級用 `--field-size` 指定，省略時取指定欄位的眾數） |
-| `checkbox-line` | 文字裡含 □ ■ ☐ ☑ ☒ 的段落 | `--checkbox-font <字型>`（全文方框同一字型、一樣大；勾選本身仍用文字 slot 把 □ 換成 ■） |
+| `table-field` | 表格儲存格裡的填寫欄（儲存格裡文字方塊內的段落不算） | `--field <paraId>`（字級一致、靠左、垂直置中；字級用 `--field-size` 指定，省略時取指定欄位的眾數） |
+| `checkbox-line` | 文字裡含 □ ■ ☐ ☑ ☒ 的段落 | `--checkbox-font <字型>`（全文方框改成同一字型，各自保留原本的字級；要一樣大，方框所在的欄位另用 `--field` 統一字級。原生核取方塊內容控制項不改，會計入略過數。勾選本身仍用文字 slot 把 □ 換成 ■） |
 | `list-checkbox` | 方框是清單符號，文字 slot 換不到 | `--tick-list <paraId>`（拿掉清單編號，前面加 ■） |
 | `body` | 其餘段落 | 內容要多段時用 `--insert-after <paraId>=<文字>`，新段落沿用錨點的格式 |
 
@@ -142,7 +142,7 @@ macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx \
 - **第 5 步（Verify）的 `--verify-against` 驗的是腳本**（整理之前），整理後的輸出本來就不會和範本 byte-equal。整理只改被點名的元素，`word/document.xml` 以外的 part 內容逐位元組不變（zip 容器本身重新寫出）。
 - 點名靠 `w14:paraId`；沒有 paraId 的段落無法整理。符號字型（如 Wingdings）畫的方框不算方框，不會被分類成 checkbox。
 - **全有全無**：所有 paraId 先驗過才動手，任何一步失敗都不寫出檔案；輸出已存在時預設拒絕，覆寫要 `--force`（同第 4 步的同意規則）。
-- **MCP 那一面沒有這些操作**（PsychQuant/che-word-mcp#300）；要整理就用 CLI。整張表一次套用與刪除中間的整張表尚未支援（PsychQuant/macdoc#250）。
+- **MCP 那一面沒有這些操作**（PsychQuant/che-word-mcp#300）；要整理就用 CLI。整張表一次套用與刪除中間的整張表尚未支援；用 `--remove` 刪掉兩張表之間唯一的段落會讓 Word 把兩張表併成一張，這個情況也記在同一張 issue（PsychQuant/macdoc#250）。
 - `macdoc docx apply` 的 `insert_paragraph` 走 typed 路徑、寫出的段落沒有格式（PsychQuant/macdoc#251）；raw channel 的表單改用 `--insert-after`。
 
 ## 判讀 coverage：為什麼你的腳本可能不可讀

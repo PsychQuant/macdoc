@@ -29,7 +29,7 @@ final class WordFormCommandTests: XCTestCase {
     /// A minimal but complete package: content types, relationships, styles,
     /// numbering and a main part holding a body paragraph, a table with a field
     /// cell and a checkbox cell, and a numbered (box-bullet) paragraph.
-    private func makeForm(at url: URL) throws {
+    private func makeForm(at url: URL, numberingOverride: String? = nil, extraBody: String = "") throws {
         let sized = "<w:rPr><w:sz w:val=\"18\"/></w:rPr>"
         let body = paragraph("0000B0D1", run("申請人資料"))
             + "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/><w:gridCol w:w=\"3000\"/></w:tblGrid><w:tr>"
@@ -39,12 +39,14 @@ final class WordFormCommandTests: XCTestCase {
             + paragraph("0000C0EE", run(")  \u{25A1}", rPr: sized)) + "</w:tc>"
             + "</w:tr></w:tbl>"
             + paragraph("0000A0A0", pPr: "<w:pPr><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"1\"/></w:numPr></w:pPr>", run("第一個選項"))
+            + extraBody
             + "<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/></w:sectPr>"
         let document = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<w:document xmlns:w=\"\(Self.w)\" xmlns:w14=\"\(Self.w14)\"><w:body>\(body)</w:body></w:document>"
         let numbering = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<w:numbering xmlns:w=\"\(Self.w)\"><w:abstractNum w:abstractNumId=\"0\"><w:lvl w:ilvl=\"0\">"
             + "<w:lvlText w:val=\"\u{25A1}\"/></w:lvl></w:abstractNum><w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num></w:numbering>"
+        let numberingPart = numberingOverride ?? numbering
         let contentTypes = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
             + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
@@ -70,7 +72,7 @@ final class WordFormCommandTests: XCTestCase {
             .init(path: "word/document.xml", data: Data(document.utf8)),
             .init(path: "word/_rels/document.xml.rels", data: Data(documentRels.utf8)),
             .init(path: "word/styles.xml", data: Data(styles.utf8)),
-            .init(path: "word/numbering.xml", data: Data(numbering.utf8)),
+            .init(path: "word/numbering.xml", data: Data(numberingPart.utf8)),
         ], to: url)
     }
 
@@ -93,6 +95,32 @@ final class WordFormCommandTests: XCTestCase {
             "0000C0EE\tcheckbox-line\t)  \u{25A1}",
             "0000A0A0\tlist-checkbox\t第一個選項",
         ])
+    }
+
+    /// A numbering part an XML parser rejects disables list-checkbox detection
+    /// only, and the command says so on stderr.
+    func testClassifyNotesAnUnreadableNumberingPart() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let broken = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<w:numbering xmlns:w=\"\(Self.w)\"><w:abstractNum w:abstractNumId=\"0\"><w:lvl w:ilvl=\"0\">"
+            + "<w:lvlText w:val=\"\u{25A1}\" w:val=\"%1.\"/></w:lvl></w:abstractNum><w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num></w:numbering>"
+        try makeForm(at: form, numberingOverride: broken)
+        let result = try CLITestHelper.run(["word", "form", "classify", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("word/numbering.xml 無法解析"), result.stderr)
+        XCTAssertTrue(result.stdout.contains("0000A0A0\tbody\t"), result.stdout)
+    }
+
+    /// Document text cannot put terminal control sequences on stdout.
+    func testClassifyPreviewReplacesControlCharacters() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        try makeForm(at: form, extraBody: paragraph("0000E5C0", run("前&#x1B;[31m後")))
+        let result = try CLITestHelper.run(["word", "form", "classify", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
+        XCTAssertTrue(result.stdout.contains("0000E5C0\tbody\t前 [31m後"), result.stdout)
     }
 
     func testClassifyMissingInput() throws {
@@ -168,6 +196,22 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("至少要指定一個操作"), result.stderr)
     }
 
+    /// `--field-size` means nothing without `--field`. Another valid operation
+    /// is given so the refusal cannot come from the no-operation check.
+    func testApplyFieldSizeWithoutFieldIsAUsageError() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        try makeForm(at: form)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path,
+            "--checkbox-font", "標楷體", "--field-size", "12",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("--field-size 需要搭配 --field"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
     func testApplyTickListAndInsertAfter() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")
@@ -209,5 +253,22 @@ final class WordFormCommandTests: XCTestCase {
             slots: [SlotDesignation(name: "applicant", paraId: "0000C0DE"),
                     SlotDesignation(name: "intro", paraId: "0000B0D1")])
         XCTAssertEqual(try String(contentsOf: script, encoding: .utf8), expected)
+    }
+
+    /// The same numbering degradation is reported on the reverse path, so a
+    /// list-checkbox slot does not lose its note without a trace.
+    func testReverseNotesAnUnreadableNumberingPart() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let script = dir.appendingPathComponent("form.mdocx.swift")
+        let broken = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<w:numbering xmlns:w=\"\(Self.w)\"><w:abstractNum w:abstractNumId=\"0\"><w:lvl w:ilvl=\"0\">"
+            + "<w:lvlText w:val=\"\u{25A1}\" w:val=\"%1.\"/></w:lvl></w:abstractNum><w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num></w:numbering>"
+        try makeForm(at: form, numberingOverride: broken)
+        let result = try CLITestHelper.run([
+            "word", "reverse", form.path, "--to-mdocx", script.path, "--slot", "choice=0000A0A0",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("word/numbering.xml 無法解析"), result.stderr)
     }
 }

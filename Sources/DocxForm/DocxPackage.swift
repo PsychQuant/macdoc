@@ -3,8 +3,9 @@
 //
 // Only `word/document.xml` changes; every other entry is copied with its
 // uncompressed content unchanged and in its original order. The output is
-// written to a temporary file next to the destination and renamed into place,
-// so a failure never leaves a half-written file at the output path.
+// written to a temporary file in a private directory next to the destination
+// and renamed into place, so a failure never leaves a half-written file at the
+// output path.
 
 import Foundation
 import ZIPFoundation
@@ -130,6 +131,13 @@ public enum DocxPackage {
         }
     }
 
+    /// True when anything occupies `path`, including a symbolic link whose
+    /// target is missing (lstat does not follow the link).
+    static func pathExists(_ path: String) -> Bool {
+        var info = stat()
+        return lstat(path, &info) == 0
+    }
+
     /// Without force the rename itself refuses an existing destination
     /// (RENAME_EXCL), so a file created after the first check is never replaced.
     /// Filesystems without exclusive rename (exFAT, FAT, some network volumes)
@@ -148,7 +156,7 @@ public enum DocxPackage {
         guard code == ENOTSUP || code == EINVAL else {
             throw DocxPackageError.writeFailed(String(cString: strerror(code)))
         }
-        if FileManager.default.fileExists(atPath: output.path) { throw DocxPackageError.outputExists(output.path) }
+        if pathExists(output.path) { throw DocxPackageError.outputExists(output.path) }
         guard rename(temp.path, output.path) == 0 else {
             throw DocxPackageError.writeFailed(String(cString: strerror(errno)))
         }
@@ -161,7 +169,7 @@ public enum DocxPackage {
     public static func rewriteDocument(input: URL, output: URL, force: Bool,
                                        transform: (_ documentXML: Data, _ entries: [Entry]) throws -> Data) throws {
         let fm = FileManager.default
-        if !force, fm.fileExists(atPath: output.path) { throw DocxPackageError.outputExists(output.path) }
+        if !force, pathExists(output.path) { throw DocxPackageError.outputExists(output.path) }
         let entries = try read(from: input)
         guard let document = entries.first(where: { $0.path == documentPart }) else {
             throw DocxPackageError.missingPart(documentPart)
@@ -172,18 +180,26 @@ public enum DocxPackage {
                 ? Entry(path: entry.path, data: newDocument, isDirectory: false, modificationDate: entry.modificationDate)
                 : entry
         }
-        let temp = output.deletingLastPathComponent()
-            .appendingPathComponent(".\(output.lastPathComponent).\(UUID().uuidString).tmp")
-        do {
-            try write(rewritten, to: temp)
-            // The output keeps the input's permission bits (a 0600 form stays 0600).
-            if let mode = try? fm.attributesOfItem(atPath: input.path)[.posixPermissions] {
-                try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: temp.path)
-            }
-            try moveIntoPlace(temp, output, force: force)
-        } catch {
-            try? fm.removeItem(at: temp)
-            throw error
+        // The package is written inside a private staging directory next to
+        // the output: created 0700, so the content is never readable by other
+        // users while it is written, and the file inside has a short fixed
+        // name, so a long output name cannot push it past the name limit. It
+        // sits on the output's filesystem, so the final rename stays atomic.
+        let staging = output.deletingLastPathComponent().appendingPathComponent(".macdoc-form-\(UUID().uuidString)")
+        guard mkdir(staging.path, 0o700) == 0 else {
+            throw DocxPackageError.writeFailed(String(cString: strerror(errno)))
         }
+        defer { try? fm.removeItem(at: staging) }
+        let temp = staging.appendingPathComponent("out.docx")
+        try write(rewritten, to: temp)
+        // The output keeps the input's permission bits (a 0600 form stays 0600).
+        if let mode = try? fm.attributesOfItem(atPath: input.path)[.posixPermissions] {
+            do {
+                try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: temp.path)
+            } catch {
+                throw DocxPackageError.writeFailed(error.localizedDescription)
+            }
+        }
+        try moveIntoPlace(temp, output, force: force)
     }
 }

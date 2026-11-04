@@ -35,14 +35,25 @@ public enum FormClassifier {
     /// False when `word/numbering.xml` cannot be parsed; classification then
     /// runs with list-checkbox detection disabled instead of failing.
     public static func isReadableNumbering(_ xml: [UInt8]) -> Bool {
-        (try? NumberingLevels(xml: xml)) != nil
+        numberingLevels(xml) != nil
+    }
+
+    /// The numbering levels, or nil when the part is not well-formed XML.
+    /// The tag index only checks tag pairing, so the part goes through a real
+    /// XML parser first (duplicate attributes, bad entities and the like).
+    static func numberingLevels(_ xml: [UInt8]?) -> NumberingLevels? {
+        guard let xml else { return nil }
+        let parser = XMLParser(data: Data(xml))
+        parser.shouldResolveExternalEntities = false
+        guard parser.parse() else { return nil }
+        return try? NumberingLevels(xml: xml)
     }
 
     /// Every paragraph that carries a `w14:paraId`, in document order. An
     /// unreadable numbering part disables list-checkbox detection only.
     public static func classify(documentXML: [UInt8], numberingXML: [UInt8]?) throws -> [ClassifiedParagraph] {
         let index = try XMLTagIndex(documentXML)
-        let numbering = numberingXML.flatMap { try? NumberingLevels(xml: $0) }
+        let numbering = numberingLevels(numberingXML)
         var out: [ClassifiedParagraph] = []
         for p in index.elements(named: "w:p") {
             guard let id = index.attribute("w14:paraId", of: p) else { continue }
@@ -57,7 +68,7 @@ public enum FormClassifier {
     /// Ids that are missing or ambiguous are left out.
     public static func kinds(of paraIds: [String], documentXML: [UInt8], numberingXML: [UInt8]?) throws -> [String: ParagraphKind] {
         let index = try XMLTagIndex(documentXML)
-        let numbering = numberingXML.flatMap { try? NumberingLevels(xml: $0) }
+        let numbering = numberingLevels(numberingXML)
         var out: [String: ParagraphKind] = [:]
         for id in paraIds {
             if case .found(let p) = FormLocator.paragraph(withId: id, in: index) {
@@ -74,8 +85,18 @@ public enum FormClassifier {
             return .listCheckbox
         }
         if containsBoxGlyph(ownText(of: p, in: index)) { return .checkboxLine }
-        if index.ancestor(of: p, named: "w:tc") != nil { return .tableField }
+        if enclosingCell(of: p, in: index) != nil { return .tableField }
         return .body
+    }
+
+    /// The cell a paragraph belongs to: its nearest container, looking
+    /// through content-control and custom-XML wrappers, when that is a
+    /// `w:tc`. A paragraph in a text box anchored in a cell belongs to the
+    /// text box, not the cell.
+    static func enclosingCell(of p: Int, in index: XMLTagIndex) -> Int? {
+        guard let container = FormOperations.blockContainer(of: p, in: index),
+              index.tags[container].name == "w:tc" else { return nil }
+        return container
     }
 
     /// Visible text of the paragraph itself (not of paragraphs nested in text boxes).

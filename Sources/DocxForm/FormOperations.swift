@@ -31,7 +31,7 @@ enum FormOperations {
 
     static func checkField(_ id: String, in index: XMLTagIndex) throws {
         let p = try locate(id, in: index)
-        guard index.ancestor(of: p, named: "w:tc") != nil else { throw FormError.notInTableCell(id) }
+        guard FormClassifier.enclosingCell(of: p, in: index) != nil else { throw FormError.notInTableCell(id) }
     }
 
     static func checkTick(_ id: String, in index: XMLTagIndex) throws {
@@ -211,7 +211,7 @@ enum FormOperations {
         }
 
         // The enclosing cell is vertically centred.
-        let tc = index.ancestor(of: p, named: "w:tc")!
+        let tc = FormClassifier.enclosingCell(of: p, in: index)!
         let vAlign = "<w:vAlign w:val=\"center\"/>"
         if let tcPr = index.child(of: tc, named: "w:tcPr") {
             edits.append(.replace(index.elementRange(tcPr),
@@ -251,6 +251,10 @@ enum FormOperations {
             guard FormClassifier.containsBoxGlyph(text) else { continue }
             let others = kids.filter { index.tags[$0].name != "w:t" && index.tags[$0].name != "w:rPr" }
             guard texts.count == 1, others.isEmpty else { skipped += 1; continue }
+            // A native checkbox content control redraws its glyph from the
+            // fonts in w14:checkedState / w14:uncheckedState when toggled, so
+            // re-fonting the run alone would not hold; leave it and count it.
+            if insideCheckboxControl(r, in: index) { skipped += 1; continue }
 
             let opening = index.openingTagString(r)
             let rPr = ownRPr(of: r, in: index).map { index.elementString($0) }
@@ -274,6 +278,19 @@ enum FormOperations {
         }
         try editor.apply(edits)
         return skipped
+    }
+
+    /// True when an enclosing `w:sdt` declares `w14:checkbox` in its `w:sdtPr`.
+    static func insideCheckboxControl(_ element: Int, in index: XMLTagIndex) -> Bool {
+        var current = index.tags[element].parent
+        while let c = current {
+            if index.tags[c].name == "w:sdt", let sdtPr = index.child(of: c, named: "w:sdtPr"),
+               index.child(of: sdtPr, named: "w14:checkbox") != nil {
+                return true
+            }
+            current = index.tags[c].parent
+        }
+        return false
     }
 
     struct Segment: Equatable {
@@ -385,6 +402,19 @@ enum FormOperations {
                 }
             }
         }
-        try editor.apply([.replace(cut..<bodyEnd, with: section)])
+        // When the kept content ends with its own section break, the cut
+        // removed a whole section. Keeping both would leave a final section
+        // with no content (an extra blank page), so the kept break becomes the
+        // body's final w:sectPr and the removed range's one is dropped.
+        var edits: [Edit] = []
+        let kept = flattenBlocks(index.children(of: body).filter { index.tags[$0].start < cut }, in: index)
+        if let last = kept.last, index.tags[last].name == "w:p", let own = ownSectPr(of: last, in: index),
+           let pPr = ownPPr(of: last, in: index) {
+            section = index.elementString(own)
+            edits.append(.replace(index.elementRange(pPr),
+                                  with: try Fragment.removeChildren(index.elementString(pPr), named: ["w:sectPr"])))
+        }
+        edits.append(.replace(cut..<bodyEnd, with: section))
+        try editor.apply(edits)
     }
 }

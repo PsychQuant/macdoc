@@ -61,9 +61,14 @@ extension MacDoc.Word.Form {
             }
         }
 
-        /// First 30 characters, tabs and line breaks replaced by spaces.
+        /// First 30 characters with every control character (tab, line
+        /// breaks, ESC and the rest of C0/C1) replaced by a space, so document
+        /// text cannot drive the terminal.
         static func preview(_ text: String) -> String {
-            String(text.prefix(30)).map { $0 == "\t" || $0 == "\n" || $0 == "\r" ? " " : String($0) }.joined()
+            let scalars = String(text.prefix(30)).unicodeScalars.map { scalar -> Unicode.Scalar in
+                scalar.properties.generalCategory == .control ? " " : scalar
+            }
+            return String(String.UnicodeScalarView(scalars))
         }
     }
 
@@ -186,7 +191,11 @@ enum SlotFollowUp {
                                                     documentXML: Array(document), numberingXML: numbering) else {
             return []
         }
-        return designations.compactMap { slot in
+        // Same degradation as classify, and said the same way: a list
+        // checkbox slot would otherwise lose its note without a trace.
+        let numberingNote = numbering.map { FormClassifier.isReadableNumbering($0) } == false
+            ? ["note: \(DocxPackage.numberingPart) 無法解析，略過 list-checkbox 判定"] : []
+        return numberingNote + designations.compactMap { slot in
             guard let kind = kinds[slot.paraId], let option = option(for: kind, paraId: slot.paraId) else { return nil }
             return "note: slot「\(slot.name)」（\(slot.paraId)）是 \(kind.rawValue)；render 之後可用 macdoc word form apply \(option) 整理格式"
         }
