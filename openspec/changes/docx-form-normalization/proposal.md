@@ -29,4 +29,5 @@ Filling a table-dense official form with swiftify puts every value in the right 
   - Modified: Package.swift, Sources/MacDocCLI/MacDoc+Word.swift, cli-spec.yaml, plugins/macdoc/skills/swiftify/SKILL.md, plugins/macdoc/skills/macdoc/SKILL.md, plugins/macdoc/CHANGELOG.md
   - Removed: (none)
 - Dependencies: ZIPFoundation (already a direct dependency of the package).
-- Assumption (unattended, challenge in review): when `--field-size` is omitted, the size is the most common explicit run size across the designated fields, ties going to the larger size; the issue asks for one size per table but does not say which.
+- Field size default (confirmed by the maintainer on 2026-11-04, previously an unattended assumption): when `--field-size` is omitted, the size is the most common explicit run size across the designated fields, ties going to the larger size. Left alignment is `w:jc w:val="left"`, and the box glyphs are exactly □ ■ ☐ ☑ ☒.
+- Deferred to PsychQuant/macdoc#250: a whole-table pass (label cells untouched) and removal of a whole table in the middle of the body.

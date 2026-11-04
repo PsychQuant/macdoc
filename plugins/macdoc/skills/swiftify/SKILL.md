@@ -116,7 +116,7 @@ MCP：`execute_script(..., verify_byte_equal_against: "form.docx")`
 
 **沒給參考檔就不會驗，也不會有任何驗證輸出。** MCP 這邊對應的是：回應**不會有** `verified` / `broken_parts` 欄位。只檢查 `broken_parts` 是否為空的 client 會把「沒驗」讀成「驗過且乾淨」——要判斷驗證結果，先確認 `verified` 欄位存在。
 
-### 6. Normalize — 整理已填的表單（選用，CLI 0.17.0+，尚未發布）
+### 6. Normalize — 整理已填的表單（選用，需要下一版 CLI，尚未發布）
 
 slot 只換字，不碰段落所在的儲存格、方框的字型或周圍的段落，所以範本本身的不一致會留在填好的輸出裡：欄位字級不同、帶註解文字樣式或首行縮排、分散對齊、儲存格沒有垂直置中、多餘空段落把值擠到中線上方、方框跟 Latin 字同一個 run 時被畫得比較小。第 6 步在 render **之後**用 `macdoc word form apply` 整理（PsychQuant/macdoc#249）：
 
@@ -258,7 +258,7 @@ macdoc word render 範本-slot.mdocx.swift --to-docx 已填-1.docx
 填好之後版面若參差（字級不一、沒置中、方框大小不同），接第 6 步整理：
 
 ```bash
-# 5. 整理填寫欄與方框（即上面工作流的第 6 步；CLI 0.17.0+，輸出同樣用新路徑）
+# 5. 整理填寫欄與方框（即上面工作流的第 6 步；需要下一版 CLI，輸出同樣用新路徑）
 macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx --field <paraId> --checkbox-font 標楷體
 ```
 

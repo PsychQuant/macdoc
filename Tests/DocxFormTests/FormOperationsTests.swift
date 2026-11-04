@@ -73,6 +73,14 @@ final class FormOperationsTests: XCTestCase {
         for kept in ["0000E011", "0000E012", "0000E013"] { XCTAssertTrue(out.contains(kept), kept) }
     }
 
+    func testCellWithAContentControlKeepsItsSiblings() throws {
+        let field = TestXML.paragraph("0000F020", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
+        let wrapped = "<w:sdt><w:sdtPr/><w:sdtContent>" + TestXML.paragraph("0000F021", TestXML.run("控制項")) + "</w:sdtContent></w:sdt>"
+        let out = TestXML.string(try apply(TestXML.table([TestXML.cell(field + wrapped + TestXML.paragraph("0000E020"))]),
+                                           FormPlan(fields: ["0000F020"])))
+        XCTAssertTrue(out.contains("0000E020"), "cleanup skipped when the cell holds a content control")
+    }
+
     func testCellWithNestedTableKeepsItsSiblings() throws {
         let field = TestXML.paragraph("0000F004", TestXML.run("值", rPr: "<w:rPr><w:sz w:val=\"24\"/></w:rPr>"))
         let empty = TestXML.paragraph("0000E002")
@@ -196,6 +204,15 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertFalse(TestXML.string(out).contains("CDATA"))
     }
 
+    func testSplitRunWithTrackedFormattingIsLeftAloneAndCounted() throws {
+        let run = "<w:r><w:rPr><w:b/><w:rPrChange w:id=\"8\" w:author=\"a\"><w:rPr/></w:rPrChange></w:rPr><w:t>A\u{25A1}B</w:t></w:r>"
+        let body = TestXML.paragraph("0000C010", run)
+        let result = try FormPlan(checkboxFont: "標楷體").apply(toDocumentXML: TestXML.document(body))
+        XCTAssertEqual(result.skippedCheckboxRuns, 1)
+        XCTAssertEqual(TestXML.string(result.documentXML).components(separatedBy: "<w:rPrChange").count - 1, 1)
+        XCTAssertEqual(TestXML.string(result.documentXML), TestXML.string(TestXML.document(body)))
+    }
+
     func testFontNameIsEscaped() throws {
         let body = TestXML.paragraph("0000C004", TestXML.run("\u{25A1}"))
         let out = try apply(body, FormPlan(checkboxFont: "A&B \"C\""))
@@ -233,6 +250,14 @@ final class FormOperationsTests: XCTestCase {
         let paragraph = try TestXML.paragraphXML("0000T002", in: out)
         XCTAssertTrue(paragraph.contains("<w:r><w:rPr><w:sz w:val=\"20\"/></w:rPr><w:t>\u{25A0}</w:t></w:r>"))
         XCTAssertEqual(paragraph.components(separatedBy: "w:ins").count - 1, 1, "only the mark keeps w:ins")
+    }
+
+    func testTickDoesNotCopyTrackedFormatting() throws {
+        let rPr = "<w:rPr><w:b/><w:rPrChange w:id=\"9\" w:author=\"a\"><w:rPr/></w:rPrChange></w:rPr>"
+        let body = TestXML.paragraph("0000T010", pPr: TestXML.numbered, TestXML.run("選項", rPr: rPr))
+        let out = TestXML.string(try apply(body, FormPlan(tickList: ["0000T010"])))
+        XCTAssertTrue(out.contains("<w:r><w:rPr><w:b/></w:rPr><w:t>\u{25A0}</w:t></w:r>"))
+        XCTAssertEqual(out.components(separatedBy: "<w:rPrChange").count - 1, 1, "the original run keeps its own")
     }
 
     func testTickWithNumberingIdZeroIsRefused() {
@@ -317,6 +342,23 @@ final class FormOperationsTests: XCTestCase {
         }
     }
 
+    func testRemoveOnlyParagraphInsideAContentControlIsRefused() {
+        let wrapped = "<w:sdt><w:sdtPr/><w:sdtContent>" + TestXML.paragraph("0000R030", TestXML.run("值")) + "</w:sdtContent></w:sdt>"
+        let body = TestXML.table([TestXML.cell(wrapped)])
+        XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R030"]))) {
+            XCTAssertEqual($0 as? FormError, .onlyParagraphInCell("0000R030"))
+        }
+    }
+
+    /// A cell may end with a content control that holds a paragraph.
+    func testRemoveBeforeAWrappedLastParagraphIsAllowed() throws {
+        let wrapped = "<w:sdt><w:sdtPr/><w:sdtContent>" + TestXML.paragraph("0000R032", TestXML.run("值")) + "</w:sdtContent></w:sdt>"
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000R031", TestXML.run("刪")) + wrapped)])
+        let out = TestXML.string(try apply(body, FormPlan(removals: ["0000R031"])))
+        XCTAssertFalse(out.contains("0000R031"))
+        XCTAssertTrue(out.contains("0000R032"))
+    }
+
     func testRemoveNamedParagraph() throws {
         let body = TestXML.paragraph("0000R003", TestXML.run("說明：請勿填寫")) + TestXML.paragraph("0000R004", TestXML.run("內容"))
         let out = try apply(body, FormPlan(removals: ["0000R003"]))
@@ -357,6 +399,14 @@ final class FormOperationsTests: XCTestCase {
             + TestXML.paragraph("0000P022", TestXML.run("P3")) + s2
         let out = try apply(body, FormPlan(truncateFrom: "0000P021"))
         XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(TestXML.paragraph("0000P020", TestXML.run("P1")) + s2)))
+    }
+
+    func testTruncateFindsASectionBreakInsideABodyLevelContentControl() throws {
+        let wrapped = "<w:sdt><w:sdtPr/><w:sdtContent>"
+            + TestXML.paragraph("0000P031", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("控制項內")) + "</w:sdtContent></w:sdt>"
+        let body = TestXML.paragraph("0000P030", TestXML.run("P1")) + TestXML.paragraph("0000P032", TestXML.run("切點")) + wrapped + s2
+        let out = try apply(body, FormPlan(truncateFrom: "0000P032"))
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(TestXML.paragraph("0000P030", TestXML.run("P1")) + s1)))
     }
 
     func testTruncateInsideATableIsRefused() {

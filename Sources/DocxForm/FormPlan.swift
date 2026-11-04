@@ -151,6 +151,17 @@ public struct FormPlan: Equatable {
         if let id = removals.first(where: { edited.contains($0) }) {
             throw FormError.conflictingOperations(id, detail: "--remove 會刪掉 --field / --tick-list / --insert-after 處理過的段落")
         }
+        // A named paragraph nested inside a removed one (for example in a
+        // text box) would disappear with it while the command reports success.
+        for removed in removals {
+            let range = index.elementRange(try FormOperations.locate(removed, in: index))
+            for id in namedIds where id != removed {
+                let start = index.tags[try FormOperations.locate(id, in: index)].start
+                if range.contains(start) {
+                    throw FormError.conflictingOperations(id, detail: "位在 --remove \(removed) 會刪掉的段落裡（例如文字方塊）")
+                }
+            }
+        }
         guard let cutId = truncateFrom else { return }
         if edited.contains(cutId) || removals.contains(cutId) {
             throw FormError.conflictingOperations(cutId, detail: "--truncate-from 會把這一段一起截掉")

@@ -59,6 +59,15 @@ final class FormClassifierTests: XCTestCase {
         XCTAssertEqual(result.map(\.kind), [.body])
     }
 
+    func testMalformedNumberingOnlyDisablesListDetection() throws {
+        let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000M001", TestXML.run("值")))])
+            + TestXML.paragraph("0000M002", pPr: TestXML.numbered, TestXML.run("選項"))
+        let broken = Array("<w:numbering><w:num>".utf8)
+        XCTAssertFalse(FormClassifier.isReadableNumbering(broken))
+        let result = try FormClassifier.classify(documentXML: TestXML.document(body), numberingXML: broken)
+        XCTAssertEqual(result.map(\.kind), [.tableField, .body])
+    }
+
     func testParagraphsWithoutParaIdAreNotListed() throws {
         let body = TestXML.paragraph(nil, TestXML.run("沒有 id")) + TestXML.paragraph("0000000A", TestXML.run("有 id"))
         let result = try FormClassifier.classify(documentXML: TestXML.document(body), numberingXML: nil)

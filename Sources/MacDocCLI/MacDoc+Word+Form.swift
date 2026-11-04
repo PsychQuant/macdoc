@@ -45,6 +45,10 @@ extension MacDoc.Word.Form {
                     throw DocxPackageError.missingPart(DocxPackage.documentPart)
                 }
                 let numbering = entries.first { $0.path == DocxPackage.numberingPart }
+                if let numbering, !FormClassifier.isReadableNumbering(Array(numbering.data)) {
+                    FileHandle.standardError.write(Data(
+                        "note: \(DocxPackage.numberingPart) 無法解析，略過 list-checkbox 判定\n".utf8))
+                }
                 let paragraphs = try FormClassifier.classify(documentXML: Array(document.data),
                                                              numberingXML: numbering.map { Array($0.data) })
                 for paragraph in paragraphs {

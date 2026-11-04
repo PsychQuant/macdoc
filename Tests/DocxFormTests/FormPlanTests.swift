@@ -61,6 +61,22 @@ final class FormPlanTests: XCTestCase {
         }
     }
 
+    /// A paragraph in a text box lives inside its outer paragraph's element:
+    /// removing the outer one would silently take the inner one with it.
+    func testNamedParagraphNestedInsideARemovedParagraphIsAConflict() {
+        let textBox = "<w:r><w:drawing><wp:inline><w:txbxContent>"
+            + TestXML.paragraph("0000K021", TestXML.run("文字方塊")) + "</w:txbxContent></wp:inline></w:drawing></w:r>"
+        let body = TestXML.paragraph("0000K020", TestXML.run("外層") + textBox) + TestXML.paragraph("0000K022", TestXML.run("後"))
+        let insert = FormPlan(insertions: [FormInsertion(anchor: "0000K021", text: "新")], removals: ["0000K020"])
+        XCTAssertThrowsError(try insert.apply(toDocumentXML: TestXML.document(body))) {
+            guard case .conflictingOperations("0000K021", _) = $0 as? FormError else { return XCTFail("\($0)") }
+        }
+        let nestedRemoval = FormPlan(removals: ["0000K020", "0000K021"])
+        XCTAssertThrowsError(try nestedRemoval.apply(toDocumentXML: TestXML.document(body))) {
+            guard case .conflictingOperations("0000K021", _) = $0 as? FormError else { return XCTFail("\($0)") }
+        }
+    }
+
     func testOverlappingEditsThrowInsteadOfTrapping() throws {
         var editor = try XMLEditor(Array("<a><b/></a>".utf8))
         XCTAssertThrowsError(try editor.apply([.replace(0..<6, with: "x"), .replace(3..<7, with: "y")])) {

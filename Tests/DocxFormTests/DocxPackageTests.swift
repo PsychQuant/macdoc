@@ -73,6 +73,39 @@ final class DocxPackageTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(), ["in.docx", "out.docx"])
     }
 
+    /// Filesystems without exclusive rename (exFAT, FAT) return ENOTSUP; the
+    /// write falls back to an existence check plus a plain rename.
+    func testRenameFallsBackWhenExclusiveRenameIsUnsupported() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        let saved = DocxPackage.exclusiveRename
+        DocxPackage.exclusiveRename = { _, _ in errno = ENOTSUP; return -1 }
+        defer { DocxPackage.exclusiveRename = saved }
+        try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in d }
+        XCTAssertEqual(try DocxPackage.read(from: output).count, 5)
+        let second = dir.appendingPathComponent("out2.docx")
+        XCTAssertThrowsError(try DocxPackage.rewriteDocument(input: input, output: second, force: false) { d, _ in
+            try Data("someone else".utf8).write(to: second)
+            return d
+        }) {
+            XCTAssertEqual($0 as? DocxPackageError, .outputExists(second.path))
+        }
+        XCTAssertEqual(try Data(contentsOf: second), Data("someone else".utf8))
+    }
+
+    func testOutputKeepsTheInputPermissions() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: input.path)
+        try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in d }
+        let mode = try FileManager.default.attributesOfItem(atPath: output.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+    }
+
     func testSymbolicLinkEntryIsRefused() throws {
         let dir = try tempDir()
         let input = dir.appendingPathComponent("in.docx")

@@ -32,10 +32,17 @@ public enum FormClassifier {
         s.unicodeScalars.contains { boxGlyphs.contains($0) }
     }
 
-    /// Every paragraph that carries a `w14:paraId`, in document order.
+    /// False when `word/numbering.xml` cannot be parsed; classification then
+    /// runs with list-checkbox detection disabled instead of failing.
+    public static func isReadableNumbering(_ xml: [UInt8]) -> Bool {
+        (try? NumberingLevels(xml: xml)) != nil
+    }
+
+    /// Every paragraph that carries a `w14:paraId`, in document order. An
+    /// unreadable numbering part disables list-checkbox detection only.
     public static func classify(documentXML: [UInt8], numberingXML: [UInt8]?) throws -> [ClassifiedParagraph] {
         let index = try XMLTagIndex(documentXML)
-        let numbering = try numberingXML.map { try NumberingLevels(xml: $0) }
+        let numbering = numberingXML.flatMap { try? NumberingLevels(xml: $0) }
         var out: [ClassifiedParagraph] = []
         for p in index.elements(named: "w:p") {
             guard let id = index.attribute("w14:paraId", of: p) else { continue }
@@ -50,7 +57,7 @@ public enum FormClassifier {
     /// Ids that are missing or ambiguous are left out.
     public static func kinds(of paraIds: [String], documentXML: [UInt8], numberingXML: [UInt8]?) throws -> [String: ParagraphKind] {
         let index = try XMLTagIndex(documentXML)
-        let numbering = try numberingXML.map { try NumberingLevels(xml: $0) }
+        let numbering = numberingXML.flatMap { try? NumberingLevels(xml: $0) }
         var out: [String: ParagraphKind] = [:]
         for id in paraIds {
             if case .found(let p) = FormLocator.paragraph(withId: id, in: index) {

@@ -45,6 +45,12 @@ public enum DocxPackage {
     public static let documentPart = "word/document.xml"
     public static let numberingPart = "word/numbering.xml"
 
+    /// Exclusive rename (fails with EEXIST when the destination exists). A seam
+    /// so tests can simulate filesystems without RENAME_EXCL support.
+    static var exclusiveRename: (String, String) -> Int32 = { from, to in
+        renamex_np(from, to, UInt32(RENAME_EXCL))
+    }
+
     /// Total uncompressed bytes accepted when reading a package.
     public static let maxTotalBytes: Int64 = 512 * 1_048_576
 
@@ -124,6 +130,30 @@ public enum DocxPackage {
         }
     }
 
+    /// Without force the rename itself refuses an existing destination
+    /// (RENAME_EXCL), so a file created after the first check is never replaced.
+    /// Filesystems without exclusive rename (exFAT, FAT, some network volumes)
+    /// return ENOTSUP or EINVAL; there an existence check immediately before a
+    /// plain rename is the best available, and the race window remains.
+    static func moveIntoPlace(_ temp: URL, _ output: URL, force: Bool) throws {
+        if force {
+            guard rename(temp.path, output.path) == 0 else {
+                throw DocxPackageError.writeFailed(String(cString: strerror(errno)))
+            }
+            return
+        }
+        if exclusiveRename(temp.path, output.path) == 0 { return }
+        let code = errno
+        if code == EEXIST { throw DocxPackageError.outputExists(output.path) }
+        guard code == ENOTSUP || code == EINVAL else {
+            throw DocxPackageError.writeFailed(String(cString: strerror(code)))
+        }
+        if FileManager.default.fileExists(atPath: output.path) { throw DocxPackageError.outputExists(output.path) }
+        guard rename(temp.path, output.path) == 0 else {
+            throw DocxPackageError.writeFailed(String(cString: strerror(errno)))
+        }
+    }
+
     /// Reads `input`, replaces `word/document.xml` with `transform`'s result,
     /// and writes the package to `output` atomically. Without `force` an
     /// existing output is refused before any work and again just before the
@@ -146,16 +176,11 @@ public enum DocxPackage {
             .appendingPathComponent(".\(output.lastPathComponent).\(UUID().uuidString).tmp")
         do {
             try write(rewritten, to: temp)
-            // Without --force the rename itself refuses an existing destination
-            // (RENAME_EXCL), so a file created after the first check is never
-            // replaced; with --force a plain rename replaces it atomically.
-            let status = force
-                ? rename(temp.path, output.path)
-                : renamex_np(temp.path, output.path, UInt32(RENAME_EXCL))
-            guard status == 0 else {
-                if !force, errno == EEXIST { throw DocxPackageError.outputExists(output.path) }
-                throw DocxPackageError.writeFailed(String(cString: strerror(errno)))
+            // The output keeps the input's permission bits (a 0600 form stays 0600).
+            if let mode = try? fm.attributesOfItem(atPath: input.path)[.posixPermissions] {
+                try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: temp.path)
             }
+            try moveIntoPlace(temp, output, force: force)
         } catch {
             try? fm.removeItem(at: temp)
             throw error

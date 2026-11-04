@@ -43,17 +43,42 @@ enum FormOperations {
     static func checkRemove(_ id: String, in index: XMLTagIndex) throws {
         let p = try locate(id, in: index)
         if ownSectPr(of: p, in: index) != nil { throw FormError.carriesSectionBreak(id) }
-        if let parent = index.tags[p].parent, index.tags[parent].name == "w:tc" {
-            let blocks = index.children(of: parent).filter { index.tags[$0].name != "w:tcPr" }
-            let paragraphs = blocks.filter { index.tags[$0].name == "w:p" }
-            if paragraphs.count <= 1 { throw FormError.onlyParagraphInCell(id) }
-            // A cell must end with a paragraph; removing the last one after a
-            // nested table would leave it ending with the table.
-            let remaining = blocks.filter { $0 != p }
-            if let last = remaining.last, index.tags[last].name != "w:p" {
-                throw FormError.cellWouldEndWithoutParagraph(id)
+        // Cells (and text boxes) must keep at least one paragraph and end with
+        // one. Their blocks are counted through content-control and custom-XML
+        // wrappers, so a wrapped paragraph is guarded like a direct one.
+        guard let container = blockContainer(of: p, in: index),
+              ["w:tc", "w:txbxContent"].contains(index.tags[container].name) else { return }
+        let blocks = flattenBlocks(index.children(of: container), in: index)
+        guard blocks.contains(p) else { return }
+        if blocks.filter({ index.tags[$0].name == "w:p" }).count <= 1 { throw FormError.onlyParagraphInCell(id) }
+        if let last = blocks.filter({ $0 != p }).last, index.tags[last].name != "w:p" {
+            throw FormError.cellWouldEndWithoutParagraph(id)
+        }
+    }
+
+    /// Block-level wrappers that do not change which container a paragraph belongs to.
+    static let blockWrappers: Set<String> = ["w:sdt", "w:sdtContent", "w:customXml"]
+
+    /// Nearest ancestor that is not a block wrapper.
+    static func blockContainer(of element: Int, in index: XMLTagIndex) -> Int? {
+        var current = index.tags[element].parent
+        while let c = current, blockWrappers.contains(index.tags[c].name) { current = index.tags[c].parent }
+        return current
+    }
+
+    /// Paragraphs and tables among `elements`, looking through block wrappers,
+    /// in document order.
+    static func flattenBlocks(_ elements: [Int], in index: XMLTagIndex) -> [Int] {
+        var out: [Int] = []
+        for e in elements {
+            switch index.tags[e].name {
+            case "w:p", "w:tbl": out.append(e)
+            case "w:sdt": out += flattenBlocks(index.children(of: e).filter { index.tags[$0].name == "w:sdtContent" }, in: index)
+            case "w:sdtContent", "w:customXml": out += flattenBlocks(index.children(of: e), in: index)
+            default: break
             }
         }
+        return out
     }
 
     static func checkTruncate(_ id: String, in index: XMLTagIndex) throws -> (paragraph: Int, body: Int) {
@@ -197,8 +222,10 @@ enum FormOperations {
         }
 
         // Paragraphs without content in the same cell push the value off centre.
-        let nestedTable = index.descendants(of: tc).contains { index.tags[$0].name == "w:tbl" }
-        if !nestedTable {
+        let nestedStructure = index.descendants(of: tc).contains {
+            ["w:tbl", "w:sdt", "w:customXml"].contains(index.tags[$0].name)
+        }
+        if !nestedStructure {
             for sibling in index.children(of: tc) where sibling != p && index.tags[sibling].name == "w:p" {
                 if let siblingId = index.attribute("w14:paraId", of: sibling), protected.contains(siblingId) { continue }
                 if ownSectPr(of: sibling, in: index) != nil || hasContent(sibling, in: index) { continue }
@@ -229,6 +256,12 @@ enum FormOperations {
             let rPr = ownRPr(of: r, in: index).map { index.elementString($0) }
             let boxRPr = try Fragment.rPrWithFont(rPr, font: font)
             let segments = splitBoxes(text)
+            // Splitting would copy a tracked formatting change (and its w:id)
+            // into every piece; leave such a run alone and count it instead.
+            if segments.count > 1, let props = ownRPr(of: r, in: index), index.child(of: props, named: "w:rPrChange") != nil {
+                skipped += 1
+                continue
+            }
             let rebuilt: String
             if segments.count == 1 {
                 rebuilt = opening + boxRPr + index.elementString(texts[0]) + "</w:r>"
@@ -281,7 +314,8 @@ enum FormOperations {
         let pPr = ownPPr(of: p, in: index)!
         let runProperties: String
         if let first = FormLocator.firstTextRun(of: p, in: index) {
-            runProperties = ownRPr(of: first, in: index).map { index.elementString($0) } ?? ""
+            runProperties = try ownRPr(of: first, in: index)
+                .map { try Fragment.removeChildren(index.elementString($0), named: ["w:rPrChange"]) } ?? ""
         } else if let mark = ownRPr(of: pPr, in: index) {
             runProperties = try Fragment.removeChildren(index.elementString(mark), named: revisionMarks)
         } else {
@@ -338,14 +372,17 @@ enum FormOperations {
         // w:pPr/w:sectPr, or the body's own w:sectPr. A w:sectPr kept inside
         // w:pPrChange is revision history and must not become the result.
         var section = ""
-        for child in index.children(of: body) where index.tags[child].start >= cut {
+        search: for child in index.children(of: body) where index.tags[child].start >= cut {
             if index.tags[child].name == "w:sectPr" {
                 section = index.elementString(child)
                 break
             }
-            if index.tags[child].name == "w:p", let own = ownSectPr(of: child, in: index) {
-                section = index.elementString(own)
-                break
+            // Body-level paragraphs, including those inside body-level content controls.
+            for paragraph in flattenBlocks([child], in: index) where index.tags[paragraph].name == "w:p" {
+                if let own = ownSectPr(of: paragraph, in: index) {
+                    section = index.elementString(own)
+                    break search
+                }
             }
         }
         try editor.apply([.replace(cut..<bodyEnd, with: section)])
