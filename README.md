@@ -4,24 +4,26 @@
 > - Token 計數／離線 GPT-4o 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `verified`，compiled executable 已在禁用網路並隔離 HOME／cache 的環境通過 `hello world` exact-byte acceptance；package suite 另以五組官方 Python `tiktoken` vectors 驗證 bundled `o200k_base`。
 > - Anthropic token-count transport 層：macOS 27.0（arm64）、Apple Swift 6.3.3；狀態為 `implemented-not-live-verified`，固定 endpoint、錯誤映射與資料遮蔽只以注入 transport 驗證，沒有呼叫 live Anthropic。
 > - Windows／Linux token 計數：macdoc CLI 與 `TokenCounter` package；狀態為 `not-supported`，目前 manifests 僅宣告 macOS 14+，不得由離線演算法外推 runtime 支援。
+> - `docflow` plugin（`doc-synth` skill）：只有提示詞、沒有 binary，不綁平台；`.docx` 的段落抽取要用 `che-word-mcp`（macOS），`.tex` 輸出的驗證要用 `xelatex`；狀態為 `prompt-only`，沒有自動化測試。
 > - 證據：`swift test --filter TokenCountCommandTests`、`swift test`（`packages/token-counter-swift`），以及 `Tests/MacDocCLITests/TokenCountCommandTests.swift`。
 
 原生 macOS 文件處理工具集，專注於文件格式轉換和 OCR。使用 Swift 開發，充分利用 Apple 平台原生能力（PDFKit、Vision.framework）。
 
 ## Claude Code Plugin Marketplace
 
-本 repo 同時是 Claude Code plugin marketplace，提供 macdoc 生態系的 4 個 plugins：
+本 repo 同時是 Claude Code plugin marketplace，提供 macdoc 生態系的 5 個 plugins：
 
 | Plugin | 內容 |
 |--------|------|
 | `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，242 工具） |
 | `che-pdf-mcp` | PDF MCP server（PDFKit 解析、Vision OCR） |
 | `che-pptx-mcp` | PowerPoint (.pptx) MCP server（PresentationML 解析與生成） |
+| `docflow` | 文件多版本的語意整合（`doc-synth` skill：.tex / .md / .ipynb / .docx 依段落維度取捨，並記錄每段來源） |
 | `macdoc` | macdoc CLI 使用指南 skill |
 
 ```bash
 claude plugin marketplace add PsychQuant/macdoc
-claude plugin install che-word-mcp@macdoc   # 或 che-pdf-mcp / che-pptx-mcp / macdoc
+claude plugin install che-word-mcp@macdoc   # 或 che-pdf-mcp / che-pptx-mcp / macdoc / docflow
 ```
 
 MCP plugins 的 wrapper 會自動從各 repo 的 GitHub Releases 下載 universal binary，並在安裝前**強制驗證** sha256 與 Developer ID 簽章鏈（Team `6W377FS7BS`）；驗證不過即拒裝。

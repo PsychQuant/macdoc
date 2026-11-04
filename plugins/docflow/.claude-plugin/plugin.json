@@ -1,0 +1,8 @@
+{
+  "name": "docflow",
+  "description": "Git-flow analog for documents — semantic synthesis, multi-version comparison, evidence-after-commit workflows for .tex / .md / .ipynb / .docx. v1.0.1 ships doc-synth skill (semantic merge between 2+ document versions, dimension-level take/leave decisions, provenance tracking, 3+ source Pattern α, cross-language edge case spec).",
+  "version": "1.0.1",
+  "author": {
+    "name": "Che Cheng"
+  }
+}
