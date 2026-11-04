@@ -1124,11 +1124,11 @@ commands:
         value_name: paraId
         required: false
         repeating: true
-        help: "移除段落（可重複）；儲存格唯一的段落與帶分節符的段落會拒絕"
+        help: "移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算）"
       - names: ["--truncate-from"]
         value_name: paraId
         required: false
-        help: "從本文的這一段刪到結尾；保留內容最後一段自帶分節符時沿用它，否則沿用被刪範圍第一個分節設定"
+        help: "從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定"
     flags:
       - names: ["--force"]
         required: false

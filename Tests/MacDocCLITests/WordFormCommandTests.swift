@@ -147,6 +147,24 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stdout.contains("0000B1D1\tbody\t甲 乙 丙"), result.stdout)
     }
 
+    /// Error messages quote names from the file (here a tag name holding the
+    /// C1 control U+0085); they reach stderr with control characters blanked.
+    func testErrorMessagesFromTheFileAreSanitized() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("broken.docx")
+        let document = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<w:document xmlns:w=\"\(Self.w)\"><w:body></a\u{85}b></w:body></w:document>"
+        try DocxPackage.write([.init(path: "word/document.xml", data: Data(document.utf8))], to: form)
+        for arguments in [["word", "form", "classify", form.path],
+                          ["word", "form", "apply", form.path, "--to-docx", dir.appendingPathComponent("o.docx").path,
+                           "--checkbox-font", "標楷體"]] {
+            let result = try CLITestHelper.run(arguments)
+            XCTAssertNotEqual(result.exitCode, 0, arguments.joined(separator: " "))
+            XCTAssertFalse(result.stderr.unicodeScalars.contains("\u{85}"), result.stderr)
+            XCTAssertTrue(result.stderr.contains("沒有對應的開始標籤"), result.stderr)
+        }
+    }
+
     func testClassifyMissingInput() throws {
         let result = try CLITestHelper.run(["word", "form", "classify", "/nonexistent/form.docx"])
         XCTAssertNotEqual(result.exitCode, 0)
@@ -234,6 +252,21 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertNotEqual(result.exitCode, 0)
         XCTAssertTrue(result.stderr.contains("--field-size 需要搭配 --field"), result.stderr)
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    /// The skipped-runs note names all three reasons and the count.
+    func testApplyNotesSkippedCheckboxRunsWithTheirReasons() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let tracked = "<w:r><w:rPr><w:rPrChange w:id=\"8\" w:author=\"a\"><w:rPr/></w:rPrChange></w:rPr><w:t>A\u{25A1}B</w:t></w:r>"
+        try makeForm(at: form, extraBody: paragraph("0000F00D", tracked))
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--checkbox-font", "標楷體",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("有 1 個含方框字元的 run 未改字型（另含其他內容、需要拆開但帶格式修訂，或在原生核取方塊內容控制項裡）"),
+                      result.stderr)
     }
 
     func testApplyTickListAndInsertAfter() throws {

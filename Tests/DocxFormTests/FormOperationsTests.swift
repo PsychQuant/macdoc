@@ -509,6 +509,16 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
     }
 
+    /// With only range markers before the cut, truncation would delete every
+    /// content block; it is refused like a cut at the first child.
+    func testTruncateWithOnlyMarkersBeforeTheCutIsRefused() {
+        let body = "<w:bookmarkStart w:id=\"1\" w:name=\"a\"/>" + TestXML.paragraph("0000P080", TestXML.run("第一段"))
+            + TestXML.paragraph("0000P081", TestXML.run("第二段")) + s2
+        XCTAssertThrowsError(try apply(body, FormPlan(truncateFrom: "0000P080"))) {
+            XCTAssertEqual($0 as? FormError, .firstBodyChild("0000P080"))
+        }
+    }
+
     /// A table after the kept break belongs to the last section, which is not empty.
     func testKeptTableAfterABreakKeepsTheRemovedRangeSection() throws {
         let body = TestXML.paragraph("0000P050", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P1"))

@@ -23,8 +23,34 @@ extension MacDoc.Word {
 
 /// Runtime failure of a form command: printed as `Error: <message>` without
 /// the usage text, exit code 1.
+/// A command failure. Messages quote names taken from the file (tag names,
+/// zip entry paths), so they are sanitized like the classify preview.
 struct FormCommandError: Error, CustomStringConvertible {
     let description: String
+
+    init(description: String) {
+        self.description = TerminalText.sanitize(description)
+    }
+}
+
+/// Replaces every control character (Cc), the line and paragraph separators
+/// and the bidirectional formatting characters with a space, so text from a
+/// document can neither drive nor reorder the terminal.
+enum TerminalText {
+    static let bidiControls: Set<Unicode.Scalar> = [
+        "\u{061C}", "\u{200E}", "\u{200F}", "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",
+        "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}",
+    ]
+
+    static func sanitize(_ text: String) -> String {
+        let scalars = text.unicodeScalars.map { scalar -> Unicode.Scalar in
+            switch scalar.properties.generalCategory {
+            case .control, .lineSeparator, .paragraphSeparator: return " "
+            default: return bidiControls.contains(scalar) ? " " : scalar
+            }
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
 }
 
 extension MacDoc.Word.Form {
@@ -77,25 +103,12 @@ extension MacDoc.Word.Form {
             }
         }
 
-        /// Bidirectional formatting characters: they can reorder what the
-        /// terminal shows without being control characters.
-        static let bidiControls: Set<Unicode.Scalar> = [
-            "\u{061C}", "\u{200E}", "\u{200F}", "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",
-            "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}",
-        ]
-
         /// First 30 characters with every control character (tab, line
         /// breaks, ESC and the rest of C0/C1), the line and paragraph
         /// separators and the bidirectional formatting characters replaced by
         /// a space, so document text cannot drive or reorder the terminal.
         static func preview(_ text: String) -> String {
-            let scalars = String(text.prefix(30)).unicodeScalars.map { scalar -> Unicode.Scalar in
-                switch scalar.properties.generalCategory {
-                case .control, .lineSeparator, .paragraphSeparator: return " "
-                default: return bidiControls.contains(scalar) ? " " : scalar
-                }
-            }
-            return String(String.UnicodeScalarView(scalars))
+            TerminalText.sanitize(String(text.prefix(30)))
         }
     }
 
@@ -139,12 +152,12 @@ extension MacDoc.Word.Form {
         var insertAfter: [String] = []
 
         @Option(name: .customLong("remove"),
-                help: ArgumentHelp("移除段落（可重複）；儲存格唯一的段落與帶分節符的段落會拒絕",
+                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算）",
                                    valueName: "paraId"))
         var remove: [String] = []
 
         @Option(name: .customLong("truncate-from"),
-                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容最後一段自帶分節符時沿用它，否則沿用被刪範圍第一個分節設定", valueName: "paraId"))
+                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定", valueName: "paraId"))
         var truncateFrom: String?
 
         func validate() throws {
@@ -192,6 +205,8 @@ extension MacDoc.Word.Form {
                 throw FormCommandError(description: error.description)
             } catch let error as DocxPackageError {
                 throw FormCommandError(description: error.description)
+            } catch let error as XMLScanError {
+                throw FormCommandError(description: FormError.malformedPart(error.description).description)
             }
             if let outcome {
                 if let size = outcome.fieldSize, outcome.fieldSizeWasDerived {

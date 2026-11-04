@@ -170,6 +170,10 @@ public enum DocxPackage {
                                        transform: (_ documentXML: Data, _ entries: [Entry]) throws -> Data) throws {
         let fm = FileManager.default
         if !force, pathExists(output.path) { throw DocxPackageError.outputExists(output.path) }
+        // The permission bits are taken once, before the package is read, and
+        // only the rwx bits: setuid, setgid and sticky are never copied.
+        let mode = (try? fm.attributesOfItem(atPath: input.path)[.posixPermissions] as? NSNumber)
+            .map { $0.intValue & 0o777 }
         let entries = try read(from: input)
         guard let document = entries.first(where: { $0.path == documentPart }) else {
             throw DocxPackageError.missingPart(documentPart)
@@ -193,7 +197,7 @@ public enum DocxPackage {
         let temp = staging.appendingPathComponent("out.docx")
         try write(rewritten, to: temp)
         // The output keeps the input's permission bits (a 0600 form stays 0600).
-        if let mode = try? fm.attributesOfItem(atPath: input.path)[.posixPermissions] {
+        if let mode {
             do {
                 try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: temp.path)
             } catch {

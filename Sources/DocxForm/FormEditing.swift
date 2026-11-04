@@ -49,7 +49,7 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
         case .notBodyChild(let id):
             return "段落 \(id) 不是 w:body 的直屬段落（可能在表格或內容控制項裡），不能用 --truncate-from"
         case .firstBodyChild(let id):
-            return "段落 \(id) 是本文第一個元素，從這裡截斷會刪掉整份本文"
+            return "段落 \(id) 之前沒有任何內容（是本文第一個元素，或前面只有書籤之類的標記），從這裡截斷會刪掉整份本文"
         case .noFieldSize:
             return "指定的填寫欄都沒有明確字級，無法決定統一字級；請用 --field-size 指定（單位 pt）"
         case .invalidFieldSize(let value):

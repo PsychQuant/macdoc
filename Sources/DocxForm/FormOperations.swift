@@ -115,7 +115,10 @@ enum FormOperations {
         guard let body = index.tags[p].parent, index.tags[body].name == "w:body" else {
             throw FormError.notBodyChild(id)
         }
-        if index.children(of: body).first == p { throw FormError.firstBodyChild(id) }
+        // Nothing but range markers before the cut means every content block
+        // would go; that is the same as cutting at the first child.
+        let before = index.children(of: body).filter { index.tags[$0].start < index.tags[p].start }
+        if contentBlocks(before, in: index).isEmpty { throw FormError.firstBodyChild(id) }
         return (p, body)
     }
 

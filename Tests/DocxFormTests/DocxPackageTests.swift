@@ -185,6 +185,18 @@ final class DocxPackageTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["in.docx"])
     }
 
+    /// Only the permission bits are copied: setuid/setgid/sticky are not.
+    func testOutputDoesNotCopySpecialModeBits() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        try FileManager.default.setAttributes([.posixPermissions: 0o4750], ofItemAtPath: input.path)
+        try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in d }
+        let mode = try FileManager.default.attributesOfItem(atPath: output.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o750)
+    }
+
     func testOutputKeepsTheInputPermissions() throws {
         let dir = try tempDir()
         let input = dir.appendingPathComponent("in.docx")
