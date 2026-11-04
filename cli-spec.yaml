@@ -1016,7 +1016,7 @@ commands:
         help: "Second .docx path."
   - path: "macdoc word"
     abstract: "Word 文件工具（.mdocx 腳本轉換）"
-    subcommands: [reverse, render]
+    subcommands: [reverse, render, form]
     project:
       status: active
       docs: ["docs/swift-as-document-source.md", "openspec/specs/mdocx-grammar/spec.md"]
@@ -1073,6 +1073,62 @@ commands:
         value_name: verify-against
         required: false
         help: "參考 .docx；提供時對重建的 part set 做 byte-equal 驗證（含 binary part）"
+    flags:
+      - names: ["--force"]
+        required: false
+        help: "覆寫既有的輸出檔案"
+  - path: "macdoc word form"
+    abstract: "表單整理：依段落類型分類，統一填寫欄格式"
+    subcommands: [classify, apply]
+  - path: "macdoc word form classify"
+    abstract: "列出帶 w14:paraId 的段落與類型（list-checkbox / checkbox-line / table-field / body）"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入的 .docx 檔案"
+  - path: "macdoc word form apply"
+    abstract: "整理已填寫的表單：統一填寫欄、方框字型、清單勾選、插入、移除、截斷"
+    arguments:
+      - name: input
+        required: true
+        help: "輸入的 .docx 檔案"
+    options:
+      - names: ["--to-docx"]
+        value_name: to-docx
+        required: true
+        help: "輸出的 .docx 路徑"
+      - names: ["--field"]
+        value_name: paraId
+        required: false
+        repeating: true
+        help: "表格填寫欄（可重複）：統一字級、靠左、垂直置中，去掉樣式、縮排與同格空段落"
+      - names: ["--field-size"]
+        value_name: pt
+        required: false
+        help: "填寫欄字級（pt，0.5 為單位）；省略時取指定欄位字級的眾數，同票取大"
+      - names: ["--checkbox-font"]
+        value_name: font
+        required: false
+        help: "本文（word/document.xml）的方框字元（□ ■ ☐ ☑ ☒）改用同一字型，字級不變；頁首、頁尾、註腳不處理"
+      - names: ["--tick-list"]
+        value_name: paraId
+        required: false
+        repeating: true
+        help: "勾選以方框為清單符號的段落（可重複）：拿掉清單編號，前面加 ■"
+      - names: ["--insert-after"]
+        value_name: "paraId=text"
+        required: false
+        repeating: true
+        help: "在段落後插入一段文字，沿用錨點的段落與文字格式（可重複，同一錨點依序接續）；錨點帶分節符時，分節符移到最後插入的段落"
+      - names: ["--remove"]
+        value_name: paraId
+        required: false
+        repeating: true
+        help: "移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算）"
+      - names: ["--truncate-from"]
+        value_name: paraId
+        required: false
+        help: "從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定"
     flags:
       - names: ["--force"]
         required: false

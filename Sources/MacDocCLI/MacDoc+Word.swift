@@ -21,7 +21,7 @@ extension MacDoc {
         static let configuration = CommandConfiguration(
             commandName: "word",
             abstract: "Word 文件工具（.mdocx 腳本轉換）",
-            subcommands: [Reverse.self, Render.self]
+            subcommands: [Reverse.self, Render.self, Form.self]
         )
     }
 }
@@ -109,6 +109,8 @@ extension MacDoc.Word {
             // the two surfaces cannot drift apart. It returns the finished
             // script, not a log.
             var paragraphsOnlyScript: String?
+            // Full-fidelity parts, kept for the slot follow-up notes (#249).
+            var fullFidelityParts: [String: Data]?
             if let sidecarLog = try SidecarStore.loadLog(alongside: inputURL) {
                 log = sidecarLog
                 FileHandle.standardError.write(Data(
@@ -135,6 +137,7 @@ extension MacDoc.Word {
                 // raw channel floor + typed DSL upgrades where byte-equal
                 // permits (ReverseExtractor's trial-rebuild gate).
                 let parts = try RawPartChannel.readAllParts(from: inputURL)
+                fullFidelityParts = parts
                 let result = try ReverseExtractor.reverse(parts: parts)
                 log = result.log
                 dslParts = result.dslParts
@@ -152,6 +155,16 @@ extension MacDoc.Word {
                 FileHandle.standardError.write(Data(
                     "note: paragraph-no-paraId；可用 --paragraphs-only 取得段落 DSL 與 slot，代價是省略其他 parts，重播不保證 byte-equal。\n".utf8
                 ))
+            }
+
+            // Slots whose paragraph kind needs a `word form apply` follow-up
+            // (#249). Advisory only: body slots, paragraphs-only and sidecar
+            // modes, and ids not found in the main part print nothing.
+            if let fullFidelityParts {
+                let slots = designations.map { (name: $0.name, paraId: $0.paraId) }
+                for note in SlotFollowUp.notes(for: slots, parts: fullFidelityParts) {
+                    FileHandle.standardError.write(Data((note + "\n").utf8))
+                }
             }
 
             // Coverage-only: report printed, nothing to write.

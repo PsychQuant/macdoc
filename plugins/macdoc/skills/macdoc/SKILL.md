@@ -22,7 +22,7 @@ description: |
 | `config` | 設定管理 | AI CLI 工具、OCR host/model 預設值、文件格式 profile |
 | `pdf` | PDF→LaTeX | 學術 PDF 處理（較少用） |
 | `bib` | BibLaTeX→APA | 參考文獻格式轉換 |
-| `word` | docx ⇄ `.mdocx.swift` 腳本 | 把文件變成可重播的重建腳本、再放回 docx |
+| `word` | docx ⇄ `.mdocx.swift` 腳本；表單整理（`word form`，需要下一版 CLI，尚未發布） | 把文件變成可重播的重建腳本、再放回 docx；填好的官方表單統一字級、置中與方框 |
 
 ---
 
@@ -151,6 +151,37 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 所以**先跑 `--coverage` 再決定期待值**——不要因為文件看起來簡單就假設會拿到可讀的 Swift。
 
 > 完整工作流（含 slot 填寫與 MCP 對應工具）見 [`swiftify`](../swiftify/SKILL.md) skill；本節只是命令參考。
+
+### word form — 表單整理（需要下一版 CLI，尚未發布）
+
+render 填好值之後，範本本身的不一致（欄位字級 9／11／12 pt 混用、註解文字樣式、首行縮排、分散對齊、儲存格沒垂直置中、多餘空段落、方框跟 Latin 字同 run 而變小）會原樣留在輸出。`word form` 在 render **之後**整理這些，只改 `word/document.xml` 裡被點名的元素，其他 part 的內容逐位元組不變（zip 容器本身重新寫出）；不經 typed 模型，所以落在 raw channel 的表單也不會被改寫正文（PsychQuant/macdoc#249）。
+
+```bash
+# 列出每個帶 w14:paraId 的段落與類型（stdout：paraId<TAB>類型<TAB>前 30 字）
+macdoc word form classify filled.docx
+
+# 整理（輸出已存在時預設拒絕，要 --force）
+macdoc word form apply filled.docx --to-docx final.docx \
+  --field <paraId> --field <paraId> [--field-size 12] \
+  --checkbox-font 標楷體 --tick-list <paraId> \
+  --insert-after <paraId>=<文字> --remove <paraId> --truncate-from <paraId>
+```
+
+`classify` 只列出 `w14:paraId` 是 8 位十六進位的段落，其他值（損壞或刻意構造的檔案）不印出、只在 stderr 計數；前 30 字裡，tab、換行與其他控制字元、行／段分隔符、雙向文字控制字元都換成空白。`word/numbering.xml` 不是合法 XML（以 XML parser 判定）時，只停用 `list-checkbox` 判定，其餘照常列出，stderr 會說明；`word reverse --slot` 遇到同樣情況也會印同一行說明。
+
+類型是封閉列舉，依結構判定（依序取第一個符合的）：`list-checkbox`（段落自己的 `w:numPr` 指到的清單層級文字是方框）、`checkbox-line`（段落文字含 □ ■ ☐ ☑ ☒）、`table-field`（最近的容器是表格儲存格；穿過內容控制項計算，儲存格裡文字方塊內的段落不算）、`body`（其餘）。**提示行不是類型**——「說明：」這類段落結構上和內文一樣，只能用 `--remove` 明確點名。
+
+| 選項 | 做什麼 | 什麼情況拒絕 |
+|------|--------|-------------|
+| `--field <paraId>` | 去掉段落樣式與縮排、靠左、段落標記與每個 run 同一字級、所在儲存格垂直置中、刪同格的空段落（只有空 run 與 `w:proofErr` 才算空；書籤、修訂、欄位、圖等都算內容；被其他選項點名的段落不刪；格內有巢狀表格或內容控制項時不刪）。字級與字型插在 `w14:` 等擴充元素之前 | 段落不在儲存格內（文字方塊裡的段落即使方塊在儲存格中也拒絕） |
+| `--field-size <pt>` | 填寫欄字級，0.5 為單位；省略時取指定欄位字級的眾數、同票取大，選定值印在 stderr | 不是 1–1638 之間 0.5 的倍數；省略時指定欄位都沒有明確字級；沒有搭配 `--field`（用法錯誤） |
+| `--checkbox-font <字型>` | 本文（`word/document.xml`；頁首、頁尾、註腳不處理）只含一個 `w:t` 的 run 裡的方框拆成獨立 run，四種 script 都用該字型，其他格式（含字級，所以各方框仍是原本的大小）保留；另含其他內容、需要拆開卻帶有格式修訂（`w:rPrChange`）、或在原生核取方塊內容控制項（`w14:checkbox`）裡的 run 不動並在 stderr 計數 | 字型名稱空白 |
+| `--tick-list <paraId>` | 方框是清單符號時（文字 slot 換不到）：拿掉清單編號，前面加 ■，格式取第一個有文字的 run；清單層級帶來的縮排與符號後的間隔不保留 | 段落沒有自己的 `w:numPr`，或 `w:numId` 是 0 |
+| `--insert-after <paraId>=<文字>` | 在錨點後插入一段，沿用錨點的段落格式（去掉清單編號、分節符、段前分頁、修訂標記）與第一個有文字的 run 的格式；同一錨點多次依序接續；錨點自己帶分節符時，分節符移到最後插入的段落，插入的內容留在錨點那一節；文字裡的換行與 tab 照字面寫入 | 文字含 XML 1.0 不允許的字元 |
+| `--remove <paraId>` | 刪除段落 | 儲存格（或文字方塊）唯一的段落；刪掉後儲存格會以表格結尾；帶分節符的段落。儲存格的段落數穿過內容控制項（`w:sdt`）與 `w:customXml` 計算 |
+| `--truncate-from <paraId>` | 從本文這一段刪到結尾，被刪範圍裡第一個有效的分節設定（不含修訂歷史裡的舊設定）成為本文最後的分節設定；保留內容的最後一個區塊是自己帶分節符的段落時（從某一節的第一段截斷），改用那個分節設定，不留下空白的最後一節；最後一個區塊是表格、`w:altChunk` 等其他內容時不搬（書籤、註解範圍這類標記不算區塊） | 不是 `w:body` 的直屬段落；是本文第一個元素 |
+
+**全有全無**：所有 paraId 先對照原檔驗過（恰好一個 `w:p` 帶它）；被 `--remove` 的段落又被其他選項點名、被點名的段落位在要刪的段落裡（例如文字方塊）、或落在 `--truncate-from` 會截掉的範圍內，都整次拒絕。輸出已存在時預設拒絕；不支援排他 rename 的磁碟（exFAT、FAT）改用「存在檢查 + rename」，指向不存在目標的 symlink 也算已存在；暫存檔寫在輸出目錄旁權限 0700 的暫存資料夾裡（程序被強制終止時這個隱藏資料夾會留下，可自行刪除），輸出檔沿用輸入檔的權限；`--force` 遇到 symlink 時取代的是 link 本身，不寫入它指向的檔案。之後依固定順序執行 field → tick-list → insert → checkbox-font → remove → truncate；任何一步失敗（包括前一步讓後一步的條件不再成立）都整次不寫檔，輸出路徑維持原狀。`word reverse --slot` 在 full-fidelity 模式下會為 `table-field`、`checkbox-line`、`list-checkbox` 的 slot 各印一行 note，指出對應的選項。MCP（che-word-mcp）目前沒有這些操作（PsychQuant/che-word-mcp#300）。已知限制：只認 □ ■ ☐ ☑ ☒ 五個方框字元，符號字型（如 Wingdings）私用區的方框不算；沒有 `w14:paraId` 的段落無法點名；整張表的預設套用與刪除中間的整張表尚未支援，`--remove` 刪掉兩張表之間唯一的段落會讓 Word 把兩張表併成一張（PsychQuant/macdoc#250）；同格有內容控制項時空段落清理會略過、帶編號的空段落仍會被當成空段落、截斷可能留下不成對的書籤或註解範圍（PsychQuant/macdoc#253）。
 
 ---
 
