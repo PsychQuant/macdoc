@@ -22,7 +22,7 @@ description: |
 | `config` | 設定管理 | AI CLI 工具、OCR host/model 預設值、文件格式 profile |
 | `pdf` | PDF→LaTeX | 學術 PDF 處理（較少用） |
 | `bib` | BibLaTeX→APA | 參考文獻格式轉換 |
-| `word` | docx ⇄ `.mdocx.swift` 腳本；表單整理（`word form`，需要下一版 CLI，尚未發布） | 把文件變成可重播的重建腳本、再放回 docx；填好的官方表單統一字級、置中與方框 |
+| `word` | docx ⇄ `.mdocx.swift` 腳本；表單整理（`word form`，CLI 0.17.0+） | 把文件變成可重播的重建腳本、再放回 docx；填好的官方表單統一字級、置中與方框 |
 
 ---
 
@@ -152,7 +152,7 @@ macdoc word render form.mdocx.swift --to-docx rebuilt.docx [--verify-against for
 
 > 完整工作流（含 slot 填寫與 MCP 對應工具）見 [`swiftify`](../swiftify/SKILL.md) skill；本節只是命令參考。
 
-### word form — 表單整理（需要下一版 CLI，尚未發布）
+### word form — 表單整理（CLI 0.17.0+）
 
 render 填好值之後，範本本身的不一致（欄位字級 9／11／12 pt 混用、註解文字樣式、首行縮排、分散對齊、儲存格沒垂直置中、多餘空段落、方框跟 Latin 字同 run 而變小）會原樣留在輸出。`word form` 在 render **之後**整理這些，只改 `word/document.xml` 裡被點名的元素，其他 part 的內容逐位元組不變（zip 容器本身重新寫出）；不經 typed 模型，所以落在 raw channel 的表單也不會被改寫正文（PsychQuant/macdoc#249）。
 
@@ -291,6 +291,7 @@ macdoc config document gc --force                             # 實際刪除；�
 
 - **1.10.0**：`word reverse --paragraphs-only` 改用 ooxml-swift 的共用實作（與 che-word-mcp 一致）；讀寫 Word 文件時保留未建模的段落屬性（`w:kinsoku`、`w:snapToGrid` 等）、非 UTF-8 宣告的 part 正確轉碼、依 relationship 找格式 part（需要 CLI 0.13.0）
 - **1.10.1**：typed 編輯後段落框線與網底不再消失、段落屬性依 schema 順序寫出；CLI 與 che-word-mcp 4.4.0 用同一版 ooxml-swift（需要 CLI 0.13.1）
+- **1.14.0**：新增 `word form classify|apply`，render 之後整理填好的表單（統一填寫欄字級、靠左、垂直置中，方框同一字型，勾選以方框為清單符號的選項，插入、移除段落與截斷）；`word reverse --slot` 為需要整理的 slot 印出對應選項（需要 CLI 0.17.0）
 - **1.13.0**：安全修正——讀入 .docx 時的圖片路徑穿越，惡意文件不能再經 marker 轉換寫出本機檔案；同時帶進解壓大小上限與多項 typed 重寫修正（需要 CLI 0.16.0）
 - **1.12.0**：`docx apply` 的 `set_bold` 依 `substring` 只加粗該段文字（過去一律失敗）；同時帶進表格格式保留與 typed 重寫的多項修正（需要 CLI 0.15.1）
 - **1.11.0**：`docx apply` 改為認證式交易：通過 Layer 1 關卡與 `verify` 才寫出輸出，失敗時輸出路徑不動（**BREAKING**）；新增 `--certificate` 寫出證書 JSON（需要 CLI 0.14.0）

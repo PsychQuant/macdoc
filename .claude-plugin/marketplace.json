@@ -20,15 +20,15 @@
     },
     {
       "name": "macdoc",
-      "version": "1.13.0",
+      "version": "1.14.0",
       "description": "macOS 原生文件處理 CLI — 格式轉換、VLM OCR（含 host profile 設定）、SRT 處理。v1.2.0: session-start hook 自動安裝 signed CLI binary（arm64）。",
       "author": {
         "name": "Che Cheng"
       },
       "source": "./plugins/macdoc",
       "category": "productivity",
-      "binary_version": "0.16.0",
-      "binary_sha256": "852d708653f9c93ecdae9ae9119912cb365699d821100bb330b99b84ca9f5ea7"
+      "binary_version": "0.17.0",
+      "binary_sha256": "26b5fc0a8bcfc40b06ab4f8e3975a720f4e395077efc2211660d00d56c756796"
     },
     {
       "name": "che-pdf-mcp",
