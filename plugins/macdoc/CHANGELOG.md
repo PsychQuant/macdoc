@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 新命令 `macdoc word form classify|apply`（需要下一版 CLI，尚未發布）：render 之後整理填好的官方表單（PsychQuant/macdoc#249）。`classify` 列出每個帶 `w14:paraId` 的段落與類型（`list-checkbox` / `checkbox-line` / `table-field` / `body`，依結構判定、不靠字面）；`apply` 提供 `--field`（字級一致、靠左、垂直置中、刪同格空段落）、`--field-size`、`--checkbox-font`（方框同一字型，各自保留原字級；原生核取方塊內容控制項不改）、`--tick-list`、`--insert-after`（沿用錨點格式）、`--remove`、`--truncate-from`。只以字串修改 `word/document.xml` 裡被點名的元素，其他 part 的內容逐位元組不變（zip 容器重新寫出）；所有 paraId 先驗、互相衝突的點名整次拒絕、任一步失敗都不寫檔，非 `--force` 時輸出路徑在執行期間出現檔案也不覆寫（不支援排他 rename 的磁碟改用存在檢查；指向不存在目標的 symlink 也算已存在），暫存檔寫在輸出目錄旁權限 0700 的暫存資料夾裡，輸出檔沿用輸入檔權限。`--truncate-from` 從某一節的第一段截斷時，保留內容最後的分節設定移到文件末端，不會多出空白頁。
+- 新命令 `macdoc word form classify|apply`（需要下一版 CLI，尚未發布）：render 之後整理填好的官方表單（PsychQuant/macdoc#249）。`classify` 列出每個帶 `w14:paraId` 的段落與類型（`list-checkbox` / `checkbox-line` / `table-field` / `body`，依結構判定、不靠字面）；`apply` 提供 `--field`（字級一致、靠左、垂直置中、刪同格空段落）、`--field-size`、`--checkbox-font`（方框同一字型，各自保留原字級；原生核取方塊內容控制項不改）、`--tick-list`、`--insert-after`（沿用錨點格式；錨點帶分節符時分節符移到最後插入的段落）、`--remove`、`--truncate-from`。只以字串修改 `word/document.xml` 裡被點名的元素，其他 part 的內容逐位元組不變（zip 容器重新寫出）；所有 paraId 先驗、互相衝突的點名整次拒絕、任一步失敗都不寫檔，非 `--force` 時輸出路徑在執行期間出現檔案也不覆寫（不支援排他 rename 的磁碟改用存在檢查；指向不存在目標的 symlink 也算已存在），暫存檔寫在輸出目錄旁權限 0700 的暫存資料夾裡，輸出檔沿用輸入檔權限。`--truncate-from` 從某一節的第一段截斷時，保留內容最後的分節設定移到文件末端，不會多出空白頁。`classify` 只列出 8 位十六進位的 paraId，預覽換掉控制字元與雙向文字控制字元。
 - `macdoc word reverse --slot`：slot 是 `table-field`、`checkbox-line` 或 `list-checkbox` 時，在 stderr 印一行 note 指出對應的 `word form apply` 選項。
 - skill：swiftify 加上第 6 步（表單整理）與類型→選項對照表；macdoc skill 加上 `word form` 命令參考。
 

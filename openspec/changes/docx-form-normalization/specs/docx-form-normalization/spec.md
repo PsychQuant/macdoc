@@ -35,7 +35,7 @@ The classifier SHALL assign every paragraph exactly one kind from the closed set
 
 ### Requirement: The classify command lists every addressable paragraph
 
-`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId`, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with every control character (Unicode general category Cc, including tab, line breaks and ESC) replaced by a space. Paragraphs without a `w14:paraId` SHALL NOT be listed. When `word/numbering.xml` is not well-formed XML (as judged by an XML parser, not only by tag pairing), the command SHALL still list every paragraph with list-checkbox detection disabled and SHALL name the numbering part on stderr.
+`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId` of exactly eight ASCII hexadecimal digits, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with every control character (Unicode general category Cc, including tab, line breaks and ESC), the line and paragraph separators (Zl, Zp) and the bidirectional formatting characters (U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) replaced by a space. Paragraphs without a `w14:paraId` SHALL NOT be listed; paragraphs whose `w14:paraId` is any other value SHALL NOT be listed either and SHALL be counted on stderr, so a crafted id cannot put terminal sequences or extra columns on stdout. When `word/numbering.xml` is not well-formed XML (it is first scanned like the main part, which refuses a DOCTYPE, and then judged by an XML parser, not only by tag pairing), the command SHALL still list every paragraph with list-checkbox detection disabled and SHALL name the numbering part on stderr.
 
 #### Scenario: Two addressable paragraphs and one without an id
 
@@ -111,12 +111,17 @@ For each `--tick-list <paraId>`, `macdoc word form apply` SHALL remove the parag
 
 ### Requirement: Inserted paragraphs inherit the anchor's format
 
-For each `--insert-after <paraId>=<text>`, `macdoc word form apply` SHALL insert after the anchor a paragraph whose `w:pPr` is the anchor's own `w:pPr` without `w:numPr`, `w:sectPr`, `w:pPrChange` and `w:pageBreakBefore`, and with `w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` and `w:rPrChange` removed from its paragraph-mark `w:rPr`, holding one run whose `w:rPr` is the anchor's first run with text's `w:rPr` without `w:rPrChange`, and whose text is the given text. Line breaks and tabs in the text are written as text, not as `w:br` or `w:tab`. Options naming the same anchor SHALL be inserted in the order given, each after the previous one. Text containing characters forbidden in XML 1.0 SHALL be refused.
+For each `--insert-after <paraId>=<text>`, `macdoc word form apply` SHALL insert after the anchor a paragraph whose `w:pPr` is the anchor's own `w:pPr` without `w:numPr`, `w:sectPr`, `w:pPrChange` and `w:pageBreakBefore`, and with `w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` and `w:rPrChange` removed from its paragraph-mark `w:rPr`, holding one run whose `w:rPr` is the anchor's first run with text's `w:rPr` without `w:rPrChange`, and whose text is the given text. Line breaks and tabs in the text are written as text, not as `w:br` or `w:tab`. Options naming the same anchor SHALL be inserted in the order given, each after the previous one. When the anchor's own `w:pPr` carries a `w:sectPr`, that `w:sectPr` SHALL move from the anchor to the last paragraph inserted after it, so the inserted paragraphs stay in the anchor's section instead of starting the next one. Text containing characters forbidden in XML 1.0 SHALL be refused.
 
 #### Scenario: Two paragraphs after one anchor
 
 - **WHEN** `--insert-after 1A2B3C4D=第一段` and `--insert-after 1A2B3C4D=第二段` are given
 - **THEN** the anchor is followed by a paragraph with text `第一段` and then a paragraph with text `第二段`, both carrying the anchor's paragraph and run formatting
+
+#### Scenario: Anchor that ends a section
+
+- **WHEN** the anchor's `w:pPr` carries section break S1 and `--insert-after` names it with text `補充`
+- **THEN** the anchor no longer carries S1, the inserted paragraph `補充` carries S1, and the document still holds exactly the same section breaks
 
 ### Requirement: Paragraphs are removed only when named
 
@@ -139,7 +144,7 @@ For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragrap
 
 ### Requirement: Truncation keeps the section settings of the kept content
 
-For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` and not its first child. `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used. When the last kept block (looking through body-level `w:sdt`) is a paragraph that carries its own `w:sectPr`, the cut removed whole sections: that `w:sectPr` SHALL be moved from the paragraph to the end of the body as its final `w:sectPr` and the removed range's section properties SHALL be dropped, so the result never ends with a section that has no content.
+For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` and not its first child. `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used. When the last kept block (looking through body-level `w:sdt` and `w:customXml`; every element counts as a block except range markers such as bookmarks, comment ranges and permission ranges, so a `w:altChunk` or a table after the break is the last block) is a paragraph that carries its own `w:sectPr`, the cut removed whole sections: that `w:sectPr` SHALL be moved from the paragraph to the end of the body as its final `w:sectPr` and the removed range's section properties SHALL be dropped, so the result never ends with a section that has no content.
 
 #### Scenario: Cut before a later section break
 
@@ -196,7 +201,7 @@ For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body
 
 ### Requirement: Reverse names the follow-up for slots that need one
 
-In full-fidelity mode, `macdoc word reverse --slot <name>=<paraId>` SHALL classify each designated paragraph found in the source's main part and, for kinds `table-field`, `checkbox-line` and `list-checkbox`, print one stderr line naming the slot, the kind and the `macdoc word form apply` option that handles it. It SHALL print nothing for `body` slots, in paragraphs-only mode, or for ids not found in the main part. When `word/numbering.xml` is not well-formed XML and at least one slot is designated, it SHALL print one stderr line naming the numbering part, as `classify` does.
+In full-fidelity mode, `macdoc word reverse --slot <name>=<paraId>` SHALL classify each designated paragraph found in the source's main part and, for kinds `table-field`, `checkbox-line` and `list-checkbox`, print one stderr line naming the slot, the kind and the `macdoc word form apply` option that handles it. It SHALL print nothing for `body` slots, in paragraphs-only mode, or for ids not found in the main part. When `word/numbering.xml` is not well-formed XML (judged the same way as `classify` judges it) and at least one slot is designated, it SHALL print one stderr line naming the numbering part, as `classify` does.
 
 #### Scenario: Table field slot
 

@@ -219,6 +219,14 @@ final class FormOperationsTests: XCTestCase {
         XCTAssertTrue(try TestXML.paragraphXML("0000C0C2", in: result.documentXML).contains("w:eastAsia=\"標楷體\""))
     }
 
+    /// The font goes before extension elements, which Word writes last.
+    func testCheckboxFontIsInsertedBeforeExtensionElements() throws {
+        let body = TestXML.paragraph("0000C0E1", TestXML.run("\u{25A1}", rPr: "<w:rPr><w14:ligatures w14:val=\"standard\"/></w:rPr>"))
+        let out = try apply(body, FormPlan(checkboxFont: "標楷體"))
+        let paragraph = try TestXML.paragraphXML("0000C0E1", in: out)
+        XCTAssertEqual(try TestXML.childNames(of: "w:rPr", in: paragraph), ["w:rFonts", "w14:ligatures"])
+    }
+
     func testGlyphOnlyRunKeepsItsTextElementAndGetsTheFont() throws {
         let body = TestXML.paragraph("0000C002", TestXML.run("\u{25A0}\u{25A1}"))
         let out = try apply(body, FormPlan(checkboxFont: "標楷體"))
@@ -332,8 +340,30 @@ final class FormOperationsTests: XCTestCase {
             XCTAssertTrue(xml.contains("<w:ind w:left=\"480\"/>"))
             XCTAssertTrue(xml.contains("標楷體"))
             XCTAssertFalse(xml.contains("w:numPr"))
-            XCTAssertFalse(xml.contains("w:sectPr"))
         }
+        // The anchor ended a section; the break now ends the inserted
+        // paragraphs, so they stay in the anchor's section.
+        XCTAssertFalse(index.elementString(paragraphs[0]).contains("w:sectPr"))
+        XCTAssertFalse(index.elementString(paragraphs[1]).contains("w:sectPr"))
+        XCTAssertTrue(index.elementString(paragraphs[2]).contains(TestXML.bodySection))
+        XCTAssertEqual(index.elements(named: "w:sectPr").count, 1)
+    }
+
+    /// Insert after a section break, then cut what follows: the inserted
+    /// paragraph is the kept content's last block and carries the break, so
+    /// the kept-break rule still applies and no extra final section remains.
+    func testInsertAfterABreakThenTruncateKeepsOneSection() throws {
+        let s1 = "<w:sectPr><w:pgSz w:w=\"16838\" w:h=\"11906\" w:orient=\"landscape\"/></w:sectPr>"
+        let body = TestXML.paragraph("0000I010", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("錨點"))
+            + TestXML.paragraph("0000I011", TestXML.run("下一份")) + TestXML.bodySection
+        let out = try apply(body, FormPlan(insertions: [FormInsertion(anchor: "0000I010", text: "補充")],
+                                           truncateFrom: "0000I011"))
+        let index = try XMLTagIndex(out)
+        XCTAssertEqual(index.elements(named: "w:p").map { FormClassifier.ownText(of: $0, in: index) }, ["錨點", "補充"])
+        let sections = index.elements(named: "w:sectPr")
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(index.elementString(sections[0]), s1)
+        XCTAssertEqual(index.tags[sections[0]].parent.map { index.tags[$0].name }, "w:body")
     }
 
     func testInsertDropsPageBreakAndRevisionMarks() throws {
@@ -453,6 +483,29 @@ final class FormOperationsTests: XCTestCase {
         let expected = TestXML.paragraph("0000P040", TestXML.run("P1")) + "<w:sdt><w:sdtPr/><w:sdtContent>"
             + TestXML.paragraph("0000P041", pPr: "<w:pPr><w:jc w:val=\"center\"/></w:pPr>", TestXML.run("控制項內"))
             + "</w:sdtContent></w:sdt>" + s1
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    /// Any block after the kept break — here an imported chunk — belongs to
+    /// the last section, so that section keeps its own settings.
+    func testKeptAltChunkAfterABreakKeepsTheRemovedRangeSection() throws {
+        let chunk = "<w:altChunk r:id=\"rId9\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/>"
+        let body = TestXML.paragraph("0000P060", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P1")) + chunk
+            + TestXML.paragraph("0000P061", TestXML.run("下一份")) + s2
+        let out = try apply(body, FormPlan(truncateFrom: "0000P061"))
+        let expected = TestXML.paragraph("0000P060", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P1")) + chunk + s2
+        XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
+    }
+
+    /// Range markers (bookmarks, comment ranges) are not blocks: the kept
+    /// break is still the last block and still moves.
+    func testRangeMarkersAfterTheKeptBreakDoNotStopTheMove() throws {
+        let body = TestXML.paragraph("0000P070", pPr: "<w:pPr>\(s1)</w:pPr>", TestXML.run("P1"))
+            + "<w:bookmarkEnd w:id=\"4\"/>"
+            + TestXML.paragraph("0000P071", TestXML.run("下一份")) + s2
+        let out = try apply(body, FormPlan(truncateFrom: "0000P071"))
+        let expected = TestXML.paragraph("0000P070", pPr: "<w:pPr></w:pPr>", TestXML.run("P1"))
+            + "<w:bookmarkEnd w:id=\"4\"/>" + s1
         XCTAssertEqual(TestXML.string(out), TestXML.string(TestXML.document(expected)))
     }
 

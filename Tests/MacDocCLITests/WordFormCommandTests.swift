@@ -123,6 +123,30 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stdout.contains("0000E5C0\tbody\t前 [31m後"), result.stdout)
     }
 
+    /// A paraId is eight hex digits; a crafted one (here an ESC sequence from
+    /// a character reference) is not printed, only counted.
+    func testClassifySkipsParaIdsThatAreNotEightHexDigits() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        try makeForm(at: form, extraBody: paragraph("&#x1B;[31mXX", run("偽造")))
+        let result = try CLITestHelper.run(["word", "form", "classify", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
+        XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
+        XCTAssertEqual(result.stdout.split(separator: "\n").count, 4, result.stdout)
+        XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
+    }
+
+    /// Bidirectional overrides can reorder the terminal line; they become spaces.
+    func testClassifyPreviewReplacesBidirectionalOverrides() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        try makeForm(at: form, extraBody: paragraph("0000B1D1", run("甲&#x202E;乙&#x2028;丙")))
+        let result = try CLITestHelper.run(["word", "form", "classify", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stdout.contains("0000B1D1\tbody\t甲 乙 丙"), result.stdout)
+    }
+
     func testClassifyMissingInput() throws {
         let result = try CLITestHelper.run(["word", "form", "classify", "/nonexistent/form.docx"])
         XCTAssertNotEqual(result.exitCode, 0)

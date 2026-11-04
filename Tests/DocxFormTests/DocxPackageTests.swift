@@ -95,6 +95,19 @@ final class DocxPackageTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: second), Data("someone else".utf8))
     }
 
+    func testFallbackWritesTheOutputUnderEINVAL() throws {
+        let dir = try tempDir()
+        let input = dir.appendingPathComponent("in.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        _ = try samplePackage(at: input)
+        let saved = DocxPackage.exclusiveRename
+        DocxPackage.exclusiveRename = { _, _ in errno = EINVAL; return -1 }
+        defer { DocxPackage.exclusiveRename = saved }
+        try DocxPackage.rewriteDocument(input: input, output: output, force: false) { d, _ in d }
+        XCTAssertEqual(try DocxPackage.read(from: output).count, 5)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(), ["in.docx", "out.docx"])
+    }
+
     /// A dangling symbolic link at the output is an existing output: the
     /// fallback checks the link itself, not its (missing) target.
     func testFallbackRefusesADanglingSymbolicLinkAtTheOutput() throws {

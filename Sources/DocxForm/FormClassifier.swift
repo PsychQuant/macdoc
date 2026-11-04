@@ -42,7 +42,10 @@ public enum FormClassifier {
     /// The tag index only checks tag pairing, so the part goes through a real
     /// XML parser first (duplicate attributes, bad entities and the like).
     static func numberingLevels(_ xml: [UInt8]?) -> NumberingLevels? {
-        guard let xml else { return nil }
+        // The tag index runs first so a DOCTYPE (and with it any entity
+        // definition) is refused before a real XML parser ever sees the part,
+        // the same order the main part goes through.
+        guard let xml, (try? XMLTagIndex(xml)) != nil else { return nil }
         let parser = XMLParser(data: Data(xml))
         parser.shouldResolveExternalEntities = false
         guard parser.parse() else { return nil }

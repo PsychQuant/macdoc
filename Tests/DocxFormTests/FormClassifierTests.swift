@@ -79,6 +79,13 @@ final class FormClassifierTests: XCTestCase {
         XCTAssertEqual(result.map(\.kind), [.body])
     }
 
+    /// A DOCTYPE is refused before any XML parser sees the part.
+    func testNumberingWithADoctypeIsUnreadable() {
+        let withDoctype = "<?xml version=\"1.0\"?><!DOCTYPE n [<!ENTITY e \"x\">]>"
+            + TestXML.string(TestXML.numbering()).replacingOccurrences(of: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>", with: "")
+        XCTAssertFalse(FormClassifier.isReadableNumbering(Array(withDoctype.utf8)))
+    }
+
     /// A paragraph in a text box anchored in a cell belongs to the text box.
     func testTextBoxParagraphInsideACellIsNotATableField() throws {
         let textBox = "<w:r><w:drawing><wp:inline><w:txbxContent>"

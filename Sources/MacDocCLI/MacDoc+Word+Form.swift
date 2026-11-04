@@ -51,8 +51,17 @@ extension MacDoc.Word.Form {
                 }
                 let paragraphs = try FormClassifier.classify(documentXML: Array(document.data),
                                                              numberingXML: numbering.map { Array($0.data) })
+                // A w14:paraId is eight hexadecimal digits. Any other value comes
+                // from a damaged or crafted file; printing it could inject
+                // terminal sequences or fake columns, so such rows are counted.
+                var skipped = 0
                 for paragraph in paragraphs {
+                    guard Self.isParaId(paragraph.paraId) else { skipped += 1; continue }
                     print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(Self.preview(paragraph.text))")
+                }
+                if skipped > 0 {
+                    FileHandle.standardError.write(Data(
+                        "note: 略過 \(skipped) 個 w14:paraId 不是 8 位十六進位的段落\n".utf8))
                 }
             } catch let error as DocxPackageError {
                 throw FormCommandError(description: error.description)
@@ -61,12 +70,30 @@ extension MacDoc.Word.Form {
             }
         }
 
+        /// True for exactly eight ASCII hexadecimal digits.
+        static func isParaId(_ id: String) -> Bool {
+            id.utf8.count == 8 && id.utf8.allSatisfy {
+                (0x30...0x39).contains($0) || (0x41...0x46).contains($0) || (0x61...0x66).contains($0)
+            }
+        }
+
+        /// Bidirectional formatting characters: they can reorder what the
+        /// terminal shows without being control characters.
+        static let bidiControls: Set<Unicode.Scalar> = [
+            "\u{061C}", "\u{200E}", "\u{200F}", "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",
+            "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}",
+        ]
+
         /// First 30 characters with every control character (tab, line
-        /// breaks, ESC and the rest of C0/C1) replaced by a space, so document
-        /// text cannot drive the terminal.
+        /// breaks, ESC and the rest of C0/C1), the line and paragraph
+        /// separators and the bidirectional formatting characters replaced by
+        /// a space, so document text cannot drive or reorder the terminal.
         static func preview(_ text: String) -> String {
             let scalars = String(text.prefix(30)).unicodeScalars.map { scalar -> Unicode.Scalar in
-                scalar.properties.generalCategory == .control ? " " : scalar
+                switch scalar.properties.generalCategory {
+                case .control, .lineSeparator, .paragraphSeparator: return " "
+                default: return bidiControls.contains(scalar) ? " " : scalar
+                }
             }
             return String(String.UnicodeScalarView(scalars))
         }
@@ -98,7 +125,7 @@ extension MacDoc.Word.Form {
         var fieldSize: String?
 
         @Option(name: .customLong("checkbox-font"),
-                help: ArgumentHelp("全文方框字元（□ ■ ☐ ☑ ☒）改用同一字型", valueName: "font"))
+                help: ArgumentHelp("本文（word/document.xml）的方框字元（□ ■ ☐ ☑ ☒）改用同一字型，字級不變；頁首、頁尾、註腳不處理", valueName: "font"))
         var checkboxFont: String?
 
         @Option(name: .customLong("tick-list"),
@@ -107,7 +134,7 @@ extension MacDoc.Word.Form {
         var tickList: [String] = []
 
         @Option(name: .customLong("insert-after"),
-                help: ArgumentHelp("在段落後插入一段文字，沿用錨點的段落與文字格式（可重複，同一錨點依序接續）",
+                help: ArgumentHelp("在段落後插入一段文字，沿用錨點的段落與文字格式（可重複，同一錨點依序接續）；錨點帶分節符時，分節符移到最後插入的段落",
                                    valueName: "paraId=text"))
         var insertAfter: [String] = []
 
@@ -117,7 +144,7 @@ extension MacDoc.Word.Form {
         var remove: [String] = []
 
         @Option(name: .customLong("truncate-from"),
-                help: ArgumentHelp("從本文的這一段刪到結尾，保留被刪範圍第一個分節設定", valueName: "paraId"))
+                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容最後一段自帶分節符時沿用它，否則沿用被刪範圍第一個分節設定", valueName: "paraId"))
         var truncateFrom: String?
 
         func validate() throws {
@@ -173,7 +200,7 @@ extension MacDoc.Word.Form {
                 }
                 if outcome.skippedCheckboxRuns > 0 {
                     FileHandle.standardError.write(Data(
-                        "note: 有 \(outcome.skippedCheckboxRuns) 個含方框字元的 run 另含其他內容，未改字型\n".utf8))
+                        "note: 有 \(outcome.skippedCheckboxRuns) 個含方框字元的 run 未改字型（另含其他內容、需要拆開但帶格式修訂，或在原生核取方塊內容控制項裡）\n".utf8))
                 }
             }
             FileHandle.standardError.write(Data("已寫入: \(toDocx)\n".utf8))

@@ -1109,7 +1109,7 @@ commands:
       - names: ["--checkbox-font"]
         value_name: font
         required: false
-        help: "全文方框字元（□ ■ ☐ ☑ ☒）改用同一字型"
+        help: "本文（word/document.xml）的方框字元（□ ■ ☐ ☑ ☒）改用同一字型，字級不變；頁首、頁尾、註腳不處理"
       - names: ["--tick-list"]
         value_name: paraId
         required: false
@@ -1119,7 +1119,7 @@ commands:
         value_name: "paraId=text"
         required: false
         repeating: true
-        help: "在段落後插入一段文字，沿用錨點的段落與文字格式（可重複，同一錨點依序接續）"
+        help: "在段落後插入一段文字，沿用錨點的段落與文字格式（可重複，同一錨點依序接續）；錨點帶分節符時，分節符移到最後插入的段落"
       - names: ["--remove"]
         value_name: paraId
         required: false
@@ -1128,7 +1128,7 @@ commands:
       - names: ["--truncate-from"]
         value_name: paraId
         required: false
-        help: "從本文的這一段刪到結尾，保留被刪範圍第一個分節設定"
+        help: "從本文的這一段刪到結尾；保留內容最後一段自帶分節符時沿用它，否則沿用被刪範圍第一個分節設定"
     flags:
       - names: ["--force"]
         required: false

@@ -81,6 +81,35 @@ enum FormOperations {
         return out
     }
 
+    /// Body-level children that are neither content nor wrappers: range
+    /// markers and the wrappers' own property elements (closed list).
+    static let nonBlockElements: Set<String> = [
+        "w:bookmarkStart", "w:bookmarkEnd", "w:commentRangeStart", "w:commentRangeEnd",
+        "w:moveFromRangeStart", "w:moveFromRangeEnd", "w:moveToRangeStart", "w:moveToRangeEnd",
+        "w:permStart", "w:permEnd", "w:proofErr",
+        "w:customXmlInsRangeStart", "w:customXmlInsRangeEnd", "w:customXmlDelRangeStart", "w:customXmlDelRangeEnd",
+        "w:customXmlMoveFromRangeStart", "w:customXmlMoveFromRangeEnd",
+        "w:customXmlMoveToRangeStart", "w:customXmlMoveToRangeEnd",
+        "w:sdtPr", "w:sdtEndPr", "w:customXmlPr", "w:sectPr",
+    ]
+
+    /// Content blocks among `elements`, looking through block wrappers, in
+    /// document order. Unlike `flattenBlocks`, every element that is not a
+    /// range marker counts — `w:altChunk`, math, anything not listed — so a
+    /// block of an unforeseen kind is never mistaken for nothing.
+    static func contentBlocks(_ elements: [Int], in index: XMLTagIndex) -> [Int] {
+        var out: [Int] = []
+        for e in elements {
+            let name = index.tags[e].name
+            switch name {
+            case "w:sdt": out += contentBlocks(index.children(of: e).filter { index.tags[$0].name == "w:sdtContent" }, in: index)
+            case "w:sdtContent", "w:customXml": out += contentBlocks(index.children(of: e), in: index)
+            default: if !nonBlockElements.contains(name) { out.append(e) }
+            }
+        }
+        return out
+    }
+
     static func checkTruncate(_ id: String, in index: XMLTagIndex) throws -> (paragraph: Int, body: Int) {
         let p = try locate(id, in: index)
         guard let body = index.tags[p].parent, index.tags[body].name == "w:body" else {
@@ -368,8 +397,22 @@ enum FormOperations {
         let rPr = try FormLocator.firstTextRun(of: anchor, in: index)
             .flatMap { ownRPr(of: $0, in: index) }
             .map { try Fragment.removeChildren(index.elementString($0), named: ["w:rPrChange"]) } ?? ""
-        let paragraphs = texts.map { "<w:p>" + pPr + "<w:r>" + rPr + textElement($0) + "</w:r></w:p>" }.joined()
-        try editor.apply([.insert(paragraphs, at: index.elementRange(anchor).upperBound)])
+        // An anchor that ends a section keeps the inserted paragraphs in its
+        // section: the break moves from the anchor to the last inserted
+        // paragraph, instead of the new text starting the next section.
+        var edits: [Edit] = []
+        var lastPPr = pPr
+        if let own = ownSectPr(of: anchor, in: index), let anchorPPr = ownPPr(of: anchor, in: index), !texts.isEmpty {
+            edits.append(.replace(index.elementRange(anchorPPr),
+                                  with: try Fragment.removeChildren(index.elementString(anchorPPr), named: ["w:sectPr"])))
+            lastPPr = try Fragment.setChild(pPr.isEmpty ? "<w:pPr></w:pPr>" : pPr, removing: [],
+                                            insert: index.elementString(own), followers: ["w:pPrChange"])
+        }
+        let paragraphs = texts.enumerated().map { offset, text in
+            "<w:p>" + (offset == texts.count - 1 ? lastPPr : pPr) + "<w:r>" + rPr + textElement(text) + "</w:r></w:p>"
+        }.joined()
+        edits.append(.insert(paragraphs, at: index.elementRange(anchor).upperBound))
+        try editor.apply(edits)
     }
 
     // MARK: Remove and truncate
@@ -407,7 +450,7 @@ enum FormOperations {
         // with no content (an extra blank page), so the kept break becomes the
         // body's final w:sectPr and the removed range's one is dropped.
         var edits: [Edit] = []
-        let kept = flattenBlocks(index.children(of: body).filter { index.tags[$0].start < cut }, in: index)
+        let kept = contentBlocks(index.children(of: body).filter { index.tags[$0].start < cut }, in: index)
         if let last = kept.last, index.tags[last].name == "w:p", let own = ownSectPr(of: last, in: index),
            let pPr = ownPPr(of: last, in: index) {
             section = index.elementString(own)
