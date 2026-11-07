@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 刪到本文沒有內容時拒絕。
   - 本文原本以段落結尾、刪完會以表格或 `w:altChunk` 結尾時，在最後補一個空段落並在 stderr 註明；以前 `--truncate-from` 切在表格後的段落時，輸出以表格結尾。
   - 沒有截斷時，刪完後最後一節沒有內容就拒絕。
+  - `word/document.xml` 有多個 `w:body`（不是一般的 Word 文件）時，任何刪除都拒絕；不刪除的操作不受影響。
 
 ### Fixed
 

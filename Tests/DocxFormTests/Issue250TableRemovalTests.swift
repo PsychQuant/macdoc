@@ -245,6 +245,11 @@ final class Issue250TableRemovalTests: XCTestCase {
         XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000K001"])), .inTextBox("0000K001"))
     }
 
+    func testParagraphInATextBoxOutsideAnyTableIsNotInATable() {
+        let body = TestXML.paragraph("0000A001", textBox(p("0000K003", "方塊"))) + p("0000A002") + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000K003"])), .notInTable("0000K003"))
+    }
+
     func testTableInsideATextBoxIsRefused() {
         let boxed = TestXML.paragraph("0000A001", textBox(table("0000K002") + TestXML.paragraph(nil)))
         let body = boxed + p("0000A002") + TestXML.bodySection
@@ -255,7 +260,7 @@ final class Issue250TableRemovalTests: XCTestCase {
         let broken = TestXML.paragraph("0000B002", pPr: sectionBreak, TestXML.run("格"))
         let body = p("0000A001") + TestXML.table([TestXML.cell(p("0000B001") + broken)]) + p("0000A002")
             + TestXML.bodySection
-        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000B001"])), .carriesSectionBreak("0000B002"))
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000B001"])), .tableCarriesSectionBreak("0000B001"))
     }
 
     func testCommentReferenceInsideWithItsRangeOutsideIsRefused() {
@@ -286,8 +291,11 @@ final class Issue250TableRemovalTests: XCTestCase {
             + p("0000A001") + table("0000B001") + p("0000A002") + "</w:body><w:body>" + p("0000A003")
             + "</w:body></w:document>").utf8)
         XCTAssertThrowsError(try FormPlan(removedTables: ["0000B001"]).apply(toDocumentXML: xml)) {
-            guard case .malformedPart? = $0 as? FormError else { return XCTFail("\($0)") }
+            guard case .malformedPart(let detail)? = $0 as? FormError else { return XCTFail("\($0)") }
+            XCTAssertTrue(detail.contains("多個 w:body"), detail)
         }
+        // A plan that deletes nothing still applies to such a part.
+        XCTAssertNoThrow(try FormPlan(checkboxFont: "標楷體").apply(toDocumentXML: xml))
     }
 
     /// The content control around a removed table stays, now empty
@@ -301,6 +309,7 @@ final class Issue250TableRemovalTests: XCTestCase {
 
     func testTextBoxMessageNamesTheParagraph() {
         XCTAssertTrue(FormError.inTextBox("0000K001").description.contains("0000K001"))
+        XCTAssertTrue(FormError.tableCarriesSectionBreak("0000B001").description.contains("0000B001"))
         XCTAssertTrue(FormError.tablesWouldJoin(["0000A002"]).description.contains("--remove-table"))
     }
 }

@@ -33,9 +33,13 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     /// `--remove-table` named a paragraph whose nearest table is not a
     /// body-level block (a nested table, or one in a text box) (#250).
     case tableNotBodyLevel(String)
-    /// `--remove-table` named a paragraph inside a text box; the table around
-    /// the text box is not the paragraph's table (#250 verify R1).
+    /// `--remove-table` named a paragraph inside a text box that sits in a
+    /// table; the table around the text box is not the paragraph's table
+    /// (#250 verify R1).
     case inTextBox(String)
+    /// `--remove-table` named a paragraph whose table holds a paragraph with
+    /// its own section break (#250 verify R1); named by the caller's id.
+    case tableCarriesSectionBreak(String)
     /// The deletions leave two tables adjacent that something other than a
     /// table separated before; Word would join them (#250). Names, in
     /// document order, what is deleted between them.
@@ -86,7 +90,9 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
         case .notInTable(let id):
             return "段落 \(id) 不在表格裡，不能用 --remove-table"
         case .inTextBox(let id):
-            return "段落 \(id) 在文字方塊裡，不能用 --remove-table 指定表格；請點名表格儲存格本身的段落"
+            return "段落 \(id) 在文字方塊裡，文字方塊外面的表格不算它的表格，不能用 --remove-table；請點名表格儲存格本身的段落"
+        case .tableCarriesSectionBreak(let id):
+            return "段落 \(id) 所在的表格裡有段落帶有分節符（w:sectPr），刪掉表格會改變分節設定"
         case .tableNotBodyLevel(let id):
             return "段落 \(id) 所在的表格不是本文層的表格（巢狀在儲存格或文字方塊裡），不能用 --remove-table"
         case .tablesWouldJoin(let ids):

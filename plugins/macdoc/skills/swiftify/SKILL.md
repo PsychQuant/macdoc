@@ -142,7 +142,7 @@ macdoc word form apply 已填-1.docx --to-docx 定稿-1.docx \
 - **第 5 步（Verify）的 `--verify-against` 驗的是腳本**（整理之前），整理後的輸出本來就不會和範本 byte-equal。整理只改被點名的元素，`word/document.xml` 以外的 part 內容逐位元組不變（zip 容器本身重新寫出）。
 - 點名靠 `w14:paraId`；沒有 paraId 的段落無法整理。符號字型（如 Wingdings）畫的方框不算方框，不會被分類成 checkbox。
 - **全有全無**：所有 paraId 先驗過才動手，任何一步失敗都不寫出檔案；輸出已存在時預設拒絕，覆寫要 `--force`（同第 4 步的同意規則）。
-- **MCP 那一面沒有這些操作**（PsychQuant/che-word-mcp#300）；要整理就用 CLI。整張表一次套用尚未支援，填寫欄的判定方式待決定（PsychQuant/macdoc#250）。刪除會守住本文層的結構：刪完後原本隔開的兩張表會緊鄰時拒絕（例如 `--remove` 刪掉兩張表之間唯一的段落；要合併請改用 `--remove-table`），本文會以表格結尾時在最後補一個空段落。
+- **MCP 那一面沒有這些操作**（PsychQuant/che-word-mcp#300）；要整理就用 CLI。整張表一次套用尚未支援，填寫欄的判定方式待決定（PsychQuant/macdoc#250）。刪除會守住本文層的結構：刪完後原本隔開的兩張表會緊鄰時拒絕（例如 `--remove` 刪掉兩張表之間唯一的段落；要刪掉其中一張表請改用 `--remove-table`），本文會以表格結尾時在最後補一個空段落。
 - `macdoc docx apply` 的 `insert_paragraph` 走 typed 路徑、寫出的段落沒有格式（PsychQuant/macdoc#251）；raw channel 的表單改用 `--insert-after`。
 
 ## 判讀 coverage：為什麼你的腳本可能不可讀

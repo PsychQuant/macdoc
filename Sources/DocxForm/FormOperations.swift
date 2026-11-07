@@ -495,15 +495,19 @@ enum FormOperations {
         var spans = zip(ids, removed).map { FormRanges.DeletionSpan(id: $0, range: index.elementRange($1)) }
         // A part with more than one body is not a document the structure
         // rules below can judge (#250 verify R1).
-        if index.elements(named: "w:body").count > 1 { throw FormError.malformedPart("有多個 w:body") }
+        if index.elements(named: "w:body").count > 1 {
+            throw FormError.malformedPart("有多個 w:body，不是一般的 Word 文件，拒絕刪除")
+        }
         // Each named table once, under the first id naming it (#250).
         let removedTables = try uniqueTables(tables, in: index)
         // A paragraph inside the table carrying its own section break would go
         // with it, as `--remove` refuses for a paragraph (#250 verify R1).
+        // Only the table's own tags are walked, so the cost is the size of the
+        // removed tables, not tables times paragraphs (#250 verify R2).
         for entry in removedTables {
-            let range = index.elementRange(entry.table)
-            for p in index.elements(named: "w:p") where range.contains(index.tags[p].start) && ownSectPr(of: p, in: index) != nil {
-                throw FormError.carriesSectionBreak(index.attribute("w14:paraId", of: p) ?? entry.id)
+            for t in entry.table...index.tags[entry.table].match! where index.tags[t].kind != .close
+                && index.tags[t].name == "w:p" && ownSectPr(of: t, in: index) != nil {
+                throw FormError.tableCarriesSectionBreak(entry.id)
             }
         }
         let tableSpans = removedTables.map { FormRanges.DeletionSpan(id: $0.id, range: index.elementRange($0.table)) }
@@ -591,7 +595,11 @@ enum FormOperations {
         while let c = current, index.tags[c].name != "w:tbl" {
             // A text box is its own story: the table around it is not the
             // paragraph's table, so the walk stops here (#250 verify R1).
-            if index.tags[c].name == "w:txbxContent" { throw FormError.inTextBox(id) }
+            if index.tags[c].name == "w:txbxContent" {
+                var outer = index.tags[c].parent
+                while let o = outer, index.tags[o].name != "w:tbl" { outer = index.tags[o].parent }
+                throw outer == nil ? FormError.notInTable(id) : FormError.inTextBox(id)
+            }
             current = index.tags[c].parent
         }
         guard let table = current else { throw FormError.notInTable(id) }
@@ -621,8 +629,8 @@ enum FormOperations {
     ///     become adjacent: Word would join them.
     /// (b) The body must keep content; deleting every block is refused. A body
     ///     that ended with a paragraph and would end with a table (or another
-    ///     block that is not a paragraph) gets an empty final paragraph, the
-    ///     form Word itself saves; the return value says so.
+    ///     block that is not a paragraph) gets an empty final paragraph; the
+    ///     return value says so.
     /// (c) Without a truncation, the last section must keep content: the last
     ///     kept block must not be a paragraph with its own section break when
     ///     the body has its own final section properties. (Truncation folds
