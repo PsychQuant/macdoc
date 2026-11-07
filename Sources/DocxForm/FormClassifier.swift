@@ -18,6 +18,52 @@ public enum ParagraphKind: String, CaseIterable, Equatable {
     case body
 }
 
+/// The main `word form apply` flag that tidies a paragraph of one kind (#255).
+/// `ParagraphKind.applyOption` is what the `word reverse --slot` hints are
+/// built from, and a test checks the swiftify skill's kind table against it;
+/// other hand-written copies (the macdoc skill's option table, CLI help and
+/// messages) are not derived from it. It records only the main flag and
+/// its argument, not companion options such as `--field-size`. Package access:
+/// it serves this package's CLI and tests, not library callers.
+package struct ApplyOption: Equatable {
+    package enum Argument: Equatable {
+        /// The option takes the paragraph's own id.
+        case paraId
+        /// The option takes a value the caller chooses, shown by this placeholder.
+        case placeholder(String)
+    }
+
+    package let flag: String
+    package let argument: Argument
+
+    package init(flag: String, argument: Argument) {
+        self.flag = flag
+        self.argument = argument
+    }
+
+    /// The option as written for one paragraph, e.g. `--field 0000A001`.
+    package func usage(paraId: String) -> String {
+        switch argument {
+        case .paraId: return "\(flag) \(paraId)"
+        case .placeholder(let value): return "\(flag) \(value)"
+        }
+    }
+}
+
+extension ParagraphKind {
+    /// The main flag that tidies this kind after render, or nil when the kind
+    /// has none. Nil is not "nothing to do": a `body` paragraph's content is
+    /// changed with `--insert-after`, which is not a per-kind tidy step.
+    package var applyOption: ApplyOption? {
+        switch self {
+        case .tableField: return ApplyOption(flag: "--field", argument: .paraId)
+        case .checkboxLine: return ApplyOption(flag: "--checkbox-font", argument: .placeholder("<字型>"))
+        case .listCheckbox: return ApplyOption(flag: "--tick-list", argument: .paraId)
+        case .body: return nil
+        }
+    }
+}
+
 public struct ClassifiedParagraph: Equatable {
     public let paraId: String
     public let kind: ParagraphKind
