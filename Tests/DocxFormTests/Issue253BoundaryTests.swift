@@ -417,7 +417,7 @@ final class Issue253BoundaryTests: XCTestCase {
             + TestXML.paragraph("0000A341", TestXML.run("項目") + end)
             + TestXML.bodySection
         var editor = try XMLEditor(TestXML.document(body))
-        XCTAssertThrowsError(try FormOperations.removeAll(["0000R340"], truncateFrom: nil, editor: &editor)) {
+        XCTAssertThrowsError(try FormOperations.deleteAll(["0000R340"], truncateFrom: nil, editor: &editor)) {
             XCTAssertEqual($0 as? FormError, .splitsField("0000R340"))
         }
     }
@@ -449,6 +449,69 @@ final class Issue253BoundaryTests: XCTestCase {
         XCTAssertTrue(empty.contains("0000R350") && empty.contains("0000R351"))
         let table = FormError.removalsEndWithoutParagraph(["0000R362", "0000R363"]).description
         XCTAssertTrue(table.contains("0000R362") && table.contains("0000R363"))
+    }
+
+    // MARK: verify round 3
+
+    private func document(root extra: String, _ body: String) -> [UInt8] {
+        Array(("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<w:document \(TestXML.namespaces) \(extra)><w:body>" + body + "</w:body></w:document>").utf8)
+    }
+
+    /// R3 #1: a Markup Compatibility attribute names prefixes in its value.
+    /// The binding of such a prefix, declared only on the removed paragraph,
+    /// must travel with the marker even though no element or attribute name
+    /// uses it.
+    func testMovedMarkerKeepsAPrefixNamedOnlyInAnIgnorableValue() throws {
+        let mc = "xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\""
+        let xml = document(root: mc,
+            "<w:p w14:paraId=\"0000R370\" xmlns:foo=\"urn:x\">"
+            + "<w:bookmarkStart w:id=\"41\" w:name=\"i\" mc:Ignorable=\"foo w14\"/>" + TestXML.run("刪") + "</w:p>"
+            + TestXML.paragraph("0000A370", TestXML.run("後") + "<w:bookmarkEnd w:id=\"41\"/>") + TestXML.bodySection)
+        let out = TestXML.string(try FormPlan(removals: ["0000R370"]).apply(toDocumentXML: xml).documentXML)
+        XCTAssertTrue(out.contains("<w:bookmarkStart w:id=\"41\" w:name=\"i\" mc:Ignorable=\"foo w14\" xmlns:foo=\"urn:x\"/>"), out)
+    }
+
+    /// R3 #3: the truncation destination is the body, so a prefix the cut
+    /// paragraph rebinds is declared on the moved marker.
+    func testTruncatedMarkerKeepsTheNamespaceItsPrefixHadInTheCut() throws {
+        let xml = document(root: "xmlns:foo=\"urn:a\"",
+            TestXML.paragraph("0000A380", "<w:bookmarkStart w:id=\"42\" w:name=\"t\"/>" + TestXML.run("留"))
+            + "<w:p w14:paraId=\"0000T380\" xmlns:foo=\"urn:b\">" + TestXML.run("切")
+            + "<w:bookmarkEnd w:id=\"42\" foo:tag=\"1\"/></w:p>" + TestXML.bodySection)
+        let out = TestXML.string(try FormPlan(truncateFrom: "0000T380").apply(toDocumentXML: xml).documentXML)
+        XCTAssertTrue(out.contains("<w:bookmarkEnd w:id=\"42\" foo:tag=\"1\" xmlns:foo=\"urn:b\"/><w:sectPr"), out)
+    }
+
+    /// R3 #6: a text box follows the same rule as a cell.
+    func testRemovingTheLastParagraphOfATextBoxKeepsItsMarkerInTheBox() throws {
+        let box = "<w:r><w:drawing><wp:inline><w:txbxContent>"
+            + TestXML.paragraph("0000A390", TestXML.run("前"))
+            + TestXML.paragraph("0000R390", "<w:bookmarkStart w:id=\"43\" w:name=\"b\"/>" + TestXML.run("刪"))
+            + "</w:txbxContent></wp:inline></w:drawing></w:r>"
+        let body = TestXML.paragraph("0000A391", box) + TestXML.paragraph("0000A392", "<w:bookmarkEnd w:id=\"43\"/>")
+            + TestXML.bodySection
+        let out = try apply(body, FormPlan(removals: ["0000R390"]))
+        XCTAssertTrue(out.contains(TestXML.run("前") + "<w:bookmarkStart w:id=\"43\" w:name=\"b\"/></w:p></w:txbxContent>"), out)
+    }
+
+    /// R3 #2: removal and truncation share one entry point that checks the
+    /// whole deletion itself, so no caller can cut a field in two.
+    func testDeleteAllRefusesATruncationThatSplitsAFieldWithoutThePlan() throws {
+        let body = TestXML.paragraph("0000A400", begin + separate + TestXML.run("目錄"))
+            + TestXML.paragraph("0000T400", TestXML.run("項目") + end) + TestXML.bodySection
+        var editor = try XMLEditor(TestXML.document(body))
+        XCTAssertThrowsError(try FormOperations.deleteAll([], truncateFrom: "0000T400", editor: &editor)) {
+            XCTAssertEqual($0 as? FormError, .splitsField("0000T400"))
+        }
+    }
+
+    /// R3 #4: with nothing to delete the step leaves the part as it is.
+    func testDeleteAllWithNothingToDeleteLeavesThePartUnchanged() throws {
+        let xml = TestXML.document(TestXML.paragraph("0000A410", TestXML.run("一")) + TestXML.bodySection)
+        var editor = try XMLEditor(xml)
+        try FormOperations.deleteAll([], truncateFrom: nil, editor: &editor)
+        XCTAssertEqual(editor.bytes, xml)
     }
 
     func testRefusalMessagesSayWhatToDo() {

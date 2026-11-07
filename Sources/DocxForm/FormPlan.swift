@@ -137,8 +137,8 @@ public struct FormPlan: Equatable {
         // Fields, comment references and range markers pair across paragraphs,
         // and a cell's remaining blocks depend on every paragraph that goes, so
         // the deletions are judged once as a whole before anything is written
-        // (#253 verify R1, R2). The removal step judges them again on its own
-        // index, so a caller that skips the plan cannot bypass the checks.
+        // (#253 verify R1, R2). The deletion step judges them again on the part
+        // the earlier steps left, so no caller can bypass the checks (R3).
         _ = try FormOperations.checkDeletions(removals, truncateFrom: truncateFrom, in: editor.index)
 
         var size: FieldSize?
@@ -173,8 +173,7 @@ public struct FormPlan: Equatable {
         }
         var skipped = 0
         if let font = checkboxFont { skipped = try FormOperations.uniformCheckboxes(font: font, editor: &editor) }
-        let truncationMarkers = try FormOperations.removeAll(removals, truncateFrom: truncateFrom, editor: &editor)
-        if let id = truncateFrom { try FormOperations.truncate(from: id, keptMarkers: truncationMarkers, editor: &editor) }
+        try FormOperations.deleteAll(removals, truncateFrom: truncateFrom, editor: &editor)
 
         // 3. The result must be well-formed XML.
         try Self.checkWellFormed(editor.bytes)

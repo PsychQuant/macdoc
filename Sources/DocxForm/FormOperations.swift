@@ -477,6 +477,9 @@ enum FormOperations {
     /// paragraphs and the `--truncate-from` range, and each cell or text box
     /// against what is left after all of its named paragraphs go.
     static func checkDeletions(_ ids: [String], truncateFrom: String?, in index: XMLTagIndex) throws -> [FormRanges.DeletionSpan] {
+        // Nothing to delete: no pairing or container question arises, and the
+        // whole-part scans below are skipped (#253 verify R3).
+        guard !ids.isEmpty || truncateFrom != nil else { return [] }
         for id in ids { try checkRemove(id, in: index) }
         var spans = try ids.map { FormRanges.DeletionSpan(id: $0, range: index.elementRange(try locate($0, in: index))) }
         if let id = truncateFrom { spans.append(.init(id: id, range: try truncationRange(from: id, in: index))) }
@@ -503,16 +506,18 @@ enum FormOperations {
         return spans
     }
 
-    /// Removes every named paragraph in one edit and returns the serialized
-    /// kept markers of the `--truncate-from` range, which `truncate` applies
-    /// next. A range marker whose partner stays is kept where its paragraph
-    /// was; when no surviving block follows the paragraph in its cell or text
-    /// box, it goes to the end of the nearest surviving paragraph before it, so
-    /// the container still ends with a paragraph whatever order the ids came
-    /// in (#253 verify R2).
-    static func removeAll(_ ids: [String], truncateFrom: String?, editor: inout XMLEditor) throws -> String {
+    /// The only entry point that deletes (#253 verify R2, R3): checks the whole
+    /// deletion, removes every named paragraph in one edit, then truncates.
+    /// A range marker whose partner stays is kept where its paragraph was;
+    /// when no surviving block follows the paragraph in its cell or text box,
+    /// it goes to the end of the nearest surviving paragraph before it, so the
+    /// container still ends with a paragraph whatever order the ids came in.
+    /// The truncation's kept markers are taken on the part before the removal
+    /// edit, where the partners of removed markers can still be seen.
+    static func deleteAll(_ ids: [String], truncateFrom: String?, editor: inout XMLEditor) throws {
         let index = editor.index
         let spans = try checkDeletions(ids, truncateFrom: truncateFrom, in: index)
+        guard !spans.isEmpty else { return }
         let deleted = spans.map(\.range)
         let removed = Set(try ids.map { try locate($0, in: index) })
         var edits: [Edit] = []
@@ -533,10 +538,13 @@ enum FormOperations {
                 ? .replace(index.elementRange(destination), with: openTag(of: destination, in: index) + markers + "</w:p>")
                 : .insert(markers, at: index.tags[index.tags[destination].match!].start))
         }
-        try editor.apply(edits)
-        guard let id = truncateFrom, let span = spans.last(where: { $0.id == id }) else { return "" }
-        return FormRanges.keptMarkerXML(in: span.range, deleted: deleted,
-                                        destination: try checkTruncate(id, in: index).body, index: index)
+        let truncation = try truncateFrom.map { id -> (id: String, markers: String) in
+            guard let span = spans.last(where: { $0.id == id }) else { return (id, "") }
+            return (id, FormRanges.keptMarkerXML(in: span.range, deleted: deleted,
+                                                 destination: try checkTruncate(id, in: index).body, index: index))
+        }
+        if !edits.isEmpty { try editor.apply(edits) }
+        if let truncation { try truncate(from: truncation.id, keptMarkers: truncation.markers, editor: &editor) }
     }
 
     /// For a removed paragraph with no surviving block after it in its cell or
@@ -552,7 +560,8 @@ enum FormOperations {
         return before
     }
 
-    static func truncate(from id: String, keptMarkers: String = "", editor: inout XMLEditor) throws {
+    /// Unchecked: reached only through `deleteAll`, which has judged the cut.
+    private static func truncate(from id: String, keptMarkers: String, editor: inout XMLEditor) throws {
         let (p, body) = try checkTruncate(id, in: editor.index)
         let index = editor.index
         let cut = index.tags[p].start
