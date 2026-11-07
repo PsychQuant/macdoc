@@ -238,7 +238,7 @@ Removal SHALL NOT leave unpaired markup, judged against the deleted set: the uni
 
 For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` with at least one content block before it (a block as defined below; range markers alone do not count, so cutting after nothing but a bookmark is refused like cutting at the first child). `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used. When the last kept block (looking through body-level `w:sdt` and `w:customXml`; every element counts as a block except range markers such as bookmarks, comment ranges and permission ranges, so a `w:altChunk` or a table after the break is the last block) is a paragraph that carries its own `w:sectPr`, the cut removed whole sections: that `w:sectPr` SHALL be moved from the paragraph to the end of the body as its final `w:sectPr` and the removed range's section properties SHALL be dropped, so the result never ends with a section that has no content.
 
-Truncation SHALL NOT leave unpaired markup, using the paired range markers and the deleted set defined under "Paragraphs are removed only when named": a paired marker in the removed range whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept at the end of the kept content, before the body's final `w:sectPr`, in document order, carrying namespace declarations by the same rule as for `--remove`; a marker whose partner is also in the deleted set SHALL be removed. The field, comment-reference and Markup Compatibility refusals of that requirement apply to the cut in the same way and name the `--truncate-from` paragraph. The body, the kept markers' new parent, is always their common ancestor with the old position, so for the cut only the marker itself and the removed elements around it can trigger the Markup Compatibility refusal. When every content block before the cut is a paragraph named by `--remove`, the command SHALL refuse before any edit, naming the `--truncate-from` paragraph.
+Truncation SHALL NOT leave unpaired markup, using the paired range markers and the deleted set defined under "Paragraphs are removed only when named": a paired marker in the removed range whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept at the end of the kept content, before the body's final `w:sectPr` (and before the empty paragraph that "Deletions keep the body's block structure" adds, when it adds one), in document order, carrying namespace declarations by the same rule as for `--remove`; a marker whose partner is also in the deleted set SHALL be removed. The field, comment-reference and Markup Compatibility refusals of that requirement apply to the cut in the same way and name the `--truncate-from` paragraph. The body, the kept markers' new parent, is always their common ancestor with the old position, so for the cut only the marker itself and the removed elements around it can trigger the Markup Compatibility refusal. When every content block before the cut is a paragraph named by `--remove`, the command SHALL refuse before any edit, naming the `--truncate-from` paragraph.
 
 #### Scenario: Kept bookmark end moves before the final section
 
@@ -279,6 +279,64 @@ Truncation SHALL NOT leave unpaired markup, using the paired range markers and t
 
 - **WHEN** `--truncate-from` names a paragraph inside a `w:tc`
 - **THEN** the command fails naming that paragraph id and writes no output
+
+### Requirement: A whole body-level table is removed by naming one of its paragraphs
+
+`macdoc word form apply --remove-table <paraId>` (repeatable) SHALL delete the whole table around the named paragraph: the paragraph's nearest enclosing `w:tbl`, which SHALL be a body-level block, directly under `w:body` or inside a body-level `w:sdt` or `w:customXml`. A paragraph in no table, and a paragraph whose nearest table lies in a table cell or a text box, SHALL be refused, naming the paragraph. A table named by several paragraphs SHALL be deleted once, attributed to the first paragraph naming it. The table's range SHALL join the deleted set defined under "Paragraphs are removed only when named": the field, comment-reference and Markup Compatibility refusals apply to it and name the paragraph that named the table, and a paired marker inside the table whose partner lies outside the deleted set SHALL be kept where the table was. A paragraph that another option names inside a removed table, and a removed table inside the range `--truncate-from` cuts, SHALL be refused before any edit. Removing a table SHALL NOT change any section properties: a table carries none, and a paragraph after it that carries a section break is kept.
+
+#### Scenario: Table between paragraphs
+
+- **WHEN** the body holds P1, table T, P2, a second table U and P3, and `--remove-table` names a paragraph inside T
+- **THEN** the body holds P1, P2, U and P3, and the output is written
+
+#### Scenario: Table in a table cell
+
+- **WHEN** `--remove-table` names a paragraph whose nearest table is nested in a cell of another table
+- **THEN** the command fails naming that paragraph and writes no output
+
+#### Scenario: Another option names a paragraph in the table
+
+- **WHEN** `--field` names a paragraph inside the table that `--remove-table` deletes
+- **THEN** the command fails naming the `--field` paragraph and writes no output
+
+#### Scenario: Bookmark that ends inside the table
+
+- **WHEN** a bookmark starts in P1, before the table, and ends inside it
+- **THEN** the `w:bookmarkEnd` is kept where the table was
+
+### Requirement: Deletions keep the body's block structure
+
+The body's content blocks (looking through body-level `w:sdt` and `w:customXml`; range markers such as bookmarks do not count) SHALL be compared before and after everything `--remove`, `--remove-table` and `--truncate-from` delete, judged as one set. A shape the input already had SHALL NOT be refused or changed. The rules are a closed list:
+
+1. Two tables that a block other than a table separated SHALL NOT become adjacent, because Word would join them. The command SHALL refuse before any edit, naming in document order what is deleted between them. Tables that already touched may lose a table between them.
+2. The body SHALL keep at least one content block; deleting every block SHALL be refused, naming them.
+3. When the body ended with a paragraph and would end with another block (a table, a `w:altChunk`), the command SHALL add an empty paragraph `<w:p/>` as the body's last block, right before the body's final `w:sectPr` and after any range markers kept there, and SHALL print a stderr note. This is the form Word saves.
+4. Without `--truncate-from`, when the last kept block is a paragraph carrying its own `w:sectPr`, the body has its own `w:sectPr`, and blocks after that paragraph are deleted, the last section would have no content. The command SHALL refuse, naming what is deleted after the paragraph. With `--truncate-from` such a break becomes the final section, as "Truncation keeps the section settings of the kept content" requires.
+
+#### Scenario: Only paragraph between two tables
+
+- **WHEN** the body holds P1, table T, P2, table U and P3, and `--remove` names P2
+- **THEN** the command fails naming P2 and writes no output
+
+#### Scenario: Paragraphs after the last table
+
+- **WHEN** the body holds P1, table T, P2 and P3, and `--remove` names P2 and P3
+- **THEN** the body holds P1, T and an empty paragraph before the final `w:sectPr`, and stderr carries a note
+
+#### Scenario: Cut right after a table
+
+- **WHEN** the body holds P1, table T, P2 and P3, and `--truncate-from` names P2
+- **THEN** the body holds P1, T and an empty paragraph before the final `w:sectPr`
+
+#### Scenario: Everything after the last section break
+
+- **WHEN** the body holds P1, P2 (whose `w:pPr` carries a section break), table T, P3 and the body's own `w:sectPr`, and `--remove-table` names a paragraph in T while `--remove` names P3
+- **THEN** the command fails naming that paragraph and P3, and writes no output
+
+#### Scenario: Body that already ended with a table
+
+- **WHEN** the body holds P1, P2 and table T, and `--remove` names P1
+- **THEN** the body holds P2 and T, and no paragraph is added
 
 ### Requirement: Apply is all-or-nothing
 

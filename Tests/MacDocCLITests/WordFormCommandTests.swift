@@ -422,4 +422,45 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertTrue(result.stderr.contains("word/numbering.xml 無法解析"), result.stderr)
     }
+
+    // MARK: --remove-table and the body structure (#250)
+
+    func testRemoveTableDeletesTheWholeTable() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        try makeForm(at: form)
+        let result = try CLITestHelper.run(["word", "form", "apply", form.path, "--to-docx", output.path,
+                                            "--remove-table", "0000C0EE"])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        let xml = try documentXML(output)
+        XCTAssertFalse(xml.contains("<w:tbl>"), xml)
+        XCTAssertTrue(xml.contains("0000B0D1") && xml.contains("0000A0A0"))
+        XCTAssertFalse(result.stderr.contains("補一個空段落"), result.stderr)
+    }
+
+    func testRemovingTheParagraphBetweenTwoTablesIsRefused() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        let second = "<w:tbl><w:tblPr/><w:tblGrid/><w:tr><w:tc>" + paragraph("0000D0D1", run("第二張")) + "</w:tc></w:tr></w:tbl>"
+        try makeForm(at: form, extraBody: second)
+        let result = try CLITestHelper.run(["word", "form", "apply", form.path, "--to-docx", output.path,
+                                            "--remove", "0000A0A0"])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("0000A0A0") && result.stderr.contains("緊鄰"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testABodyLeftEndingWithATableGetsAFinalParagraphAndANote() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        try makeForm(at: form)
+        let result = try CLITestHelper.run(["word", "form", "apply", form.path, "--to-docx", output.path,
+                                            "--remove", "0000A0A0"])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: 刪除後本文會以表格"), result.stderr)
+        XCTAssertTrue(try documentXML(output).contains("</w:tbl><w:p/><w:sectPr"))
+    }
 }

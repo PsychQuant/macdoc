@@ -154,19 +154,24 @@ extension MacDoc.Word.Form {
         var insertAfter: [String] = []
 
         @Option(name: .customLong("remove"),
-                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算，同一格要刪的幾段合起來判斷），會拆開欄位、讓註解失去引用，或要保留的標記受 Markup Compatibility 標記影響時也拒絕；另一半不在這次要刪的範圍裡的書籤等範圍標記留下",
+                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算，同一格要刪的幾段合起來判斷），會拆開欄位、讓註解失去引用，或要保留的標記受 Markup Compatibility 標記影響時也拒絕；另一半不在這次要刪的範圍裡的書籤等範圍標記留下；本文層的整體規則見 --remove-table",
                                    valueName: "paraId"))
         var remove: [String] = []
 
+        @Option(name: .customLong("remove-table"),
+                help: ArgumentHelp("刪掉段落所在的整張表格（可重複，同一張表只刪一次）；只限本文層的表格，巢狀表格與文字方塊裡的表格會拒絕，表格裡的段落被其他選項點名時也拒絕。和 --remove、--truncate-from 一起判斷：刪完後原本隔開的兩張表格會緊鄰、本文沒有內容，或（沒有截斷時）最後一節沒有內容時拒絕；本文會以表格結尾時在最後補一個空段落",
+                                   valueName: "paraId"))
+        var removeTable: [String] = []
+
         @Option(name: .customLong("truncate-from"),
-                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定；會拆開欄位、讓註解失去引用、之前的內容全被 --remove 刪掉，或要移動的標記受 Markup Compatibility 標記影響時拒絕，另一半保留的書籤等範圍標記移到保留內容的結尾", valueName: "paraId"))
+                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定；會拆開欄位、讓註解失去引用、之前的內容全被 --remove 刪掉，或要移動的標記受 Markup Compatibility 標記影響時拒絕，另一半保留的書籤等範圍標記移到保留內容的結尾；保留內容會以表格結尾時在最後補一個空段落", valueName: "paraId"))
         var truncateFrom: String?
 
         func validate() throws {
             let plan = try makePlan()
             guard plan.hasOperations else {
                 throw ValidationError(
-                    "至少要指定一個操作：--field、--checkbox-font、--tick-list、--insert-after、--remove 或 --truncate-from")
+                    "至少要指定一個操作：--field、--checkbox-font、--tick-list、--insert-after、--remove、--remove-table 或 --truncate-from")
             }
             if fieldSize != nil, fields.isEmpty {
                 throw ValidationError("--field-size 需要搭配 --field")
@@ -189,7 +194,8 @@ extension MacDoc.Word.Form {
                 throw ValidationError(error.description)
             }
             return FormPlan(fields: fields, fieldSize: size, checkboxFont: checkboxFont, tickList: tickList,
-                            insertions: insertions, removals: remove, truncateFrom: truncateFrom)
+                            insertions: insertions, removals: remove, removedTables: removeTable,
+                            truncateFrom: truncateFrom)
         }
 
         func run() throws {
@@ -221,6 +227,10 @@ extension MacDoc.Word.Form {
                 }
                 for skip in outcome.skippedCleanups {
                     FileHandle.standardError.write(Data(Self.cleanupNote(skip).utf8))
+                }
+                if outcome.addedFinalParagraph {
+                    FileHandle.standardError.write(Data(
+                        "note: 刪除後本文會以表格（或其他不是段落的區塊）結尾，已在最後補一個空段落\n".utf8))
                 }
             }
             FileHandle.standardError.write(Data("已寫入: \(toDocx)\n".utf8))

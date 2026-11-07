@@ -28,6 +28,21 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     /// Every content block before the `--truncate-from` paragraph is named by
     /// `--remove` (#253 verify R4).
     case removalsLeaveNothingBeforeCut(String)
+    /// `--remove-table` named a paragraph that is in no table (#250).
+    case notInTable(String)
+    /// `--remove-table` named a paragraph whose nearest table is not a
+    /// body-level block (a nested table, or one in a text box) (#250).
+    case tableNotBodyLevel(String)
+    /// The deletions leave two tables adjacent that something other than a
+    /// table separated before; Word would join them (#250). Names, in
+    /// document order, what is deleted between them.
+    case tablesWouldJoin([String])
+    /// The deletions take every content block of the body (#250).
+    case removalsLeaveEmptyBody([String])
+    /// The deletions leave the last section with no content: the last kept
+    /// block carries its own section break and the body has its own final
+    /// section properties (#250).
+    case lastSectionWouldBeEmpty([String])
     case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
     case splitsField(String)
@@ -65,6 +80,16 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "從段落 \(id) 刪除的範圍裡有要保留的範圍標記（書籤等），但標記本身、它外層被刪的元素或要移入的段落帶有 Markup Compatibility 標記（mc:Ignorable 等屬性，或 mc:AlternateContent 這類元素，Word 的文字方塊就包在裡面）；搬移會改變這些規則套用的對象，因此不刪。請把標記的另一半也列入刪除範圍，或先在 Word 裡移除這個標記"
         case .removalsLeaveNothingBeforeCut(let id):
             return "從段落 \(id) 截斷時，它之前的內容都列在 --remove 裡，刪完後本文不會留下任何內容"
+        case .notInTable(let id):
+            return "段落 \(id) 不在表格裡，不能用 --remove-table"
+        case .tableNotBodyLevel(let id):
+            return "段落 \(id) 所在的表格不是本文層的表格（巢狀在儲存格或文字方塊裡），不能用 --remove-table"
+        case .tablesWouldJoin(let ids):
+            return "刪掉 \(ids.joined(separator: "、")) 後，前後兩張表格會緊鄰，Word 會把它們併成一張；請至少留下兩張表之間的一段"
+        case .removalsLeaveEmptyBody(let ids):
+            return "刪掉 \(ids.joined(separator: "、")) 後，本文不會留下任何內容；請至少留下一段"
+        case .lastSectionWouldBeEmpty(let ids):
+            return "刪掉 \(ids.joined(separator: "、")) 後，最後一節沒有任何內容（保留的最後一段帶有分節符），Word 會多出一頁空白；請留下分節符之後的一段，或改用 --truncate-from"
         case .conflictingOperations(let id, let detail):
             return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):
