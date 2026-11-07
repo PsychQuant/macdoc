@@ -27,7 +27,7 @@ Constraints found while scouting:
 - Changing raw-channel slot substitution semantics or the `// @slot-raw` directive grammar.
 - Headers, footers, footnotes and other parts. Only `word/document.xml` is edited.
 - Resolving list numbering inherited from paragraph styles; only a paragraph's own `w:numPr` counts.
-- Applying field normalization to a whole table at once, and removing a whole table in the middle of the body. The maintainer decided (2026-11-04) that a table-wide pass leaves label cells untouched and that middle-table removal is to be supported; both are tracked in PsychQuant/macdoc#250.
+- Applying field normalization to a whole table at once. The maintainer decided (2026-11-04) that a table-wide pass leaves label cells untouched; how fill cells are told from label cells is still to be decided (PsychQuant/macdoc#250). Removing a whole table in the middle of the body was added in PsychQuant/macdoc#250 (`--remove-table`).
 
 ## Decisions
 
@@ -106,9 +106,9 @@ Alternatives: always using a plain rename after an existence check (round-1 defe
 
 - [String splicing can produce invalid OOXML child order] → insertions use explicit follower lists from ECMA-376 (`w:pPr`, `w:rPr`, `w:tcPr`), and tests assert the position of each inserted element.
 - [Removing a paragraph that looks empty can remove content] → emptiness is a closed whitelist (empty runs and `w:proofErr` only); bookmarks, comment ranges, tracked changes, fields, drawings and symbols count as content.
-- [Structural rules beyond well-formedness] → the final `XMLParser` check proves well-formedness only. The cell-ending guard, the conflict checks and the live-sectPr rule cover the structural cases found in review; body-level table adjacency after removal or truncation is not checked: removing the only paragraph between two tables makes Word merge them (PsychQuant/macdoc#250). Empty-paragraph cleanup skipped silently for inline content controls, numbered or revised empty paragraphs, and range markers cut by truncation are tracked in PsychQuant/macdoc#253; id lookup cost and the entry-count limit in PsychQuant/macdoc#252.
+- [Structural rules beyond well-formedness] → the final `XMLParser` check proves well-formedness only. The cell-ending guard, the conflict checks and the live-sectPr rule cover the structural cases found in review; body-level structure after deletion is checked since PsychQuant/macdoc#250: two tables a non-table block separated must not become adjacent, the body keeps content and gets an empty final paragraph instead of ending with a table, and without a cut the last section keeps content. Empty-paragraph cleanup skipped silently for inline content controls, numbered or revised empty paragraphs, and range markers cut by truncation are tracked in PsychQuant/macdoc#253; id lookup cost and the entry-count limit in PsychQuant/macdoc#252.
 - [The default field size can surprise a caller] → the chosen size is printed, and `--field-size` overrides it (default confirmed by the maintainer on 2026-11-04).
 - [Exclusive rename is unavailable on some filesystems] → falls back to an existence check plus a plain rename; the race window remains there.
 - [Two steps (render, then apply) instead of one] → the swiftify skill documents the order and the kind → option table.
 - [MCP callers do not get the operations] → recorded as a non-goal; PsychQuant/che-word-mcp#300.
-- [The table-level default is per designated paragraph, and a whole table in the middle of the body cannot be removed] → decided by the maintainer and tracked in PsychQuant/macdoc#250.
+- [The table-level default is per designated paragraph] → decided by the maintainer and tracked in PsychQuant/macdoc#250; a whole table in the middle of the body is removed with `--remove-table` (#250).

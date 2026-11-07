@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `macdoc word form apply --remove-table <paraId>`（需要下一版 CLI）：刪掉段落所在的整張本文層表格，和 `--remove`、`--truncate-from` 一起判斷；表格裡另一半留下的書籤等範圍標記留在表格原本的位置，巢狀表格、文字方塊裡的表格與段落、帶分節符的表格內段落，以及被其他選項點名的段落會拒絕（PsychQuant/macdoc#250）。
+
+### Changed
+
+- `macdoc word form apply`（需要下一版 CLI）的刪除會守住本文層的結構（PsychQuant/macdoc#250）。原檔本來就是這樣的情況不擋：
+  - 刪完後原本被表格以外的區塊隔開的兩張表會緊鄰時拒絕（Word 會把它們併成一張）；以前 `--remove` 刪掉兩張表之間唯一的段落會照樣寫出。
+  - 刪到本文沒有內容時拒絕。
+  - 本文原本以段落結尾、刪完會以表格或 `w:altChunk` 結尾時，在最後補一個空段落並在 stderr 註明；以前 `--truncate-from` 切在表格後的段落時，輸出以表格結尾。
+  - 沒有截斷時，刪完後最後一節沒有內容就拒絕。
+  - `word/document.xml` 有多個 `w:body`（不是一般的 Word 文件）時，任何刪除都拒絕；不刪除的操作不受影響。
+
 ### Fixed
 
 - `macdoc word form classify`／`apply`（需要下一版 CLI）在資源上設了上限，並把查找改成一次建表（PsychQuant/macdoc#252）：
