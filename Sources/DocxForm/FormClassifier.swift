@@ -18,6 +18,48 @@ public enum ParagraphKind: String, CaseIterable, Equatable {
     case body
 }
 
+/// The `word form apply` option that tidies a paragraph of one kind (#255).
+/// `ParagraphKind.applyOption` is the one place this mapping lives: the
+/// `word reverse --slot` hints read it, and a test keeps the swiftify skill's
+/// kind table in step with it.
+public struct ApplyOption: Equatable {
+    public enum Argument: Equatable {
+        /// The option takes the paragraph's own id.
+        case paraId
+        /// The option takes a value the caller chooses, shown by this placeholder.
+        case placeholder(String)
+    }
+
+    public let flag: String
+    public let argument: Argument
+
+    public init(flag: String, argument: Argument) {
+        self.flag = flag
+        self.argument = argument
+    }
+
+    /// The option as written for one paragraph, e.g. `--field 0000A001`.
+    public func usage(paraId: String) -> String {
+        switch argument {
+        case .paraId: return "\(flag) \(paraId)"
+        case .placeholder(let value): return "\(flag) \(value)"
+        }
+    }
+}
+
+extension ParagraphKind {
+    /// The option that tidies this kind after render, or nil when the kind has
+    /// none (`body`: its content is changed with `--insert-after`, not tidied).
+    public var applyOption: ApplyOption? {
+        switch self {
+        case .tableField: return ApplyOption(flag: "--field", argument: .paraId)
+        case .checkboxLine: return ApplyOption(flag: "--checkbox-font", argument: .placeholder("<字型>"))
+        case .listCheckbox: return ApplyOption(flag: "--tick-list", argument: .paraId)
+        case .body: return nil
+        }
+    }
+}
+
 public struct ClassifiedParagraph: Equatable {
     public let paraId: String
     public let kind: ParagraphKind

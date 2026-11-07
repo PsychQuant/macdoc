@@ -271,12 +271,8 @@ enum SlotFollowUp {
         }
     }
 
+    /// The option comes from the one kind → option mapping (#255).
     static func option(for kind: ParagraphKind, paraId: String) -> String? {
-        switch kind {
-        case .tableField: return "--field \(paraId)"
-        case .checkboxLine: return "--checkbox-font <字型>"
-        case .listCheckbox: return "--tick-list \(paraId)"
-        case .body: return nil
-        }
+        kind.applyOption?.usage(paraId: paraId)
     }
 }
