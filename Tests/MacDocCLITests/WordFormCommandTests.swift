@@ -304,6 +304,24 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
 
+    /// #253 verify R5: the Markup Compatibility refusal reaches the terminal
+    /// with a non-zero exit and no output written.
+    func testApplyRefusesMovingAMarkerAcrossCompatibilityRules() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let body = "<w:p w14:paraId=\"0000C0A0\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\""
+            + " mc:Ignorable=\"w14\"><w:bookmarkStart w:id=\"90\" w:name=\"c\"/>" + run("刪") + "</w:p>"
+            + paragraph("0000C0A1", run("後") + "<w:bookmarkEnd w:id=\"90\"/>")
+        try makeForm(at: form, extraBody: body)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--remove", "0000C0A0",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("0000C0A0") && result.stderr.contains("Markup Compatibility"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
     func testApplyTickListAndInsertAfter() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")

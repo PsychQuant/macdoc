@@ -22,8 +22,8 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     /// removal together leaves a cell or text box ending with a table.
     case removalsEndWithoutParagraph([String])
     /// A range marker that would be kept, where the marker itself, an element
-    /// removed around it, or the paragraph it would move into carries a Markup
-    /// Compatibility attribute (#253 verify R4).
+    /// removed around it, or the paragraph it would move into is or carries
+    /// Markup Compatibility markup (#253 verify R4, R5).
     case markerUnderCompatibilityRules(String)
     /// Every content block before the `--truncate-from` paragraph is named by
     /// `--remove` (#253 verify R4).
@@ -62,7 +62,7 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
         case .removalsEndWithoutParagraph(let ids):
             return "一起刪掉段落 \(ids.joined(separator: "、")) 後，所在儲存格（或文字方塊）會以表格結尾；Word 要求最後一個元素是段落，請至少留下表格之後的一段"
         case .markerUnderCompatibilityRules(let id):
-            return "從段落 \(id) 刪除的範圍裡有要保留的範圍標記（書籤等），但標記本身、它外層被刪的元素或要移入的段落帶有 Markup Compatibility 屬性（mc:Ignorable 等）；搬移會改變這些規則套用的對象，因此不刪。請把標記的另一半也列入刪除範圍，或先在 Word 裡移除這個標記"
+            return "從段落 \(id) 刪除的範圍裡有要保留的範圍標記（書籤等），但標記本身、它外層被刪的元素或要移入的段落帶有 Markup Compatibility 標記（mc:Ignorable 等屬性，或 mc:AlternateContent 這類元素，Word 的文字方塊就包在裡面）；搬移會改變這些規則套用的對象，因此不刪。請把標記的另一半也列入刪除範圍，或先在 Word 裡移除這個標記"
         case .removalsLeaveNothingBeforeCut(let id):
             return "從段落 \(id) 截斷時，它之前的內容都列在 --remove 裡，刪完後本文不會留下任何內容"
         case .conflictingOperations(let id, let detail):

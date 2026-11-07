@@ -483,10 +483,14 @@ enum FormOperations {
         var distinct: Set<String> = []
         let ids = ids.filter { distinct.insert($0).inserted }
         for id in ids { try checkRemove(id, in: index) }
-        var spans = try ids.map { FormRanges.DeletionSpan(id: $0, range: index.elementRange(try locate($0, in: index))) }
-        if let id = truncateFrom { spans.append(.init(id: id, range: try truncationRange(from: id, in: index))) }
-        try FormRanges.checkPairedMarkup(spans, index: index)
         let removed = try ids.map { try locate($0, in: index) }
+        var spans = zip(ids, removed).map { FormRanges.DeletionSpan(id: $0, range: index.elementRange($1)) }
+        // The cut is located and checked once; every later use reads it here.
+        let cut = try truncateFrom.map { try checkTruncate($0, in: index) }
+        if let id = truncateFrom, let cut {
+            spans.append(.init(id: id, range: index.tags[cut.paragraph].start..<bodyEnd(of: cut.body, in: index)))
+        }
+        try FormRanges.checkPairedMarkup(spans, index: index)
         let removedSet = Set(removed)
         var seen: Set<Int> = []
         for p in removed.sorted() {
@@ -505,9 +509,8 @@ enum FormOperations {
                 throw FormError.removalsEndWithoutParagraph(ids(named.filter { $0 > last }))
             }
         }
-        if let id = truncateFrom, !removedSet.isEmpty {
-            let (cut, body) = try checkTruncate(id, in: index)
-            let before = index.children(of: body).filter { index.tags[$0].start < index.tags[cut].start }
+        if let id = truncateFrom, let cut, !removedSet.isEmpty {
+            let before = index.children(of: cut.body).filter { index.tags[$0].start < index.tags[cut.paragraph].start }
             if contentBlocks(before, in: index).allSatisfy({ removedSet.contains($0) }) {
                 throw FormError.removalsLeaveNothingBeforeCut(id)
             }
@@ -516,14 +519,15 @@ enum FormOperations {
         // change the Markup Compatibility rules applying to it (R4).
         let deleted = spans.map(\.range)
         for p in removedSet.sorted() {
-            let destination = survivingParagraphBefore(p, removed: removedSet, in: index) ?? index.tags[p].parent!
+            // A named paragraph with no parent is the root of a crafted part;
+            // the result check reports it, there is no context to compare.
+            guard let destination = survivingParagraphBefore(p, removed: removedSet, in: index) ?? index.tags[p].parent else { continue }
             for marker in FormRanges.keptMarkers(in: index.elementRange(p), deleted: deleted, index: index)
             where FormRanges.compatibilityContextChanges(marker, destination: destination, index: index) {
                 throw FormError.markerUnderCompatibilityRules(index.attribute("w14:paraId", of: p) ?? "")
             }
         }
-        if let id = truncateFrom, let span = spans.last(where: { $0.id == id }) {
-            let body = try checkTruncate(id, in: index).body
+        if let id = truncateFrom, let body = cut?.body, let span = spans.last(where: { $0.id == id }) {
             for marker in FormRanges.keptMarkers(in: span.range, deleted: deleted, index: index)
             where FormRanges.compatibilityContextChanges(marker, destination: body, index: index) {
                 throw FormError.markerUnderCompatibilityRules(id)

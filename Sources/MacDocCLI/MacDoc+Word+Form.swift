@@ -152,12 +152,12 @@ extension MacDoc.Word.Form {
         var insertAfter: [String] = []
 
         @Option(name: .customLong("remove"),
-                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算，同一格要刪的幾段合起來判斷），會拆開欄位、讓註解失去引用，或要保留的標記受 Markup Compatibility 屬性影響時也拒絕；另一半不在這次要刪的範圍裡的書籤等範圍標記留下",
+                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算，同一格要刪的幾段合起來判斷），會拆開欄位、讓註解失去引用，或要保留的標記受 Markup Compatibility 標記影響時也拒絕；另一半不在這次要刪的範圍裡的書籤等範圍標記留下",
                                    valueName: "paraId"))
         var remove: [String] = []
 
         @Option(name: .customLong("truncate-from"),
-                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定；會拆開欄位、讓註解失去引用、之前的內容全被 --remove 刪掉，或要移動的標記受 Markup Compatibility 屬性影響時拒絕，另一半保留的書籤等範圍標記移到保留內容的結尾", valueName: "paraId"))
+                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定；會拆開欄位、讓註解失去引用、之前的內容全被 --remove 刪掉，或要移動的標記受 Markup Compatibility 標記影響時拒絕，另一半保留的書籤等範圍標記移到保留內容的結尾", valueName: "paraId"))
         var truncateFrom: String?
 
         func validate() throws {

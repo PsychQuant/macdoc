@@ -542,12 +542,43 @@ final class Issue253BoundaryTests: XCTestCase {
                        .removalsLeaveNothingBeforeCut("0000T378"))
     }
 
-    /// R4 #5: a repeated --remove id is one paragraph, named once.
-    func testRepeatedRemovalIdIsNamedOnce() {
+    /// R4 #5, R5 #4: a repeated id is one paragraph, named once, also for a
+    /// caller that reaches the check without the plan's own deduplication.
+    func testRepeatedRemovalIdIsNamedOnce() throws {
         let cell = TestXML.paragraph("0000R379", TestXML.run("一")) + TestXML.paragraph("0000R380", TestXML.run("二"))
-        let body = TestXML.table([TestXML.cell(cell)]) + TestXML.paragraph(nil) + TestXML.bodySection
-        XCTAssertEqual(refusal(TestXML.document(body), FormPlan(removals: ["0000R379", "0000R379", "0000R380"])),
-                       .removalsLeaveNoParagraph(["0000R379", "0000R380"]))
+        let index = try XMLTagIndex(TestXML.document(TestXML.table([TestXML.cell(cell)]) + TestXML.paragraph(nil)
+                                                     + TestXML.bodySection))
+        XCTAssertThrowsError(try FormOperations.checkDeletions(["0000R379", "0000R379", "0000R380"], truncateFrom: nil, in: index)) {
+            XCTAssertEqual($0 as? FormError, .removalsLeaveNoParagraph(["0000R379", "0000R380"]))
+        }
+    }
+
+    /// R5 #1: Word 2010 and later wrap a text box in mc:AlternateContent with
+    /// one copy under mc:Choice and one under mc:Fallback. A marker inside
+    /// either would leave that branch, so the removal is refused.
+    func testKeptMarkerInsideAlternateContentIsRefused() {
+        let story = { (id: String) in "<w:txbxContent><w:p><w:bookmarkStart w:id=\"50\" w:name=\"t\"/>"
+            + TestXML.run(id) + "</w:p></w:txbxContent>" }
+        let box = "<w:r><mc:AlternateContent><mc:Choice Requires=\"w14\"><w:drawing><wp:inline>" + story("新")
+            + "</wp:inline></w:drawing></mc:Choice><mc:Fallback><w:pict>" + story("舊")
+            + "</w:pict></mc:Fallback></mc:AlternateContent></w:r>"
+        let xml = document(root: "xmlns:mc=\"\(mcURI)\"",
+            TestXML.paragraph("0000R381", box) + TestXML.paragraph("0000A381", "<w:bookmarkEnd w:id=\"50\"/>")
+            + TestXML.bodySection)
+        XCTAssertEqual(refusal(xml, FormPlan(removals: ["0000R381"])), .markerUnderCompatibilityRules("0000R381"))
+    }
+
+    /// R5 #2: a crafted part whose root is a named paragraph used to trap on a
+    /// force unwrap. It must end either in a FormError or in a result that has
+    /// passed the plan's own well-formedness check — never in a crash.
+    func testRemovingARootParagraphDoesNotTrap() throws {
+        let xml = Array("<w:p xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" w14:paraId=\"0000R382\"><w:bookmarkStart w:id=\"51\" w:name=\"r\"/></w:p>".utf8)
+        do {
+            let result = try FormPlan(removals: ["0000R382"]).apply(toDocumentXML: xml)
+            XCTAssertNoThrow(try XMLTagIndex(result.documentXML))
+        } catch {
+            XCTAssertNotNil(error as? FormError, "\(error)")
+        }
     }
 
     /// R3 #3: the truncation destination is the body, so a prefix the cut

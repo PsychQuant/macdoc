@@ -109,17 +109,24 @@ enum FormRanges {
 
     static let markupCompatibilityNamespace = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 
-    /// Whether `element` carries a Markup Compatibility attribute (any local
-    /// name): one whose prefix resolves, on the element, to the
-    /// markup-compatibility namespace, with character references in the
-    /// declared URI decoded. The spelling of the prefix does not matter.
-    static func carriesCompatibilityAttribute(_ element: Int, index: XMLTagIndex) -> Bool {
-        attributes(of: element, index: index).contains { attribute in
-            guard attribute.name != "xmlns", !attribute.name.hasPrefix("xmlns:"),
-                  let colon = attribute.name.firstIndex(of: ":") else { return false }
-            let prefix = String(attribute.name[..<colon])
+    /// Whether `element` is Markup Compatibility markup or carries some: its
+    /// own name (`mc:AlternateContent`, `mc:Choice`, `mc:Fallback`), or the
+    /// name of one of its attributes (`mc:Ignorable` and the rest), resolves
+    /// on the element to the markup-compatibility namespace, the declared URI
+    /// read with character references decoded. An unprefixed element name
+    /// resolves through the default namespace; an unprefixed attribute has no
+    /// namespace. The spelling of the prefix does not matter (#253 verify R4, R5).
+    static func carriesCompatibilityMarkup(_ element: Int, index: XMLTagIndex) -> Bool {
+        func isCompatibility(_ prefix: String) -> Bool {
             guard prefix != "xml", let quoted = binding(of: prefix, from: element, index: index) else { return false }
             return XMLText.decode(String(quoted.dropFirst().dropLast())) == markupCompatibilityNamespace
+        }
+        let name = index.tags[element].name
+        if isCompatibility(name.firstIndex(of: ":").map { String(name[..<$0]) } ?? "") { return true }
+        return attributes(of: element, index: index).contains { attribute in
+            guard attribute.name != "xmlns", !attribute.name.hasPrefix("xmlns:"),
+                  let colon = attribute.name.firstIndex(of: ":") else { return false }
+            return isCompatibility(String(attribute.name[..<colon]))
         }
     }
 
@@ -144,7 +151,7 @@ enum FormRanges {
         guard let lca = sourceChain.first(where: { common.contains($0) }) else { return true }
         let lost = sourceChain.prefix { $0 != lca }
         let gained = destinationChain.prefix { $0 != lca }
-        return (Array(lost) + Array(gained)).contains { carriesCompatibilityAttribute($0, index: index) }
+        return (Array(lost) + Array(gained)).contains { carriesCompatibilityMarkup($0, index: index) }
     }
 
     /// The quoted value (source text, quotes included) declaring `prefix` on
