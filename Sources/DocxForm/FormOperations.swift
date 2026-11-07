@@ -43,6 +43,8 @@ enum FormOperations {
     static func checkRemove(_ id: String, in index: XMLTagIndex) throws {
         let p = try locate(id, in: index)
         if ownSectPr(of: p, in: index) != nil { throw FormError.carriesSectionBreak(id) }
+        // Fields and comment references are checked by the plan against the
+        // union of everything it deletes (FormRanges.checkPairedMarkup).
         // Cells (and text boxes) must keep at least one paragraph and end with
         // one. Their blocks are counted through content-control and custom-XML
         // wrappers, so a wrapped paragraph is guarded like a direct one.
@@ -122,6 +124,18 @@ enum FormOperations {
         return (p, body)
     }
 
+    /// Start of the body's closing tag.
+    static func bodyEnd(of body: Int, in index: XMLTagIndex) -> Int {
+        index.tags[index.tags[body].match!].start
+    }
+
+    /// The byte range `--truncate-from` deletes: from the paragraph to the
+    /// start of the body's closing tag.
+    static func truncationRange(from id: String, in index: XMLTagIndex) throws -> Range<Int> {
+        let (p, body) = try checkTruncate(id, in: index)
+        return index.tags[p].start..<bodyEnd(of: body, in: index)
+    }
+
     // MARK: Structure helpers
 
     static func ownPPr(of p: Int, in index: XMLTagIndex) -> Int? { index.child(of: p, named: "w:pPr") }
@@ -143,15 +157,18 @@ enum FormOperations {
     }
 
     /// True unless the paragraph is provably empty. Empty is defined by a
-    /// closed list: apart from its own `w:pPr`, the paragraph holds only
-    /// `w:proofErr` markers and runs whose children are `w:rPr`,
-    /// `w:lastRenderedPageBreak` or a `w:t` with no text. Everything else —
-    /// bookmarks, comment ranges, tracked changes, hyperlinks, fields,
-    /// drawings, symbols — counts as content, so it is never deleted.
+    /// closed list: its own `w:pPr` shows nothing (see `markShowsContent`),
+    /// and apart from that the paragraph holds only `w:proofErr` markers and
+    /// runs whose children are `w:rPr`, `w:lastRenderedPageBreak` or a `w:t`
+    /// with no text. Everything else — bookmarks, comment ranges, tracked
+    /// changes, hyperlinks, fields, drawings, symbols — counts as content, so
+    /// it is never deleted.
     static func hasContent(_ p: Int, in index: XMLTagIndex) -> Bool {
         for child in index.children(of: p) {
             switch index.tags[child].name {
-            case "w:pPr", "w:proofErr":
+            case "w:pPr":
+                if markShowsContent(child, in: index) { return true }
+            case "w:proofErr":
                 continue
             case "w:r":
                 for runChild in index.children(of: child) {
@@ -163,6 +180,24 @@ enum FormOperations {
             default:
                 return true
             }
+        }
+        return false
+    }
+
+    /// True when a paragraph's own `w:pPr` carries something the reader sees
+    /// or a revision would lose (#253): numbering (a visible bullet — a
+    /// `w:numPr` without `w:numId` may take its id from the style, and only
+    /// `w:numId` 0 removes numbering), `w:pPrChange`, or a revision marker in
+    /// the paragraph-mark `w:rPr`.
+    static func markShowsContent(_ pPr: Int, in index: XMLTagIndex) -> Bool {
+        if let numPr = index.child(of: pPr, named: "w:numPr") {
+            let numId = index.child(of: numPr, named: "w:numId").flatMap { index.attribute("w:val", of: $0) }
+            if numId != "0" { return true }
+        }
+        if index.child(of: pPr, named: "w:pPrChange") != nil { return true }
+        if let mark = ownRPr(of: pPr, in: index),
+           index.children(of: mark).contains(where: { revisionMarks.contains(index.tags[$0].name) }) {
+            return true
         }
         return false
     }
@@ -206,8 +241,11 @@ enum FormOperations {
 
     // MARK: Field normalization
 
+    /// Returns the skipped cleanup when the cell holds a structure that stops
+    /// the removal of empty siblings (#253), so the caller can report it.
+    @discardableResult
     static func normalizeField(_ id: String, halfPoints: Int, protected: Set<String>,
-                               editor: inout XMLEditor) throws {
+                               editor: inout XMLEditor) throws -> CleanupSkip? {
         try checkField(id, in: editor.index)
         let index = editor.index
         let p = try locate(id, in: index)
@@ -242,6 +280,16 @@ enum FormOperations {
             }
         }
 
+        // A content control's own run properties format what Word writes when
+        // a value is picked, so they carry the size too; one without them is
+        // left without (#253).
+        for sdt in FormLocator.ownElements(named: "w:sdt", of: p, in: index) {
+            guard let sdtPr = index.child(of: sdt, named: "w:sdtPr"),
+                  let rPr = ownRPr(of: sdtPr, in: index) else { continue }
+            edits.append(.replace(index.elementRange(rPr),
+                                  with: try Fragment.rPrWithSize(index.elementString(rPr), halfPoints: halfPoints)))
+        }
+
         // The enclosing cell is vertically centred.
         let tc = FormClassifier.enclosingCell(of: p, in: index)!
         let vAlign = "<w:vAlign w:val=\"center\"/>"
@@ -254,17 +302,21 @@ enum FormOperations {
         }
 
         // Paragraphs without content in the same cell push the value off centre.
-        let nestedStructure = index.descendants(of: tc).contains {
-            ["w:tbl", "w:sdt", "w:customXml"].contains(index.tags[$0].name)
+        // The spec skips the cleanup when the cell holds one of these
+        // structures; the skip is returned so it is never silent (#253).
+        let present = Set(index.descendants(of: tc).map { index.tags[$0].name })
+        let reasons = CleanupSkip.Reason.allCases.filter { present.contains($0.elementName) }
+        let removable = index.children(of: tc).filter { sibling in
+            guard sibling != p, index.tags[sibling].name == "w:p" else { return false }
+            if let siblingId = index.attribute("w14:paraId", of: sibling), protected.contains(siblingId) { return false }
+            return ownSectPr(of: sibling, in: index) == nil && !hasContent(sibling, in: index)
         }
-        if !nestedStructure {
-            for sibling in index.children(of: tc) where sibling != p && index.tags[sibling].name == "w:p" {
-                if let siblingId = index.attribute("w14:paraId", of: sibling), protected.contains(siblingId) { continue }
-                if ownSectPr(of: sibling, in: index) != nil || hasContent(sibling, in: index) { continue }
-                edits.append(.remove(index.elementRange(sibling)))
-            }
+        if reasons.isEmpty {
+            for sibling in removable { edits.append(.remove(index.elementRange(sibling))) }
         }
         try editor.apply(edits)
+        // Only a skip that left an empty paragraph behind is reported (#253 verify R1).
+        return reasons.isEmpty || removable.isEmpty ? nil : CleanupSkip(paragraphId: id, reasons: reasons)
     }
 
     // MARK: Box glyph font
@@ -420,17 +472,131 @@ enum FormOperations {
 
     // MARK: Remove and truncate
 
-    static func remove(_ id: String, editor: inout XMLEditor) throws {
-        try checkRemove(id, in: editor.index)
-        let p = try locate(id, in: editor.index)
-        try editor.apply([.remove(editor.index.elementRange(p))])
+    /// Checks everything the command deletes as one set (#253 verify R1, R2):
+    /// fields and comment references against the union of the `--remove`
+    /// paragraphs and the `--truncate-from` range, and each cell or text box
+    /// against what is left after all of its named paragraphs go.
+    static func checkDeletions(_ ids: [String], truncateFrom: String?, in index: XMLTagIndex) throws -> [FormRanges.DeletionSpan] {
+        // Nothing to delete: no pairing or container question arises, and the
+        // whole-part scans below are skipped (#253 verify R3).
+        guard !ids.isEmpty || truncateFrom != nil else { return [] }
+        var distinct: Set<String> = []
+        let ids = ids.filter { distinct.insert($0).inserted }
+        for id in ids { try checkRemove(id, in: index) }
+        let removed = try ids.map { try locate($0, in: index) }
+        var spans = zip(ids, removed).map { FormRanges.DeletionSpan(id: $0, range: index.elementRange($1)) }
+        // The cut is located and checked once; every later use reads it here.
+        let cut = try truncateFrom.map { try checkTruncate($0, in: index) }
+        if let id = truncateFrom, let cut {
+            spans.append(.init(id: id, range: index.tags[cut.paragraph].start..<bodyEnd(of: cut.body, in: index)))
+        }
+        try FormRanges.checkPairedMarkup(spans, index: index)
+        let removedSet = Set(removed)
+        var seen: Set<Int> = []
+        for p in removed.sorted() {
+            guard let container = blockContainer(of: p, in: index),
+                  ["w:tc", "w:txbxContent"].contains(index.tags[container].name), seen.insert(container).inserted else { continue }
+            // checkRemove has refused every paragraph that breaks the
+            // container alone, so what is left is a combination. Name the
+            // paragraphs that cause it, in document order (tag order).
+            let named = removed.filter { blockContainer(of: $0, in: index) == container }.sorted()
+            let remaining = flattenBlocks(index.children(of: container), in: index).filter { !removedSet.contains($0) }
+            let ids = { (ps: [Int]) in ps.map { index.attribute("w14:paraId", of: $0) ?? "" } }
+            if !remaining.contains(where: { index.tags[$0].name == "w:p" }) {
+                throw FormError.removalsLeaveNoParagraph(ids(named))
+            }
+            if let last = remaining.last, index.tags[last].name != "w:p" {
+                throw FormError.removalsEndWithoutParagraph(ids(named.filter { $0 > last }))
+            }
+        }
+        if let id = truncateFrom, let cut, !removedSet.isEmpty {
+            let before = index.children(of: cut.body).filter { index.tags[$0].start < index.tags[cut.paragraph].start }
+            if contentBlocks(before, in: index).allSatisfy({ removedSet.contains($0) }) {
+                throw FormError.removalsLeaveNothingBeforeCut(id)
+            }
+        }
+        // A kept marker goes where deleteAll puts it; refuse when that would
+        // change the Markup Compatibility rules applying to it (R4).
+        let deleted = spans.map(\.range)
+        for p in removedSet.sorted() {
+            // A named paragraph with no parent is the root of a crafted part;
+            // the result check reports it, there is no context to compare.
+            guard let destination = survivingParagraphBefore(p, removed: removedSet, in: index) ?? index.tags[p].parent else { continue }
+            for marker in FormRanges.keptMarkers(in: index.elementRange(p), deleted: deleted, index: index)
+            where FormRanges.compatibilityContextChanges(marker, destination: destination, index: index) {
+                throw FormError.markerUnderCompatibilityRules(index.attribute("w14:paraId", of: p) ?? "")
+            }
+        }
+        if let id = truncateFrom, let body = cut?.body, let span = spans.last(where: { $0.id == id }) {
+            for marker in FormRanges.keptMarkers(in: span.range, deleted: deleted, index: index)
+            where FormRanges.compatibilityContextChanges(marker, destination: body, index: index) {
+                throw FormError.markerUnderCompatibilityRules(id)
+            }
+        }
+        return spans
     }
 
-    static func truncate(from id: String, editor: inout XMLEditor) throws {
+    /// The only entry point that deletes (#253 verify R2, R3): checks the whole
+    /// deletion, removes every named paragraph in one edit, then truncates.
+    /// A range marker whose partner stays is kept where its paragraph was;
+    /// when no surviving block follows the paragraph in its cell or text box,
+    /// it goes to the end of the nearest surviving paragraph before it, so the
+    /// container still ends with a paragraph whatever order the ids came in.
+    /// The truncation's kept markers are taken on the part before the removal
+    /// edit, where the partners of removed markers can still be seen.
+    static func deleteAll(_ ids: [String], truncateFrom: String?, editor: inout XMLEditor) throws {
+        let index = editor.index
+        let spans = try checkDeletions(ids, truncateFrom: truncateFrom, in: index)
+        guard !spans.isEmpty else { return }
+        let deleted = spans.map(\.range)
+        let removed = Set(try ids.map { try locate($0, in: index) })
+        var edits: [Edit] = []
+        var appended: [Int: String] = [:]
+        for p in removed.sorted() {
+            let span = index.elementRange(p)
+            if let destination = survivingParagraphBefore(p, removed: removed, in: index) {
+                appended[destination, default: ""] += FormRanges.keptMarkerXML(in: span, deleted: deleted,
+                                                                               destination: destination, index: index)
+                edits.append(.remove(span))
+            } else {
+                edits.append(.replace(span, with: FormRanges.keptMarkerXML(in: span, deleted: deleted,
+                                                                           destination: index.tags[p].parent, index: index)))
+            }
+        }
+        for (destination, markers) in appended where !markers.isEmpty {
+            edits.append(index.tags[destination].kind == .selfClosing
+                ? .replace(index.elementRange(destination), with: openTag(of: destination, in: index) + markers + "</w:p>")
+                : .insert(markers, at: index.tags[index.tags[destination].match!].start))
+        }
+        let truncation = try truncateFrom.map { id -> (id: String, markers: String) in
+            guard let span = spans.last(where: { $0.id == id }) else { return (id, "") }
+            return (id, FormRanges.keptMarkerXML(in: span.range, deleted: deleted,
+                                                 destination: try checkTruncate(id, in: index).body, index: index))
+        }
+        if !edits.isEmpty { try editor.apply(edits) }
+        if let truncation { try truncate(from: truncation.id, keptMarkers: truncation.markers, editor: &editor) }
+    }
+
+    /// For a removed paragraph with no surviving block after it in its cell or
+    /// text box: the nearest surviving paragraph before it.
+    static func survivingParagraphBefore(_ p: Int, removed: Set<Int>, in index: XMLTagIndex) -> Int? {
+        guard let container = blockContainer(of: p, in: index),
+              ["w:tc", "w:txbxContent"].contains(index.tags[container].name) else { return nil }
+        let blocks = flattenBlocks(index.children(of: container), in: index)
+        guard let at = blocks.firstIndex(of: p),
+              !blocks[(at + 1)...].contains(where: { !removed.contains($0) }),
+              let before = blocks[..<at].last(where: { !removed.contains($0) }),
+              index.tags[before].name == "w:p" else { return nil }
+        return before
+    }
+
+    /// Reached only through `deleteAll`, which has judged the whole deletion;
+    /// here only the cut's own structure is checked again, not the pairing.
+    private static func truncate(from id: String, keptMarkers: String, editor: inout XMLEditor) throws {
         let (p, body) = try checkTruncate(id, in: editor.index)
         let index = editor.index
         let cut = index.tags[p].start
-        let bodyEnd = index.tags[index.tags[body].match!].start
+        let bodyEnd = bodyEnd(of: body, in: index)
         // Only live section properties count: a body-level paragraph's own
         // w:pPr/w:sectPr, or the body's own w:sectPr. A w:sectPr kept inside
         // w:pPrChange is revision history and must not become the result.
@@ -460,7 +626,9 @@ enum FormOperations {
             edits.append(.replace(index.elementRange(pPr),
                                   with: try Fragment.removeChildren(index.elementString(pPr), named: ["w:sectPr"])))
         }
-        edits.append(.replace(cut..<bodyEnd, with: section))
+        // Range markers whose partner is kept end the kept content, before the
+        // final section properties (#253); the plan serializes them.
+        edits.append(.replace(cut..<bodyEnd, with: keptMarkers + section))
         try editor.apply(edits)
     }
 }

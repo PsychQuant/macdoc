@@ -269,6 +269,59 @@ final class WordFormCommandTests: XCTestCase {
                       result.stderr)
     }
 
+    /// A skipped cell cleanup is reported with the field id and the structure (#253).
+    func testApplyNotesASkippedCellCleanup() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let cell = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w=\"3000\" w:type=\"dxa\"/></w:tcPr>"
+            + paragraph("0000F0D1", run("值"))
+            + "<w:sdt><w:sdtPr/><w:sdtContent>" + paragraph("0000F0D2", run("控制項")) + "</w:sdtContent></w:sdt>"
+            + "<w:p/></w:tc></w:tr></w:tbl><w:p/>"
+        try makeForm(at: form, extraBody: cell)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--field", "0000F0D1", "--field-size", "12",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: --field 0000F0D1 所在的儲存格含內容控制項（w:sdt），依規格不清除同格的空段落"),
+                      result.stderr)
+    }
+
+    /// Removing half of a complex field is refused and writes nothing (#253).
+    func testApplyRefusesSplittingAField() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let field = paragraph("0000F1D0", "<w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText> TOC </w:instrText></w:r>"
+            + "<w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>" + run("目錄"))
+            + paragraph("0000F1D1", run("項目") + "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>")
+        try makeForm(at: form, extraBody: field)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--remove", "0000F1D0",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("0000F1D0") && result.stderr.contains("w:fldChar"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    /// #253 verify R5: the Markup Compatibility refusal reaches the terminal
+    /// with a non-zero exit and no output written.
+    func testApplyRefusesMovingAMarkerAcrossCompatibilityRules() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let body = "<w:p w14:paraId=\"0000C0A0\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\""
+            + " mc:Ignorable=\"w14\"><w:bookmarkStart w:id=\"90\" w:name=\"c\"/>" + run("刪") + "</w:p>"
+            + paragraph("0000C0A1", run("後") + "<w:bookmarkEnd w:id=\"90\"/>")
+        try makeForm(at: form, extraBody: body)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--remove", "0000C0A0",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("0000C0A0") && result.stderr.contains("Markup Compatibility"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
     func testApplyTickListAndInsertAfter() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")

@@ -15,8 +15,23 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     case noOwnNumbering(String)
     case onlyParagraphInCell(String)
     case cellWouldEndWithoutParagraph(String)
+    /// Several `--remove` paragraphs that each could go alone but together
+    /// take every paragraph of one cell or text box (#253 verify R2).
+    case removalsLeaveNoParagraph([String])
+    /// Several `--remove` paragraphs after the last block that stays, whose
+    /// removal together leaves a cell or text box ending with a table.
+    case removalsEndWithoutParagraph([String])
+    /// A range marker that would be kept, where the marker itself, an element
+    /// removed around it, or the paragraph it would move into is or carries
+    /// Markup Compatibility markup (#253 verify R4, R5).
+    case markerUnderCompatibilityRules(String)
+    /// Every content block before the `--truncate-from` paragraph is named by
+    /// `--remove` (#253 verify R4).
+    case removalsLeaveNothingBeforeCut(String)
     case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
+    case splitsField(String)
+    case splitsComment(String)
     case notBodyChild(String)
     case firstBodyChild(String)
     case noFieldSize
@@ -42,10 +57,22 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "段落 \(id) 是儲存格裡唯一的段落，刪掉它會讓儲存格失效"
         case .cellWouldEndWithoutParagraph(let id):
             return "刪掉段落 \(id) 後，所在儲存格會以表格結尾；Word 要求儲存格最後一個元素是段落"
+        case .removalsLeaveNoParagraph(let ids):
+            return "段落 \(ids.joined(separator: "、")) 是所在儲存格（或文字方塊）裡全部的段落，一起刪掉會讓它失效；請至少留下一段"
+        case .removalsEndWithoutParagraph(let ids):
+            return "一起刪掉段落 \(ids.joined(separator: "、")) 後，所在儲存格（或文字方塊）會以表格結尾；Word 要求最後一個元素是段落，請至少留下表格之後的一段"
+        case .markerUnderCompatibilityRules(let id):
+            return "從段落 \(id) 刪除的範圍裡有要保留的範圍標記（書籤等），但標記本身、它外層被刪的元素或要移入的段落帶有 Markup Compatibility 標記（mc:Ignorable 等屬性，或 mc:AlternateContent 這類元素，Word 的文字方塊就包在裡面）；搬移會改變這些規則套用的對象，因此不刪。請把標記的另一半也列入刪除範圍，或先在 Word 裡移除這個標記"
+        case .removalsLeaveNothingBeforeCut(let id):
+            return "從段落 \(id) 截斷時，它之前的內容都列在 --remove 裡，刪完後本文不會留下任何內容"
         case .conflictingOperations(let id, let detail):
             return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):
             return "段落 \(id) 帶有分節符（w:sectPr），刪掉它會改變分節設定"
+        case .splitsField(let id):
+            return "從段落 \(id) 刪除的範圍只含一個欄位（w:fldChar 的開頭、分隔、結尾）的一部分，刪掉會讓欄位斷掉；請把開頭、分隔、結尾所在的段落都列入 --remove（或一起截斷），或先在 Word 裡把欄位轉成一般文字"
+        case .splitsComment(let id):
+            return "從段落 \(id) 刪除的範圍含有註解的引用（w:commentReference），但這個註解的範圍標記留在範圍外；刪掉會讓註解失去錨點。請把註解範圍所在的段落一起列入 --remove，或先在 Word 裡刪除或移動這個註解"
         case .notBodyChild(let id):
             return "段落 \(id) 不是 w:body 的直屬段落（可能在表格或內容控制項裡），不能用 --truncate-from"
         case .firstBodyChild(let id):

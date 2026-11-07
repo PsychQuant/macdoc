@@ -47,6 +47,32 @@ public struct FormInsertion: Equatable {
     }
 }
 
+/// A `--field` whose cell was not cleaned of empty sibling paragraphs, and the
+/// structures in the cell that caused the skip (macdoc#253).
+public struct CleanupSkip: Equatable {
+    public enum Reason: Equatable, CaseIterable {
+        case nestedTable, contentControl, customXML
+
+        /// The element whose presence in the cell causes the skip.
+        public var elementName: String {
+            switch self {
+            case .nestedTable: return "w:tbl"
+            case .contentControl: return "w:sdt"
+            case .customXML: return "w:customXml"
+            }
+        }
+    }
+
+    public let paragraphId: String
+    /// In the fixed order of `Reason.allCases`.
+    public let reasons: [Reason]
+
+    public init(paragraphId: String, reasons: [Reason]) {
+        self.paragraphId = paragraphId
+        self.reasons = reasons
+    }
+}
+
 public struct FormResult {
     public let documentXML: [UInt8]
     /// The size applied to `--field` paragraphs, when any were named.
@@ -55,6 +81,8 @@ public struct FormResult {
     public let fieldSizeWasDerived: Bool
     /// Runs holding a box glyph that were left alone because they carry other content.
     public let skippedCheckboxRuns: Int
+    /// Fields whose cell cleanup was skipped, in plan order.
+    public let skippedCleanups: [CleanupSkip]
 }
 
 public struct FormPlan: Equatable {
@@ -106,6 +134,13 @@ public struct FormPlan: Equatable {
         for id in removals { try FormOperations.checkRemove(id, in: editor.index) }
         if let id = truncateFrom { _ = try FormOperations.checkTruncate(id, in: editor.index) }
 
+        // Fields, comment references and range markers pair across paragraphs,
+        // and a cell's remaining blocks depend on every paragraph that goes, so
+        // the deletions are judged once as a whole before anything is written
+        // (#253 verify R1, R2). The deletion step judges them again on the part
+        // the earlier steps left, so no caller can bypass the checks (R3).
+        _ = try FormOperations.checkDeletions(removals, truncateFrom: truncateFrom, in: editor.index)
+
         var size: FieldSize?
         var derived = false
         if !fields.isEmpty {
@@ -122,9 +157,13 @@ public struct FormPlan: Equatable {
 
         // 2. Run the operations in the fixed order.
         let protected = Set(namedIds)
+        var cleanupSkips: [CleanupSkip] = []
         if let size {
             for id in fields {
-                try FormOperations.normalizeField(id, halfPoints: size.halfPoints, protected: protected, editor: &editor)
+                if let skip = try FormOperations.normalizeField(id, halfPoints: size.halfPoints,
+                                                                protected: protected, editor: &editor) {
+                    cleanupSkips.append(skip)
+                }
             }
         }
         for id in ticks { try FormOperations.tickList(id, editor: &editor) }
@@ -134,13 +173,12 @@ public struct FormPlan: Equatable {
         }
         var skipped = 0
         if let font = checkboxFont { skipped = try FormOperations.uniformCheckboxes(font: font, editor: &editor) }
-        for id in removals { try FormOperations.remove(id, editor: &editor) }
-        if let id = truncateFrom { try FormOperations.truncate(from: id, editor: &editor) }
+        try FormOperations.deleteAll(removals, truncateFrom: truncateFrom, editor: &editor)
 
         // 3. The result must be well-formed XML.
         try Self.checkWellFormed(editor.bytes)
         return FormResult(documentXML: editor.bytes, fieldSize: size, fieldSizeWasDerived: derived,
-                          skippedCheckboxRuns: skipped)
+                          skippedCheckboxRuns: skipped, skippedCleanups: cleanupSkips)
     }
 
     /// Refuses plans whose later steps would silently undo earlier ones: a

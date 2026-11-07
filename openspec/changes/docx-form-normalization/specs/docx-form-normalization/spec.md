@@ -44,7 +44,7 @@ The classifier SHALL assign every paragraph exactly one kind from the closed set
 
 ### Requirement: Table field normalization makes designated fields uniform
 
-For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph's own `w:pStyle` and `w:ind`, set its own `w:jc` to `left`, set `w:sz` and `w:szCs` to the field size on the paragraph mark and on every run of the paragraph, set `w:vAlign` to `center` on the nearest enclosing `w:tc`, and remove every other direct-child paragraph of that cell that is empty, carries no `w:sectPr`, and is not named by any operation of the same command. A paragraph is empty only when, apart from its own `w:pPr`, its children are `w:proofErr` markers and runs whose children are `w:rPr`, `w:lastRenderedPageBreak` or a `w:t` with no text; this is a closed list, and any other child (bookmarks, comment ranges, tracked changes, hyperlinks, fields, drawings, symbols, tabs, breaks) makes the paragraph non-empty. Sibling paragraphs SHALL NOT be removed when the cell contains a nested `w:tbl`, `w:sdt` or `w:customXml`. A designated paragraph whose nearest container (looking through `w:sdt`, `w:sdtContent` and `w:customXml`) is not a `w:tc` SHALL be refused, including a paragraph in a text box that sits in a cell. Inserted elements SHALL follow ECMA-376 child order.
+For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph's own `w:pStyle` and `w:ind`, set its own `w:jc` to `left`, set `w:sz` and `w:szCs` to the field size on the paragraph mark, on every run of the paragraph, and on the existing `w:sdtPr/w:rPr` of every content control inside the paragraph (a content control whose `w:sdtPr` has no `w:rPr` is left without one), set `w:vAlign` to `center` on the nearest enclosing `w:tc`, and remove every other direct-child paragraph of that cell that is empty, carries no `w:sectPr`, and is not named by any operation of the same command. A paragraph is empty only when its own `w:pPr` carries no `w:numPr` (a `w:numPr` whose `w:numId` is `0` removes numbering and does not count), no `w:pPrChange`, and no `w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` or `w:rPrChange` in its paragraph-mark `w:rPr`, and, apart from that `w:pPr`, its children are `w:proofErr` markers and runs whose children are `w:rPr`, `w:lastRenderedPageBreak` or a `w:t` with no text; this is a closed list, and any other child (bookmarks, comment ranges, tracked changes, hyperlinks, fields, drawings, symbols, tabs, breaks) makes the paragraph non-empty. Sibling paragraphs SHALL NOT be removed when the cell contains a nested `w:tbl`, `w:sdt` or `w:customXml`; when that leaves at least one empty, unnamed sibling paragraph in place, the command SHALL write a note to standard error naming the field's paragraph id and which of those three structures the cell holds, in that order. A designated paragraph whose nearest container (looking through `w:sdt`, `w:sdtContent` and `w:customXml`) is not a `w:tc` SHALL be refused, including a paragraph in a text box that sits in a cell. Inserted elements SHALL follow ECMA-376 child order.
 
 #### Scenario: Field with style, indent and distributed alignment
 
@@ -55,6 +55,21 @@ For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph
 
 - **WHEN** a designated field's cell also holds an empty paragraph, a paragraph containing only a `w:drawing`, and a paragraph holding only a bookmark
 - **THEN** the empty paragraph is removed and the drawing and bookmark paragraphs are kept
+
+#### Scenario: Numbered or revised empty siblings are kept
+
+- **WHEN** a designated field's cell also holds an empty paragraph whose `w:pPr` carries `w:numPr` with `w:numId` 3, an empty paragraph whose paragraph mark is a tracked insertion, and an empty paragraph whose `w:numPr` has `w:numId` 0
+- **THEN** the first two paragraphs are kept and the third is removed
+
+#### Scenario: Skipped cleanup is reported
+
+- **WHEN** a designated field's cell also holds a paragraph wrapped in `w:sdt` and an empty paragraph
+- **THEN** the empty paragraph is kept and standard error names the field's paragraph id and the content control
+
+#### Scenario: Content control in the field takes the field size
+
+- **WHEN** a designated field holds a drop-down content control whose `w:sdtPr/w:rPr` has `w:sz w:val="18"`, and the field size is 12 pt
+- **THEN** that `w:rPr` carries `w:sz w:val="24"` and `w:szCs w:val="24"`
 
 #### Scenario: Named sibling is kept
 
@@ -125,12 +140,89 @@ For each `--insert-after <paraId>=<text>`, `macdoc word form apply` SHALL insert
 
 ### Requirement: Paragraphs are removed only when named
 
-For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that carries a `w:sectPr`, and a paragraph inside a `w:tc` or `w:txbxContent` whose removal would leave that cell or text box with no paragraph or ending with a block other than a paragraph, where the cell's blocks are counted through `w:sdt`/`w:sdtContent` and `w:customXml` wrappers.
+For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that carries a `w:sectPr`, and removals that would leave a `w:tc` or `w:txbxContent` with no paragraph or ending with a block other than a paragraph, where the container's blocks are counted through `w:sdt`/`w:sdtContent` and `w:customXml` wrappers and are judged after every paragraph that `--remove` names in that container is gone. A paragraph that breaks its container alone is named alone; when only the combination breaks it, the message SHALL name every named paragraph in the container for a container left without a paragraph, and the named paragraphs after the last block that stays for a container left ending with another block.
+
+Removal SHALL NOT leave unpaired markup, judged against the deleted set: the union of every paragraph named by `--remove` and the range `--truncate-from` cuts. The deleted set SHALL be judged on the original part before any edit, and again by the deletion step on the part as the earlier steps left it; a refusal at either point aborts the command. The paired range markers are a closed list, each pairing a start and an end of the same kind with the same `w:id`: `w:bookmarkStart`/`w:bookmarkEnd`, `w:commentRangeStart`/`w:commentRangeEnd`, `w:moveFromRangeStart`/`w:moveFromRangeEnd`, `w:moveToRangeStart`/`w:moveToRangeEnd`, `w:permStart`/`w:permEnd`, and the four `w:customXml…RangeStart`/`…RangeEnd` pairs (insert, delete, move-from, move-to). A paired range marker inside a removed paragraph whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept where the paragraph was, in document order; when no block that stays follows the removed paragraph in its `w:tc` or `w:txbxContent`, the kept markers SHALL go at the end of the nearest paragraph before it that stays instead, so the container still ends with a paragraph whatever order the ids are given in. For every prefix that a kept marker's name and attribute names use, the marker SHALL carry a declaration of the namespace that prefix had at its original position whenever its new position would resolve the prefix to another namespace or to none; a declaration is an `xmlns` or `xmlns:` attribute, never text inside another attribute's value. The command SHALL refuse a deletion that would move a kept marker when Markup Compatibility markup is found on the marker itself, on an ancestor of the marker below the lowest common ancestor of its old parent and its new parent, or on the new parent or one of its ancestors below that common ancestor. An element is or carries Markup Compatibility markup when its own name (for example `mc:AlternateContent`, `mc:Choice`, `mc:Fallback`), or the name of one of its attributes (for example `mc:Ignorable`), resolves on that element to the markup-compatibility namespace, the declared URI read with character references decoded; an unprefixed element name resolves through the default namespace and an unprefixed attribute has none. The message names the `--remove` paragraph whose range holds the marker. A marker whose partner is also in the deleted set SHALL be removed with it. The command SHALL refuse a deleted set that holds some but not all of the `begin`, `separate` and `end` `w:fldChar` of one complex field (a paragraph wholly inside a field's result holds none of them and may go; naming every paragraph of a field removes it whole), and a deleted set holding a `w:commentReference` whose comment keeps a `w:commentRangeStart` or `w:commentRangeEnd` outside it; the message names the paragraph whose range holds the part that would go.
+
+#### Scenario: Bookmark start kept when its end stays
+
+- **WHEN** the removed paragraph holds `w:bookmarkStart w:id="3"` and the next paragraph holds `w:bookmarkEnd w:id="3"`
+- **THEN** the paragraph's content is gone and the `w:bookmarkStart` stays in its place, before the next paragraph
+
+#### Scenario: Removal would split a field
+
+- **WHEN** the removed paragraph holds the `begin` and `separate` `w:fldChar` of a field whose `end` is in the next paragraph
+- **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Removing only the separator paragraph is refused
+
+- **WHEN** a field begins in P1, its `separate` is in P2 and its `end` in P3, and `--remove` names P2
+- **THEN** the command fails naming P2 and writes no output
+
+#### Scenario: Every paragraph of a field removed together
+
+- **WHEN** a field begins in P1 and ends in P2, and `--remove` names both P1 and P2
+- **THEN** both paragraphs are gone and no `w:fldChar` of that field remains
+
+#### Scenario: Last paragraph of a cell keeps the cell ending with a paragraph
+
+- **WHEN** the last paragraph of a cell holds a `w:bookmarkStart` whose end is after the table, and `--remove` names it
+- **THEN** the `w:bookmarkStart` is at the end of the cell's previous paragraph and the cell's last child is a `w:p`
+
+#### Scenario: Last two paragraphs of a cell removed in either order
+
+- **WHEN** a cell holds paragraphs A, R1 and R2, R1 holds a `w:bookmarkStart` and R2 a `w:permStart` whose partners are after the table, and `--remove` names R1 and R2 in either order
+- **THEN** both markers are at the end of A in document order and the cell's last child is a `w:p`
+
+#### Scenario: Moved marker keeps the namespace of its prefix
+
+- **WHEN** the root binds `foo` to `urn:a`, the cell's previous paragraph rebinds `foo` to `urn:b`, and the cell's last paragraph, named by `--remove`, holds a `w:bookmarkStart` with a `foo:tag` attribute whose end stays
+- **THEN** the `w:bookmarkStart` is at the end of the previous paragraph carrying `xmlns:foo="urn:a"`
+
+#### Scenario: Marker under compatibility rules is not moved
+
+- **WHEN** the removed paragraph carries `mc:Ignorable="foo"` and holds a `w:bookmarkStart` with a `foo:tag` attribute whose end stays
+- **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Marker inside alternate content is not moved
+
+- **WHEN** the removed paragraph holds a text box wrapped in `mc:AlternateContent`, and the `mc:Choice` and `mc:Fallback` copies each hold a `w:bookmarkStart` whose end is in the next paragraph
+- **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Destination paragraph under compatibility rules
+
+- **WHEN** a cell holds paragraphs A and R, A carries `mc:Ignorable`, and `--remove` names R, whose `w:bookmarkStart` has its end after the table
+- **THEN** the command fails naming R and writes no output
+
+#### Scenario: Compatibility attribute known by its namespace
+
+- **WHEN** the root binds `compat` to the markup-compatibility namespace, and a kept marker in the removed paragraph carries `compat:ProcessContent`
+- **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Field split between a removal and the cut
+
+- **WHEN** a field's `begin` and `separate` are in the paragraph named by `--remove` and its `end` is in the paragraph named by `--truncate-from`
+- **THEN** the command succeeds and no `w:fldChar` of that field remains
+
+#### Scenario: Removal would orphan a comment
+
+- **WHEN** the removed paragraph holds the `w:commentReference` of a comment whose range markers are in the previous paragraph
+- **THEN** the command fails naming that paragraph id and writes no output
 
 #### Scenario: Cell would end with a nested table
 
 - **WHEN** a cell holds a paragraph, a nested table and a last paragraph, and `--remove` names the last paragraph
 - **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Paragraphs that together empty a cell
+
+- **WHEN** a cell holds paragraphs P1 and P2 and `--remove` names both
+- **THEN** the command fails naming P1 and P2 and writes no output
+
+#### Scenario: Paragraphs that together end a cell with a table
+
+- **WHEN** a cell holds P0, P1, a nested table, P2 and P3, and `--remove` names P0, P2 and P3
+- **THEN** the command fails naming P2 and P3, not P0, and writes no output
 
 #### Scenario: Only paragraph of a cell inside a content control
 
@@ -145,6 +237,28 @@ For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragrap
 ### Requirement: Truncation keeps the section settings of the kept content
 
 For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` with at least one content block before it (a block as defined below; range markers alone do not count, so cutting after nothing but a bookmark is refused like cutting at the first child). `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used. When the last kept block (looking through body-level `w:sdt` and `w:customXml`; every element counts as a block except range markers such as bookmarks, comment ranges and permission ranges, so a `w:altChunk` or a table after the break is the last block) is a paragraph that carries its own `w:sectPr`, the cut removed whole sections: that `w:sectPr` SHALL be moved from the paragraph to the end of the body as its final `w:sectPr` and the removed range's section properties SHALL be dropped, so the result never ends with a section that has no content.
+
+Truncation SHALL NOT leave unpaired markup, using the paired range markers and the deleted set defined under "Paragraphs are removed only when named": a paired marker in the removed range whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept at the end of the kept content, before the body's final `w:sectPr`, in document order, carrying namespace declarations by the same rule as for `--remove`; a marker whose partner is also in the deleted set SHALL be removed. The field, comment-reference and Markup Compatibility refusals of that requirement apply to the cut in the same way and name the `--truncate-from` paragraph. The body, the kept markers' new parent, is always their common ancestor with the old position, so for the cut only the marker itself and the removed elements around it can trigger the Markup Compatibility refusal. When every content block before the cut is a paragraph named by `--remove`, the command SHALL refuse before any edit, naming the `--truncate-from` paragraph.
+
+#### Scenario: Kept bookmark end moves before the final section
+
+- **WHEN** a bookmark starts in a kept paragraph and ends in the paragraph named by `--truncate-from`
+- **THEN** the `w:bookmarkEnd` is the last element before the body's final `w:sectPr`
+
+#### Scenario: Cut marker under compatibility rules
+
+- **WHEN** the paragraph named by `--truncate-from` carries `mc:Ignorable` and holds the `w:bookmarkEnd` of a bookmark that starts in a kept paragraph
+- **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Removals that leave nothing before the cut
+
+- **WHEN** the body holds P1 and P2, `--remove` names P1 and `--truncate-from` names P2
+- **THEN** the command fails naming P2 and writes no output
+
+#### Scenario: Cut would split a field
+
+- **WHEN** a field begins in a kept paragraph and its `end` `w:fldChar` is in the paragraph named by `--truncate-from`
+- **THEN** the command fails naming that paragraph id and writes no output
 
 #### Scenario: Cut before a later section break
 
