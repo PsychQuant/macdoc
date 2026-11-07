@@ -19,9 +19,10 @@ public enum ParagraphKind: String, CaseIterable, Equatable {
 }
 
 /// The main `word form apply` flag that tidies a paragraph of one kind (#255).
-/// `ParagraphKind.applyOption` is the one place this mapping lives: the
-/// `word reverse --slot` hints are built from it, and a test checks the
-/// swiftify skill's kind table against it. It records only the main flag and
+/// `ParagraphKind.applyOption` is what the `word reverse --slot` hints are
+/// built from, and a test checks the swiftify skill's kind table against it;
+/// other hand-written copies (the macdoc skill's option table, CLI help and
+/// messages) are not derived from it. It records only the main flag and
 /// its argument, not companion options such as `--field-size`. Package access:
 /// it serves this package's CLI and tests, not library callers.
 package struct ApplyOption: Equatable {

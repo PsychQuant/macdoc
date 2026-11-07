@@ -31,7 +31,8 @@ final class FormKindHandlingTests: XCTestCase {
 
     /// The swiftify skill's routing table (the one after 「依段落類型分流」):
     /// exactly one row per kind and no row for an unknown kind; a kind with an
-    /// apply option names that option first, a kind without one names none.
+    /// apply option names that option first, a kind without one names none of
+    /// the kinds' tidy flags.
     func testSwiftifyKindTableMatchesTheMapping() throws {
         let url = CLITestHelper.repoRoot.appendingPathComponent("plugins/macdoc/skills/swiftify/SKILL.md")
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
@@ -39,8 +40,9 @@ final class FormKindHandlingTests: XCTestCase {
         }
         let lines = text.components(separatedBy: "\n")
         guard let intro = lines.firstIndex(where: { $0.contains("依段落類型分流") }),
-              let header = lines[intro...].firstIndex(where: { $0.hasPrefix("| 類型 |") }) else {
-            return XCTFail("routing table not found in \(url.lastPathComponent)")
+              let header = lines[intro...].firstIndex(where: { $0.hasPrefix("| 類型 |") }),
+              header + 1 < lines.count, lines[header + 1].hasPrefix("|--") else {
+            return XCTFail("routing table (header and separator row) not found in \(url.lastPathComponent)")
         }
         var rows: [String: String] = [:]
         for line in lines[(header + 2)...].prefix(while: { $0.hasPrefix("|") }) {
@@ -58,7 +60,11 @@ final class FormKindHandlingTests: XCTestCase {
             if let handling = kind.applyOption {
                 XCTAssertTrue(cell.hasPrefix("`\(handling.usage(paraId: "<paraId>"))`"), "\(kind.rawValue): \(cell)")
             } else {
-                XCTAssertFalse(cell.hasPrefix("`--"), "\(kind.rawValue) has no apply option: \(cell)")
+                // A kind without a tidy option names none of the kinds' tidy
+                // flags (`body` may still mention `--insert-after`).
+                for flag in ParagraphKind.allCases.compactMap({ $0.applyOption?.flag }) {
+                    XCTAssertFalse(cell.contains("`\(flag)"), "\(kind.rawValue) has no apply option but names \(flag): \(cell)")
+                }
             }
         }
     }
