@@ -31,9 +31,15 @@ public enum XMLScanError: Error, Equatable, CustomStringConvertible {
     case unexpectedClose(name: String, at: Int)
     case unclosed(name: String)
     case doctypeNotAllowed(at: Int)
+    /// More nested elements than `XMLTagIndex.maxDepth` (#252).
+    case tooDeep(limit: Int, at: Int)
+    /// More tags than `XMLTagIndex.maxTags` (#252).
+    case tooManyTags(limit: Int)
 
     public var description: String {
         switch self {
+        case .tooDeep(let limit, let at): return "位元組 \(at) 的元素超過 \(limit) 層巢狀，拒絕處理"
+        case .tooManyTags(let limit): return "XML 標籤超過 \(limit) 個，拒絕處理"
         case .doctypeNotAllowed(let at): return "位元組 \(at) 有 DOCTYPE 宣告（OPC 封裝的 part 不允許 DTD）"
         case .unterminated(let at): return "XML 標籤在位元組 \(at) 沒有結束"
         case .unexpectedClose(let name, let at): return "位元組 \(at) 的 </\(name)> 沒有對應的開始標籤"
@@ -45,10 +51,34 @@ public enum XMLScanError: Error, Equatable, CustomStringConvertible {
 public struct XMLTagIndex {
     public let bytes: [UInt8]
     public let tags: [XMLTag]
+    /// Non-close tags by element name, in document order (#252).
+    private let byName: [String: [Int]]
+    /// Non-close tags carrying a `w14:paraId`, by its value, in document order (#252).
+    private let byParaId: [String: [Int]]
 
-    public init(_ bytes: [UInt8]) throws {
+    /// Deepest nesting accepted: Foundation's XMLParser (libxml2 without
+    /// XML_PARSE_HUGE) accepts 257 nested elements and rejects 258 (measured),
+    /// so the scan refuses nothing the output check would have passed (#252).
+    public static let maxDepth = 257
+    /// Most tags accepted. An index entry costs about 90 bytes, so this caps
+    /// the index near 450 MB however small the tags of a large part are (#252).
+    public static let maxTags = 5_000_000
+
+    public init(_ bytes: [UInt8], maxDepth: Int = XMLTagIndex.maxDepth, maxTags: Int = XMLTagIndex.maxTags) throws {
         self.bytes = bytes
-        self.tags = try Self.scan(bytes)
+        let tags = try Self.scan(bytes, maxDepth: maxDepth, maxTags: maxTags)
+        self.tags = tags
+        // One pass builds both tables, so a lookup no longer walks the part.
+        var byName: [String: [Int]] = [:]
+        var byParaId: [String: [Int]] = [:]
+        for (i, tag) in tags.enumerated() where tag.kind != .close {
+            byName[tag.name, default: []].append(i)
+            if !tag.attributes.isEmpty, let id = Self.attribute("w14:paraId", in: tag.attributes, of: bytes) {
+                byParaId[id, default: []].append(i)
+            }
+        }
+        self.byName = byName
+        self.byParaId = byParaId
     }
 
     public init(_ string: String) throws {
@@ -57,7 +87,7 @@ public struct XMLTagIndex {
 
     // MARK: Scanning
 
-    private static func scan(_ b: [UInt8]) throws -> [XMLTag] {
+    private static func scan(_ b: [UInt8], maxDepth: Int, maxTags: Int) throws -> [XMLTag] {
         var tags: [XMLTag] = []
         var stack: [Int] = []
         let n = b.count
@@ -95,6 +125,9 @@ public struct XMLTagIndex {
             let attrEnd = selfClosing ? j - 1 : j
             let end = j + 1
             let index = tags.count
+            if index >= maxTags { throw XMLScanError.tooManyTags(limit: maxTags) }
+            // An element's depth counts itself and every open ancestor.
+            if !isClose && stack.count + 1 > maxDepth { throw XMLScanError.tooDeep(limit: maxDepth, at: i) }
             if isClose {
                 guard let top = stack.last, tags[top].name == name else {
                     throw XMLScanError.unexpectedClose(name: name, at: i)
@@ -212,14 +245,28 @@ public struct XMLTagIndex {
 
     /// Elements with this name anywhere in the part (`.open` and `.selfClosing`).
     public func elements(named name: String) -> [Int] {
-        tags.indices.filter { tags[$0].kind != .close && tags[$0].name == name }
+        byName[name] ?? []
+    }
+
+    /// Elements named any of `names`, merged in document order.
+    func elements(namedAnyOf names: some Sequence<String>) -> [Int] {
+        names.flatMap { byName[$0] ?? [] }.sorted()
+    }
+
+    /// Non-close tags whose `w14:paraId` decodes to `id`, in document order.
+    func tags(withParaId id: String) -> [Int] {
+        byParaId[id] ?? []
     }
 
     /// Value of an attribute in the element's opening tag, entity-decoded.
     public func attribute(_ name: String, of i: Int) -> String? {
-        let range = tags[i].attributes
+        Self.attribute(name, in: tags[i].attributes, of: bytes)
+    }
+
+    /// The attribute parser behind `attribute(_:of:)`, usable while the index
+    /// is being built.
+    static func attribute(_ name: String, in range: Range<Int>, of b: [UInt8]) -> String? {
         guard !range.isEmpty else { return nil }
-        let b = bytes
         var k = range.lowerBound
         let end = range.upperBound
         while k < end {
@@ -323,16 +370,20 @@ public enum XMLText {
         case "quot": return "\""
         case "apos": return "'"
         default:
+            // A character reference is `#` and ASCII decimal digits, or `#x` and
+            // ASCII hex digits, naming a character the XML 1.0 Char production
+            // allows. Anything else (a sign, an empty number, a control
+            // character, a surrogate) is not one and stays as written, as an
+            // XML parser would refuse it (#252).
             guard e.hasPrefix("#") else { return nil }
-            let digits = e.dropFirst()
-            let value: UInt32?
-            if digits.hasPrefix("x") || digits.hasPrefix("X") {
-                value = UInt32(digits.dropFirst(), radix: 16)
-            } else {
-                value = UInt32(digits, radix: 10)
-            }
-            guard let v = value, let scalar = Unicode.Scalar(v) else { return nil }
-            return String(Character(scalar))
+            var digits = e.dropFirst()
+            var radix = 10
+            if digits.first == "x" || digits.first == "X" { radix = 16; digits = digits.dropFirst() }
+            let isDigit: (Character) -> Bool = radix == 16 ? { $0.isASCII && $0.isHexDigit } : { ("0"..."9").contains($0) }
+            guard !digits.isEmpty, digits.allSatisfy(isDigit),
+                  let v = UInt32(digits, radix: radix), let scalar = Unicode.Scalar(v) else { return nil }
+            let decoded = String(Character(scalar))
+            return isAllowed(decoded) ? decoded : nil
         }
     }
 

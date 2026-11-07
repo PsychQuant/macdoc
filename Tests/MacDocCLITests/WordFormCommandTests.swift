@@ -112,15 +112,36 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stdout.contains("0000A0A0\tbody\t"), result.stdout)
     }
 
-    /// Document text cannot put terminal control sequences on stdout.
+    /// Document text cannot put terminal control sequences on stdout. A raw
+    /// control byte (classify runs no XML parser over the main part) reaches
+    /// the preview and is replaced by a space; a character reference to a
+    /// character XML 1.0 does not allow is not decoded at all (#252), so it is
+    /// shown as written. Neither puts an ESC on stdout.
     func testClassifyPreviewReplacesControlCharacters() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")
-        try makeForm(at: form, extraBody: paragraph("0000E5C0", run("前&#x1B;[31m後")))
+        try makeForm(at: form, extraBody: paragraph("0000E5C0", run("前\u{1B}[31m後"))
+                                           + paragraph("0000E5C1", run("左&#x1B;[31m右")))
         let result = try CLITestHelper.run(["word", "form", "classify", form.path])
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
         XCTAssertTrue(result.stdout.contains("0000E5C0\tbody\t前 [31m後"), result.stdout)
+        XCTAssertTrue(result.stdout.contains("0000E5C1\tbody\t左&#x1B;[31m右"), result.stdout)
+    }
+
+    /// #252: classify reads only the two parts it needs, but the entry-name
+    /// check still covers the whole package.
+    func testClassifyRefusesASuspiciousEntryName() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let crafted = dir.appendingPathComponent("crafted.docx")
+        try makeForm(at: form)
+        try DocxPackage.write(try DocxPackage.read(from: form) + [DocxPackage.Entry(path: "../evil.xml", data: Data("<a/>".utf8))],
+                              to: crafted)
+        let result = try CLITestHelper.run(["word", "form", "classify", crafted.path])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("../evil.xml"), result.stderr)
+        XCTAssertTrue(result.stdout.isEmpty, result.stdout)
     }
 
     /// A paraId is eight hex digits; a crafted one (here an ESC sequence from

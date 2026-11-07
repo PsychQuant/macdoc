@@ -66,7 +66,9 @@ extension MacDoc.Word.Form {
         func run() throws {
             let inputURL = try validatedInputURL(input)
             do {
-                let entries = try DocxPackage.read(from: inputURL)
+                // Only the two parts classify reads are extracted (#252).
+                let entries = try DocxPackage.readParts(from: inputURL,
+                                                        paths: [DocxPackage.documentPart, DocxPackage.numberingPart])
                 guard let document = entries.first(where: { $0.path == DocxPackage.documentPart }) else {
                     throw DocxPackageError.missingPart(DocxPackage.documentPart)
                 }

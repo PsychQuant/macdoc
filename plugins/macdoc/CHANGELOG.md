@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `macdoc word form classify`／`apply`（需要下一版 CLI）在資源上設了上限，並把查找改成一次建表（PsychQuant/macdoc#252）：
+  - 封裝超過 10,000 個 entry，或 entry 名稱以 `/`、`\` 開頭、任一段是 `..` 時拒絕並點名；`classify` 只解壓 `word/document.xml` 與 `word/numbering.xml`，大小上限只算這兩個 part。
+  - XML part 超過 257 層巢狀（XMLParser 能接受的最深層數）或 5,000,000 個 tag 時拒絕，不再可能在 `--remove`／`--truncate-from` 的遞迴裡堆疊溢位。
+  - 字元參照不再接受正負號，也不再解碼 XML 1.0 不允許的字元（例如 `&#x1B;`），照原文保留。
+  - paraId 與元素名的查找改為建立 index 時一次建表，`checkConflicts` 與 `--remove`／`--truncate-from` 的配對掃描不再隨點名數重複走訪整份 part。
 - `macdoc word form apply`（需要下一版 CLI）的幾個邊界不再靜默略過或留下不完整的標記（PsychQuant/macdoc#253）：
   - `--field` 因同格有巢狀表格、內容控制項或 `w:customXml` 而不清空段落時，stderr 註明是哪一欄、哪一種結構；欄位段落裡內容控制項既有的 `w:sdtPr/w:rPr` 也設成欄位字級。
   - 帶自己清單編號（`w:numId` 為 0 的除外）或段落標記修訂的段落不再被當成空段落刪掉。
