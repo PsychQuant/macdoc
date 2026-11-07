@@ -60,8 +60,10 @@ public struct XMLTagIndex {
     /// XML_PARSE_HUGE) accepts 257 nested elements and rejects 258 (measured),
     /// so the scan refuses nothing the output check would have passed (#252).
     public static let maxDepth = 257
-    /// Most tags accepted. An index entry costs about 90 bytes, so this caps
-    /// the index near 450 MB however small the tags of a large part are (#252).
+    /// Most tags accepted, counting close tags. The index grows with the tag
+    /// count however small the tags are; a 47 MB part at this limit, every
+    /// paragraph with its own `w14:paraId`, measured about 1.3 GB peak
+    /// resident memory while the index was built (#252 verify R1).
     public static let maxTags = 5_000_000
 
     public init(_ bytes: [UInt8], maxDepth: Int = XMLTagIndex.maxDepth, maxTags: Int = XMLTagIndex.maxTags) throws {
@@ -248,9 +250,10 @@ public struct XMLTagIndex {
         byName[name] ?? []
     }
 
-    /// Elements named any of `names`, merged in document order.
+    /// Elements named any of `names`, merged in document order; a name given
+    /// twice does not list its elements twice.
     func elements(namedAnyOf names: some Sequence<String>) -> [Int] {
-        names.flatMap { byName[$0] ?? [] }.sorted()
+        Set(names).flatMap { byName[$0] ?? [] }.sorted()
     }
 
     /// Non-close tags whose `w14:paraId` decodes to `id`, in document order.
@@ -340,29 +343,33 @@ public struct XMLTagIndex {
 
 /// XML 1.0 text helpers shared by the scanner and the operations.
 public enum XMLText {
+    /// Replaces the five predefined entities and well-formed character
+    /// references. The text is walked as Unicode scalars, the units an XML
+    /// parser reads: a combining mark after `&` or `;` would otherwise join it
+    /// into one Character and hide it (#252 verify R1).
     public static func decode(_ s: String) -> String {
-        guard s.contains("&") else { return s }
-        var out = ""
-        var rest = Substring(s)
-        while let amp = rest.firstIndex(of: "&") {
-            out += rest[rest.startIndex..<amp]
-            guard let semi = rest[amp...].firstIndex(of: ";") else {
-                out += rest[amp...]
-                return out
+        guard s.utf8.contains(UInt8(ascii: "&")) else { return s }
+        let scalars = Array(s.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        var i = 0
+        while i < scalars.count {
+            guard scalars[i] == "&" else { out.append(scalars[i]); i += 1; continue }
+            guard let semi = scalars[(i + 1)...].firstIndex(of: ";") else {
+                out.append(contentsOf: scalars[i...])
+                break
             }
-            let entity = rest[rest.index(after: amp)..<semi]
-            if let decoded = decodeEntity(entity) {
-                out += decoded
+            let name = String(String.UnicodeScalarView(scalars[(i + 1)..<semi]))
+            if let decoded = decodeEntity(name) {
+                out.append(contentsOf: decoded.unicodeScalars)
             } else {
-                out += rest[amp...semi]
+                out.append(contentsOf: scalars[i...semi])
             }
-            rest = rest[rest.index(after: semi)...]
+            i = semi + 1
         }
-        out += rest
-        return out
+        return String(out)
     }
 
-    private static func decodeEntity(_ e: Substring) -> String? {
+    private static func decodeEntity(_ e: String) -> String? {
         switch e {
         case "amp": return "&"
         case "lt": return "<"
@@ -370,18 +377,23 @@ public enum XMLText {
         case "quot": return "\""
         case "apos": return "'"
         default:
-            // A character reference is `#` and ASCII decimal digits, or `#x` and
-            // ASCII hex digits, naming a character the XML 1.0 Char production
-            // allows. Anything else (a sign, an empty number, a control
+            // A character reference is `#` and ASCII decimal digits, or `#x`
+            // (lowercase only, as XML 1.0 CharRef has it) and ASCII hex
+            // digits, naming a character the XML 1.0 Char production allows.
+            // Anything else (`#X`, a sign, an empty number, a control
             // character, a surrogate) is not one and stays as written, as an
             // XML parser would refuse it (#252).
-            guard e.hasPrefix("#") else { return nil }
-            var digits = e.dropFirst()
+            var digits = e.unicodeScalars[...]
+            guard digits.first == "#" else { return nil }
+            digits = digits.dropFirst()
             var radix = 10
-            if digits.first == "x" || digits.first == "X" { radix = 16; digits = digits.dropFirst() }
-            let isDigit: (Character) -> Bool = radix == 16 ? { $0.isASCII && $0.isHexDigit } : { ("0"..."9").contains($0) }
+            if digits.first == "x" { radix = 16; digits = digits.dropFirst() }
+            let isDigit: (Unicode.Scalar) -> Bool = radix == 16
+                ? { ("0"..."9").contains($0) || ("a"..."f").contains($0) || ("A"..."F").contains($0) }
+                : { ("0"..."9").contains($0) }
             guard !digits.isEmpty, digits.allSatisfy(isDigit),
-                  let v = UInt32(digits, radix: radix), let scalar = Unicode.Scalar(v) else { return nil }
+                  let v = UInt32(String(String.UnicodeScalarView(digits)), radix: radix),
+                  let scalar = Unicode.Scalar(v) else { return nil }
             let decoded = String(Character(scalar))
             return isAllowed(decoded) ? decoded : nil
         }

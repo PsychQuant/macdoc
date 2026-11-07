@@ -38,9 +38,11 @@ public enum FormClassifier {
         numberingLevels(xml) != nil
     }
 
-    /// The numbering levels, or nil when the part is not well-formed XML.
-    /// The tag index only checks tag pairing, so the part goes through a real
-    /// XML parser first (duplicate attributes, bad entities and the like).
+    /// The numbering levels, or nil when the part cannot be read: the tag scan
+    /// refuses it (unpaired tags, a DOCTYPE, more nesting or tags than the
+    /// scan limits, #252) or a real XML parser does (duplicate attributes, bad
+    /// entities and the like). The tag index only checks tag pairing, so the
+    /// part goes through the parser as well.
     static func numberingLevels(_ xml: [UInt8]?) -> NumberingLevels? {
         // The tag index runs first so a DOCTYPE (and with it any entity
         // definition) is refused before a real XML parser ever sees the part,

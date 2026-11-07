@@ -16,7 +16,8 @@ public enum DocxPackageError: Error, Equatable, CustomStringConvertible {
     case tooLarge(limit: Int64)
     /// More entries than `DocxPackage.maxEntries` (#252).
     case tooManyEntries(limit: Int)
-    /// An entry name that is absolute or has a `..` segment (#252).
+    /// An entry name that is absolute (`/`, `\` or a drive letter) or has a
+    /// `..` segment (#252).
     case suspiciousEntryName(String)
     case outputExists(String)
     case writeFailed(String)
@@ -67,12 +68,25 @@ public enum DocxPackage {
     public static let maxEntries = 10_000
 
     /// Entry names refused outright (closed list, #252; nothing is refused by
-    /// resemblance): a name starting with `/` or `\`, and a name with a `..`
-    /// segment between `/` or `\` separators. The rewrite copies names as they
-    /// are, so the output would hand such a name to whatever extracts it next.
+    /// resemblance): a name starting with `/` or `\`, a name starting with an
+    /// ASCII letter and `:` (a Windows drive), and a name with a `..` segment
+    /// between `/` or `\` separators. The rewrite copies names as they are, so
+    /// the output would hand such a name to whatever extracts it next.
+    ///
+    /// The name is read as Unicode scalars, not as Characters: a combining
+    /// mark after a separator joins it into one Character that equals neither
+    /// `/` nor `\`, while an extractor reading the bytes still sees the
+    /// separator (#252 verify R1).
     static func isSuspicious(_ path: String) -> Bool {
-        if path.hasPrefix("/") || path.hasPrefix("\\") { return true }
-        return path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).contains("..")
+        let scalars = Array(path.unicodeScalars)
+        guard let first = scalars.first else { return false }
+        if first == "/" || first == "\\" { return true }
+        if scalars.count >= 2, scalars[1] == ":", ("A"..."Z").contains(first) || ("a"..."z").contains(first) {
+            return true
+        }
+        let dotDot: [Unicode.Scalar] = [".", "."]
+        return scalars.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" })
+            .contains { $0.elementsEqual(dotDot) }
     }
 
     /// Every entry, in archive order.

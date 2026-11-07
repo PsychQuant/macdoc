@@ -28,6 +28,14 @@ final class Issue252LimitsTests: XCTestCase {
         XCTAssertEqual(XMLTagIndex.maxDepth, 257)
     }
 
+    /// The limit is the output check's own: FormPlan.checkWellFormed (the
+    /// XMLParser every apply result goes through) accepts the scan's deepest
+    /// nesting and refuses one level more.
+    func testOutputCheckParserAcceptsExactlyTheScanDepth() {
+        XCTAssertNoThrow(try FormPlan.checkWellFormed(Array(nested(XMLTagIndex.maxDepth).utf8)))
+        XCTAssertThrowsError(try FormPlan.checkWellFormed(Array(nested(XMLTagIndex.maxDepth + 1).utf8)))
+    }
+
     func testScanRefusesNestingDeeperThanTheLimit() {
         let xml = nested(XMLTagIndex.maxDepth + 1)
         XCTAssertThrowsError(try XMLTagIndex(xml)) {
@@ -100,22 +108,53 @@ final class Issue252LimitsTests: XCTestCase {
         }
     }
 
+    /// The merged lookup the deletion checks walk (keptMarkers, fieldSplit,
+    /// commentOrphan) equals a full filter, in document order, once per
+    /// element even when a name is given twice.
+    func testElementsNamedAnyOfMatchesAFullFilterInDocumentOrder() throws {
+        let body = TestXML.paragraph("0000AAAA", "<w:bookmarkStart w:id=\"1\"/>" + TestXML.run("一")
+                                     + "<w:commentRangeStart w:id=\"0\"/>")
+            + TestXML.paragraph("0000BBBB", "<w:bookmarkEnd w:id=\"1\"/>" + "<w:commentRangeEnd w:id=\"0\"/>"
+                                + "<w:r><w:commentReference w:id=\"0\"/></w:r>")
+            + TestXML.bodySection
+        let index = try XMLTagIndex(TestXML.document(body))
+        let sets: [[String]] = [["w:bookmarkStart", "w:bookmarkEnd"],
+                                ["w:commentRangeStart", "w:commentRangeEnd", "w:commentReference"],
+                                ["w:p", "w:r", "w:nothing"], ["w:bookmarkEnd", "w:bookmarkStart", "w:bookmarkEnd"], []]
+        for names in sets {
+            let wanted = Set(names)
+            let full = index.tags.indices.filter { index.tags[$0].kind != .close && wanted.contains(index.tags[$0].name) }
+            XCTAssertEqual(index.elements(namedAnyOf: names), full, "\(names)")
+        }
+    }
+
     // MARK: character references
 
     func testDecodeAcceptsWellFormedReferences() {
-        XCTAssertEqual(XMLText.decode("&#65;&#x42;&#X43;&amp;"), "ABC&")
+        XCTAssertEqual(XMLText.decode("&#65;&#x42;&#x43;&amp;"), "ABC&")
+        XCTAssertEqual(XMLText.decode("&#x4a;&#x4A;"), "JJ")   // hex digits in either case
         XCTAssertEqual(XMLText.decode("&#x1F600;"), "\u{1F600}")
         XCTAssertEqual(XMLText.decode("&#9;&#xA;&#13;"), "\t\n\r")
     }
 
-    /// A sign, an empty number, a stray character or a value outside the XML
-    /// 1.0 Char production is not a reference; it is kept as written.
+    /// An uppercase `X` (XML 1.0 CharRef has only `&#x`), a sign, an empty
+    /// number, a stray character or a value outside the XML 1.0 Char
+    /// production is not a reference; it is kept as written.
     func testDecodeKeepsMalformedReferencesAsWritten() {
-        for literal in ["&#+65;", "&#-65;", "&#;", "&#x;", "&#x+41;", "&#6 5;", "&#65a;", "&#xG1;",
+        for literal in ["&#X43;", "&#+65;", "&#-65;", "&#;", "&#x;", "&#x+41;", "&#6 5;", "&#65a;", "&#xG1;",
                         "&#1;", "&#x0;", "&#xB;", "&#x1F;", "&#xD800;", "&#xFFFE;", "&#xFFFF;", "&#x110000;",
                         "&#99999999999;"] {
             XCTAssertEqual(XMLText.decode(literal), literal, literal)
         }
+    }
+
+    /// Decoding walks Unicode scalars, as an XML parser does: a combining
+    /// mark after `;` or `&` must not hide the delimiter (#252 verify R1).
+    func testDecodeWalksScalarsNotCharacters() {
+        XCTAssertEqual(Array(XMLText.decode("&#65;\u{301}").unicodeScalars), ["A", "\u{301}"])
+        XCTAssertEqual(Array(XMLText.decode("&amp;\u{301}x").unicodeScalars), ["&", "\u{301}", "x"])
+        // `&` followed by a combining mark starts no reference; it stays as written.
+        XCTAssertEqual(Array(XMLText.decode("&\u{301}#65;").unicodeScalars), Array("&\u{301}#65;".unicodeScalars))
     }
 
     // MARK: package limits
@@ -138,10 +177,17 @@ final class Issue252LimitsTests: XCTestCase {
         XCTAssertEqual(DocxPackage.maxEntries, 10_000)
     }
 
-    /// Closed list: a name starting with `/` or `\`, or with a `..` segment
-    /// between `/` or `\` separators. Nothing else is refused on its name.
+    /// Closed list: a name starting with `/` or `\`, a name starting with an
+    /// ASCII letter and `:`, or one with a `..` segment between `/` or `\`
+    /// separators, all read as Unicode scalars. Nothing else is refused on
+    /// its name.
     func testSuspiciousEntryNamesAreRefused() throws {
-        for name in ["/etc/x.xml", "\\x.xml", "../x.xml", "word/../../x.xml", "word\\..\\x.xml", "word/.."] {
+        for name in ["/etc/x.xml", "\\x.xml", "../x.xml", "word/../../x.xml", "word\\..\\x.xml", "word/..",
+                     // A combining mark after the separator joins it into one Character;
+                     // the bytes an extractor reads still hold the separator (#252 verify R1).
+                     "/\u{301}etc/x.xml", "\\\u{301}x.xml", "../\u{301}x.xml", "word/../\u{301}x.xml",
+                     // A Windows drive is an absolute path too.
+                     "C:\\x.xml", "c:x.xml", "C:..\\x.xml", "Z:/x.xml"] {
             let url = try tempDir().appendingPathComponent("in.docx")
             try package(at: url, extra: [DocxPackage.Entry(path: name, data: Data("<a/>".utf8))])
             XCTAssertThrowsError(try DocxPackage.read(from: url), name) {
@@ -149,7 +195,8 @@ final class Issue252LimitsTests: XCTestCase {
             }
             XCTAssertThrowsError(try DocxPackage.readParts(from: url, paths: [DocxPackage.documentPart]), name)
         }
-        for name in ["word/..x.xml", "word/x..xml", "word/.x.xml", "a..b/c.xml"] {
+        for name in ["word/..x.xml", "word/x..xml", "word/.x.xml", "a..b/c.xml",
+                     "word/C:x.xml", "1:x.xml", "\u{E9}:x.xml", "word/.\u{301}./x.xml"] {
             let url = try tempDir().appendingPathComponent("in.docx")
             try package(at: url, extra: [DocxPackage.Entry(path: name, data: Data("<a/>".utf8))])
             XCTAssertNoThrow(try DocxPackage.read(from: url), name)

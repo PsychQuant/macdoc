@@ -144,6 +144,26 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stdout.isEmpty, result.stdout)
     }
 
+    /// The refused name is quoted in the message with its control characters
+    /// blanked, for classify and apply alike (#252 verify R1).
+    func testRefusedEntryNameReachesStderrWithoutControlCharacters() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let crafted = dir.appendingPathComponent("crafted.docx")
+        try makeForm(at: form)
+        let name = "../\u{1B}[2Jevil\nx.xml"
+        try DocxPackage.write(try DocxPackage.read(from: form) + [DocxPackage.Entry(path: name, data: Data("<a/>".utf8))],
+                              to: crafted)
+        for arguments in [["word", "form", "classify", crafted.path],
+                          ["word", "form", "apply", crafted.path, "--to-docx", dir.appendingPathComponent("o.docx").path,
+                           "--checkbox-font", "標楷體"]] {
+            let result = try CLITestHelper.run(arguments)
+            XCTAssertNotEqual(result.exitCode, 0, arguments.joined(separator: " "))
+            XCTAssertFalse(result.stderr.unicodeScalars.contains("\u{1B}"), result.stderr)
+            XCTAssertTrue(result.stderr.contains("../ [2Jevil x.xml"), result.stderr)
+        }
+    }
+
     /// A paraId is eight hex digits; a crafted one (here an ESC sequence from
     /// a character reference) is not printed, only counted.
     func testClassifySkipsParaIdsThatAreNotEightHexDigits() throws {
