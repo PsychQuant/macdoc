@@ -157,6 +157,17 @@ final class Issue252LimitsTests: XCTestCase {
         XCTAssertEqual(Array(XMLText.decode("&\u{301}#65;").unicodeScalars), Array("&\u{301}#65;".unicodeScalars))
     }
 
+    /// A reference after a long run of text, and a reference with a long run
+    /// of leading zeros (XML allows them), decode like short ones (#252 verify R2).
+    func testDecodeHandlesLongTextAndLongDigitRuns() {
+        let text = String(repeating: "a", count: 200_000)
+        XCTAssertEqual(XMLText.decode(text + "&amp;" + text), text + "&" + text)
+        XCTAssertEqual(XMLText.decode("&#" + String(repeating: "0", count: 100_000) + "65;"), "A")
+        XCTAssertEqual(XMLText.decode("&#x" + String(repeating: "0", count: 100_000) + "41;"), "A")
+        XCTAssertEqual(XMLText.decode("&#4294967296;"), "&#4294967296;")   // past UInt32
+        XCTAssertEqual(XMLText.decode("x&" + text), "x&" + text)            // no `;` after `&`
+    }
+
     // MARK: package limits
 
     private func package(at url: URL, extra: [DocxPackage.Entry] = []) throws {

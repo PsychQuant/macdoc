@@ -342,6 +342,16 @@ Truncation SHALL NOT leave unpaired markup, using the paired range markers and t
 - **WHEN** a media entry alone exceeds the size limit and the main and numbering parts are small
 - **THEN** `classify` lists the paragraphs, while `apply` fails naming the limit
 
+#### Scenario: Nesting deeper than the limit
+
+- **WHEN** the main part nests 258 elements
+- **THEN** both commands fail naming the limit of 257, and a part nesting 257 elements is read
+
+#### Scenario: More tags than the limit
+
+- **WHEN** the main part holds more than 5,000,000 tags, close tags counted
+- **THEN** both commands fail naming the limit
+
 #### Scenario: A reference to a control character is not decoded
 
 - **WHEN** a paragraph's text holds `&#x1B;`, `&#+65;` or `&#X41;`

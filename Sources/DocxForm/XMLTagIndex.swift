@@ -57,13 +57,17 @@ public struct XMLTagIndex {
     private let byParaId: [String: [Int]]
 
     /// Deepest nesting accepted: Foundation's XMLParser (libxml2 without
-    /// XML_PARSE_HUGE) accepts 257 nested elements and rejects 258 (measured),
-    /// so the scan refuses nothing the output check would have passed (#252).
+    /// XML_PARSE_HUGE) accepts 257 nested elements and rejects 258, measured
+    /// on macOS 27.3, so the scan refuses nothing the output check would have
+    /// passed (#252). The value belongs to the platform's parser;
+    /// `testOutputCheckParserAcceptsExactlyTheScanDepth` fails if it moves.
     public static let maxDepth = 257
     /// Most tags accepted, counting close tags. The index grows with the tag
-    /// count however small the tags are; a 47 MB part at this limit, every
-    /// paragraph with its own `w14:paraId`, measured about 1.3 GB peak
-    /// resident memory while the index was built (#252 verify R1).
+    /// count however small the tags are. One measurement, not a bound: a
+    /// 47 MB part at this limit, every paragraph with its own eight-digit
+    /// `w14:paraId`, peaked at about 1.3 GB resident memory while the index
+    /// was built; longer ids or attributes cost more (#252 verify R1, R2;
+    /// PsychQuant/macdoc#265).
     public static let maxTags = 5_000_000
 
     public init(_ bytes: [UInt8], maxDepth: Int = XMLTagIndex.maxDepth, maxTags: Int = XMLTagIndex.maxTags) throws {
@@ -346,57 +350,70 @@ public enum XMLText {
     /// Replaces the five predefined entities and well-formed character
     /// references. The text is walked as Unicode scalars, the units an XML
     /// parser reads: a combining mark after `&` or `;` would otherwise join it
-    /// into one Character and hide it (#252 verify R1).
+    /// into one Character and hide it (#252 verify R1). The walk moves over
+    /// the string's own scalar view and copies the text between references in
+    /// slices, so decoding allocates only the output (#252 verify R2).
     public static func decode(_ s: String) -> String {
         guard s.utf8.contains(UInt8(ascii: "&")) else { return s }
-        let scalars = Array(s.unicodeScalars)
+        let view = s.unicodeScalars
         var out = String.UnicodeScalarView()
-        var i = 0
-        while i < scalars.count {
-            guard scalars[i] == "&" else { out.append(scalars[i]); i += 1; continue }
-            guard let semi = scalars[(i + 1)...].firstIndex(of: ";") else {
-                out.append(contentsOf: scalars[i...])
-                break
+        var rest = view[...]
+        while let amp = rest.firstIndex(of: "&") {
+            out.append(contentsOf: rest[..<amp])
+            let nameStart = view.index(after: amp)
+            guard let semi = view[nameStart...].firstIndex(of: ";") else {
+                out.append(contentsOf: view[amp...])
+                return String(out)
             }
-            let name = String(String.UnicodeScalarView(scalars[(i + 1)..<semi]))
-            if let decoded = decodeEntity(name) {
+            if let decoded = decodeEntity(view[nameStart..<semi]) {
                 out.append(contentsOf: decoded.unicodeScalars)
             } else {
-                out.append(contentsOf: scalars[i...semi])
+                out.append(contentsOf: view[amp...semi])
             }
-            i = semi + 1
+            rest = view[view.index(after: semi)...]
         }
+        out.append(contentsOf: rest)
         return String(out)
     }
 
-    private static func decodeEntity(_ e: String) -> String? {
-        switch e {
-        case "amp": return "&"
-        case "lt": return "<"
-        case "gt": return ">"
-        case "quot": return "\""
-        case "apos": return "'"
-        default:
-            // A character reference is `#` and ASCII decimal digits, or `#x`
-            // (lowercase only, as XML 1.0 CharRef has it) and ASCII hex
-            // digits, naming a character the XML 1.0 Char production allows.
-            // Anything else (`#X`, a sign, an empty number, a control
-            // character, a surrogate) is not one and stays as written, as an
-            // XML parser would refuse it (#252).
-            var digits = e.unicodeScalars[...]
-            guard digits.first == "#" else { return nil }
-            digits = digits.dropFirst()
-            var radix = 10
-            if digits.first == "x" { radix = 16; digits = digits.dropFirst() }
-            let isDigit: (Unicode.Scalar) -> Bool = radix == 16
-                ? { ("0"..."9").contains($0) || ("a"..."f").contains($0) || ("A"..."F").contains($0) }
-                : { ("0"..."9").contains($0) }
-            guard !digits.isEmpty, digits.allSatisfy(isDigit),
-                  let v = UInt32(String(String.UnicodeScalarView(digits)), radix: radix),
-                  let scalar = Unicode.Scalar(v) else { return nil }
-            let decoded = String(Character(scalar))
-            return isAllowed(decoded) ? decoded : nil
+    private static let predefinedEntities: [(name: String, value: String)] = [
+        ("amp", "&"), ("lt", "<"), ("gt", ">"), ("quot", "\""), ("apos", "'"),
+    ]
+
+    private static func decodeEntity(_ e: Substring.UnicodeScalarView) -> String? {
+        if let entity = predefinedEntities.first(where: { e.elementsEqual($0.name.unicodeScalars) }) {
+            return entity.value
         }
+        // A character reference is `#` and ASCII decimal digits, or `#x`
+        // (lowercase only, as XML 1.0 CharRef has it) and ASCII hex digits,
+        // naming a character the XML 1.0 Char production allows. Anything
+        // else (`#X`, a sign, an empty number, a control character, a
+        // surrogate, a value past UInt32) is not one and stays as written, as
+        // an XML parser would refuse it (#252). Digits are accumulated in
+        // place, so a long run of them allocates nothing.
+        var digits = e
+        guard digits.first == "#" else { return nil }
+        digits = digits.dropFirst()
+        var radix: UInt32 = 10
+        if digits.first == "x" { radix = 16; digits = digits.dropFirst() }
+        guard !digits.isEmpty else { return nil }
+        var value: UInt32 = 0
+        for d in digits {
+            let digit: UInt32
+            switch d {
+            case "0"..."9": digit = d.value - 0x30
+            case "a"..."f" where radix == 16: digit = d.value - 0x61 + 10
+            case "A"..."F" where radix == 16: digit = d.value - 0x41 + 10
+            default: return nil
+            }
+            let (shifted, o1) = value.multipliedReportingOverflow(by: radix)
+            let (sum, o2) = shifted.addingReportingOverflow(digit)
+            if o1 || o2 { return nil }
+            value = sum
+        }
+        guard let scalar = Unicode.Scalar(value) else { return nil }
+        let decoded = String(Character(scalar))
+        return isAllowed(decoded) ? decoded : nil
     }
 
     public static func escapeText(_ s: String) -> String {
