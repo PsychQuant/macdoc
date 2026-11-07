@@ -43,7 +43,8 @@ enum FormOperations {
     static func checkRemove(_ id: String, in index: XMLTagIndex) throws {
         let p = try locate(id, in: index)
         if ownSectPr(of: p, in: index) != nil { throw FormError.carriesSectionBreak(id) }
-        try checkPairedMarkup(index.elementRange(p), id: id, in: index)
+        // Fields and comment references are checked by the plan against the
+        // union of everything it deletes (FormRanges.checkPairedMarkup).
         // Cells (and text boxes) must keep at least one paragraph and end with
         // one. Their blocks are counted through content-control and custom-XML
         // wrappers, so a wrapped paragraph is guarded like a direct one.
@@ -120,7 +121,6 @@ enum FormOperations {
         // would go; that is the same as cutting at the first child.
         let before = index.children(of: body).filter { index.tags[$0].start < index.tags[p].start }
         if contentBlocks(before, in: index).isEmpty { throw FormError.firstBodyChild(id) }
-        try checkPairedMarkup(index.tags[p].start..<bodyEnd(of: body, in: index), id: id, in: index)
         return (p, body)
     }
 
@@ -129,11 +129,11 @@ enum FormOperations {
         index.tags[index.tags[body].match!].start
     }
 
-    /// Fields and comment references live inside runs, so a deletion that
-    /// would split one has nowhere safe to keep the other half (#253).
-    static func checkPairedMarkup(_ span: Range<Int>, id: String, in index: XMLTagIndex) throws {
-        if FormRanges.splitsField(span, index: index) { throw FormError.splitsField(id) }
-        if FormRanges.orphansComment(span, index: index) { throw FormError.splitsComment(id) }
+    /// The byte range `--truncate-from` deletes: from the paragraph to the
+    /// start of the body's closing tag.
+    static func truncationRange(from id: String, in index: XMLTagIndex) throws -> Range<Int> {
+        let (p, body) = try checkTruncate(id, in: index)
+        return index.tags[p].start..<bodyEnd(of: body, in: index)
     }
 
     // MARK: Structure helpers
@@ -306,15 +306,17 @@ enum FormOperations {
         // structures; the skip is returned so it is never silent (#253).
         let present = Set(index.descendants(of: tc).map { index.tags[$0].name })
         let reasons = CleanupSkip.Reason.allCases.filter { present.contains($0.elementName) }
+        let removable = index.children(of: tc).filter { sibling in
+            guard sibling != p, index.tags[sibling].name == "w:p" else { return false }
+            if let siblingId = index.attribute("w14:paraId", of: sibling), protected.contains(siblingId) { return false }
+            return ownSectPr(of: sibling, in: index) == nil && !hasContent(sibling, in: index)
+        }
         if reasons.isEmpty {
-            for sibling in index.children(of: tc) where sibling != p && index.tags[sibling].name == "w:p" {
-                if let siblingId = index.attribute("w14:paraId", of: sibling), protected.contains(siblingId) { continue }
-                if ownSectPr(of: sibling, in: index) != nil || hasContent(sibling, in: index) { continue }
-                edits.append(.remove(index.elementRange(sibling)))
-            }
+            for sibling in removable { edits.append(.remove(index.elementRange(sibling))) }
         }
         try editor.apply(edits)
-        return reasons.isEmpty ? nil : CleanupSkip(paragraphId: id, reasons: reasons)
+        // Only a skip that left an empty paragraph behind is reported (#253 verify R1).
+        return reasons.isEmpty || removable.isEmpty ? nil : CleanupSkip(paragraphId: id, reasons: reasons)
     }
 
     // MARK: Box glyph font
@@ -470,15 +472,30 @@ enum FormOperations {
 
     // MARK: Remove and truncate
 
-    static func remove(_ id: String, editor: inout XMLEditor) throws {
+    /// `keptMarkers` is the plan's serialization of the range markers of this
+    /// paragraph whose partner stays (#253); they are kept where the paragraph
+    /// was, or at the end of the paragraph before it when the paragraph is the
+    /// last block of a cell or text box, which must keep ending with a paragraph.
+    static func remove(_ id: String, keptMarkers: String = "", editor: inout XMLEditor) throws {
         try checkRemove(id, in: editor.index)
-        let p = try locate(id, in: editor.index)
-        let span = editor.index.elementRange(p)
-        // Range markers whose partner stays are kept where the paragraph was (#253).
-        try editor.apply([.replace(span, with: FormRanges.keptMarkerXML(in: span, index: editor.index))])
+        let index = editor.index
+        let p = try locate(id, in: index)
+        let span = index.elementRange(p)
+        if !keptMarkers.isEmpty, let container = blockContainer(of: p, in: index),
+           ["w:tc", "w:txbxContent"].contains(index.tags[container].name) {
+            let blocks = flattenBlocks(index.children(of: container), in: index)
+            if blocks.last == p, let previous = blocks.dropLast().last, index.tags[previous].name == "w:p" {
+                let into: Edit = index.tags[previous].kind == .selfClosing
+                    ? .replace(index.elementRange(previous), with: openTag(of: previous, in: index) + keptMarkers + "</w:p>")
+                    : .insert(keptMarkers, at: index.tags[index.tags[previous].match!].start)
+                try editor.apply([into, .remove(span)])
+                return
+            }
+        }
+        try editor.apply([.replace(span, with: keptMarkers)])
     }
 
-    static func truncate(from id: String, editor: inout XMLEditor) throws {
+    static func truncate(from id: String, keptMarkers: String = "", editor: inout XMLEditor) throws {
         let (p, body) = try checkTruncate(id, in: editor.index)
         let index = editor.index
         let cut = index.tags[p].start
@@ -513,8 +530,7 @@ enum FormOperations {
                                   with: try Fragment.removeChildren(index.elementString(pPr), named: ["w:sectPr"])))
         }
         // Range markers whose partner is kept end the kept content, before the
-        // final section properties (#253).
-        let keptMarkers = FormRanges.keptMarkerXML(in: cut..<bodyEnd, index: index)
+        // final section properties (#253); the plan serializes them.
         edits.append(.replace(cut..<bodyEnd, with: keptMarkers + section))
         try editor.apply(edits)
     }

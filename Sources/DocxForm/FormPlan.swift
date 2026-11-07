@@ -134,6 +134,23 @@ public struct FormPlan: Equatable {
         for id in removals { try FormOperations.checkRemove(id, in: editor.index) }
         if let id = truncateFrom { _ = try FormOperations.checkTruncate(id, in: editor.index) }
 
+        // Fields, comment references and range markers pair across paragraphs,
+        // so they are judged once against the union of everything the command
+        // deletes, on the original part (#253 verify R1). The earlier steps do
+        // not touch any of them, so the serialized markers stay valid.
+        var deletions = try removals.map {
+            FormRanges.DeletionSpan(id: $0, range: editor.index.elementRange(try FormOperations.locate($0, in: editor.index)))
+        }
+        if let id = truncateFrom {
+            deletions.append(.init(id: id, range: try FormOperations.truncationRange(from: id, in: editor.index)))
+        }
+        try FormRanges.checkPairedMarkup(deletions, index: editor.index)
+        let deleted = deletions.map(\.range)
+        var keptMarkers: [String: String] = [:]
+        for deletion in deletions {
+            keptMarkers[deletion.id] = FormRanges.keptMarkerXML(in: deletion.range, deleted: deleted, index: editor.index)
+        }
+
         var size: FieldSize?
         var derived = false
         if !fields.isEmpty {
@@ -166,8 +183,8 @@ public struct FormPlan: Equatable {
         }
         var skipped = 0
         if let font = checkboxFont { skipped = try FormOperations.uniformCheckboxes(font: font, editor: &editor) }
-        for id in removals { try FormOperations.remove(id, editor: &editor) }
-        if let id = truncateFrom { try FormOperations.truncate(from: id, editor: &editor) }
+        for id in removals { try FormOperations.remove(id, keptMarkers: keptMarkers[id] ?? "", editor: &editor) }
+        if let id = truncateFrom { try FormOperations.truncate(from: id, keptMarkers: keptMarkers[id] ?? "", editor: &editor) }
 
         // 3. The result must be well-formed XML.
         try Self.checkWellFormed(editor.bytes)
