@@ -17,6 +17,8 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     case cellWouldEndWithoutParagraph(String)
     case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
+    case splitsField(String)
+    case splitsComment(String)
     case notBodyChild(String)
     case firstBodyChild(String)
     case noFieldSize
@@ -46,6 +48,10 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):
             return "段落 \(id) 帶有分節符（w:sectPr），刪掉它會改變分節設定"
+        case .splitsField(let id):
+            return "從段落 \(id) 刪除的範圍只含一個欄位（w:fldChar 的開頭與結尾分在範圍內外）的一部分，刪掉會讓欄位斷掉；請改成連同整個欄位一起刪，或先在 Word 裡把欄位轉成一般文字"
+        case .splitsComment(let id):
+            return "從段落 \(id) 刪除的範圍含有註解的引用（w:commentReference），但這個註解的範圍標記在範圍外；刪掉會讓註解失去錨點。請先在 Word 裡刪除或移動這個註解"
         case .notBodyChild(let id):
             return "段落 \(id) 不是 w:body 的直屬段落（可能在表格或內容控制項裡），不能用 --truncate-from"
         case .firstBodyChild(let id):
