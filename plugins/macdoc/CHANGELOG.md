@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `macdoc word form apply --remove-table <paraId>`（需要下一版 CLI）：刪掉段落所在的整張本文層表格，和 `--remove`、`--truncate-from` 一起判斷；表格裡另一半留下的書籤等範圍標記留在表格原本的位置，巢狀表格、文字方塊裡的表格與被其他選項點名的段落會拒絕（PsychQuant/macdoc#250）。
+- `macdoc word form apply --remove-table <paraId>`（需要下一版 CLI）：刪掉段落所在的整張本文層表格，和 `--remove`、`--truncate-from` 一起判斷；表格裡另一半留下的書籤等範圍標記留在表格原本的位置，巢狀表格、文字方塊裡的表格與段落、帶分節符的表格內段落，以及被其他選項點名的段落會拒絕（PsychQuant/macdoc#250）。
 
 ### Changed
 

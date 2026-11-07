@@ -159,7 +159,7 @@ extension MacDoc.Word.Form {
         var remove: [String] = []
 
         @Option(name: .customLong("remove-table"),
-                help: ArgumentHelp("刪掉段落所在的整張表格（可重複，同一張表只刪一次）；只限本文層的表格，巢狀表格與文字方塊裡的表格會拒絕，表格裡的段落被其他選項點名時也拒絕。和 --remove、--truncate-from 一起判斷：刪完後原本隔開的兩張表格會緊鄰、本文沒有內容，或（沒有截斷時）最後一節沒有內容時拒絕；本文會以表格結尾時在最後補一個空段落",
+                help: ArgumentHelp("刪掉段落所在的整張表格（可重複，同一張表只刪一次）；只限本文層的表格，巢狀表格、文字方塊裡的表格與文字方塊裡的段落會拒絕，表格裡的段落帶分節符或被其他選項點名時也拒絕。和 --remove、--truncate-from 一起判斷：刪完後原本隔開的兩張表格會緊鄰、本文沒有內容，或（沒有截斷時）最後一節沒有內容時拒絕；本文會以表格結尾時在最後補一個空段落",
                                    valueName: "paraId"))
         var removeTable: [String] = []
 

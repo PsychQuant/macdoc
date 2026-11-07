@@ -493,8 +493,19 @@ enum FormOperations {
         for id in ids { try checkRemove(id, in: index) }
         let removed = try ids.map { try locate($0, in: index) }
         var spans = zip(ids, removed).map { FormRanges.DeletionSpan(id: $0, range: index.elementRange($1)) }
+        // A part with more than one body is not a document the structure
+        // rules below can judge (#250 verify R1).
+        if index.elements(named: "w:body").count > 1 { throw FormError.malformedPart("有多個 w:body") }
         // Each named table once, under the first id naming it (#250).
         let removedTables = try uniqueTables(tables, in: index)
+        // A paragraph inside the table carrying its own section break would go
+        // with it, as `--remove` refuses for a paragraph (#250 verify R1).
+        for entry in removedTables {
+            let range = index.elementRange(entry.table)
+            for p in index.elements(named: "w:p") where range.contains(index.tags[p].start) && ownSectPr(of: p, in: index) != nil {
+                throw FormError.carriesSectionBreak(index.attribute("w14:paraId", of: p) ?? entry.id)
+            }
+        }
         let tableSpans = removedTables.map { FormRanges.DeletionSpan(id: $0.id, range: index.elementRange($0.table)) }
         for (id, p) in zip(ids, removed) {
             if let table = tableSpans.first(where: { $0.range.contains(index.tags[p].start) }) {
@@ -577,7 +588,12 @@ enum FormOperations {
     static func tableToRemove(_ id: String, in index: XMLTagIndex) throws -> Int {
         let p = try locate(id, in: index)
         var current = index.tags[p].parent
-        while let c = current, index.tags[c].name != "w:tbl" { current = index.tags[c].parent }
+        while let c = current, index.tags[c].name != "w:tbl" {
+            // A text box is its own story: the table around it is not the
+            // paragraph's table, so the walk stops here (#250 verify R1).
+            if index.tags[c].name == "w:txbxContent" { throw FormError.inTextBox(id) }
+            current = index.tags[c].parent
+        }
         guard let table = current else { throw FormError.notInTable(id) }
         guard let container = blockContainer(of: table, in: index), index.tags[container].name == "w:body" else {
             throw FormError.tableNotBodyLevel(id)

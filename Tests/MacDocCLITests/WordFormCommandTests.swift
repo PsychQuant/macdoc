@@ -463,4 +463,16 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("note: 刪除後本文會以表格"), result.stderr)
         XCTAssertTrue(try documentXML(output).contains("</w:tbl><w:p/><w:sectPr"))
     }
+
+    func testRemoveTableOnAParagraphOutsideTablesIsRefused() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("out.docx")
+        try makeForm(at: form)
+        let result = try CLITestHelper.run(["word", "form", "apply", form.path, "--to-docx", output.path,
+                                            "--remove-table", "0000B0D1"])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("0000B0D1") && result.stderr.contains("不在表格裡"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
 }

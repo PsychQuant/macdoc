@@ -33,6 +33,9 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     /// `--remove-table` named a paragraph whose nearest table is not a
     /// body-level block (a nested table, or one in a text box) (#250).
     case tableNotBodyLevel(String)
+    /// `--remove-table` named a paragraph inside a text box; the table around
+    /// the text box is not the paragraph's table (#250 verify R1).
+    case inTextBox(String)
     /// The deletions leave two tables adjacent that something other than a
     /// table separated before; Word would join them (#250). Names, in
     /// document order, what is deleted between them.
@@ -82,10 +85,12 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "從段落 \(id) 截斷時，它之前的內容都列在 --remove 裡，刪完後本文不會留下任何內容"
         case .notInTable(let id):
             return "段落 \(id) 不在表格裡，不能用 --remove-table"
+        case .inTextBox(let id):
+            return "段落 \(id) 在文字方塊裡，不能用 --remove-table 指定表格；請點名表格儲存格本身的段落"
         case .tableNotBodyLevel(let id):
             return "段落 \(id) 所在的表格不是本文層的表格（巢狀在儲存格或文字方塊裡），不能用 --remove-table"
         case .tablesWouldJoin(let ids):
-            return "刪掉 \(ids.joined(separator: "、")) 後，前後兩張表格會緊鄰，Word 會把它們併成一張；請至少留下兩張表之間的一段"
+            return "刪掉 \(ids.joined(separator: "、")) 後，前後兩張表格會緊鄰，Word 會把它們併成一張；請至少留下兩張表之間的一段，或改用 --remove-table 刪掉其中一張表"
         case .removalsLeaveEmptyBody(let ids):
             return "刪掉 \(ids.joined(separator: "、")) 後，本文不會留下任何內容；請至少留下一段"
         case .lastSectionWouldBeEmpty(let ids):

@@ -230,4 +230,77 @@ final class Issue250TableRemovalTests: XCTestCase {
         XCTAssertTrue(FormError.removalsLeaveEmptyBody(["0000A002", "0000A003"]).description.contains("0000A002、0000A003"))
         XCTAssertTrue(FormError.lastSectionWouldBeEmpty(["0000B001"]).description.contains("0000B001"))
     }
+
+    // MARK: verify round 1
+
+    private func textBox(_ inner: String) -> String {
+        "<w:r><w:drawing><wp:inline><w:txbxContent>" + inner + "</w:txbxContent></wp:inline></w:drawing></w:r>"
+    }
+
+    /// A text box is its own story: naming a paragraph in it never reaches the
+    /// table around the text box.
+    func testParagraphInATextBoxInsideATableCellIsRefused() {
+        let cell = TestXML.paragraph("0000B001", TestXML.run("格") + textBox(p("0000K001", "方塊")))
+        let body = p("0000A001") + TestXML.table([TestXML.cell(cell)]) + p("0000A002") + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000K001"])), .inTextBox("0000K001"))
+    }
+
+    func testTableInsideATextBoxIsRefused() {
+        let boxed = TestXML.paragraph("0000A001", textBox(table("0000K002") + TestXML.paragraph(nil)))
+        let body = boxed + p("0000A002") + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000K002"])), .tableNotBodyLevel("0000K002"))
+    }
+
+    func testTableHoldingASectionBreakIsRefused() {
+        let broken = TestXML.paragraph("0000B002", pPr: sectionBreak, TestXML.run("格"))
+        let body = p("0000A001") + TestXML.table([TestXML.cell(p("0000B001") + broken)]) + p("0000A002")
+            + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000B001"])), .carriesSectionBreak("0000B002"))
+    }
+
+    func testCommentReferenceInsideWithItsRangeOutsideIsRefused() {
+        let range = TestXML.paragraph("0000A001", "<w:commentRangeStart w:id=\"3\"/>" + TestXML.run("註")
+                                      + "<w:commentRangeEnd w:id=\"3\"/>")
+        let inside = TestXML.table([TestXML.cell(TestXML.paragraph("0000B001", "<w:r><w:commentReference w:id=\"3\"/></w:r>"))])
+        let body = range + inside + p("0000A002") + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000B001"])), .splitsComment("0000B001"))
+    }
+
+    func testKeptMarkerUnderCompatibilityRulesInTheTableIsRefused() {
+        let mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+        let inside = "<w:tbl xmlns:mc=\"\(mc)\" mc:Ignorable=\"w14\"><w:tblPr/><w:tblGrid/><w:tr><w:tc>"
+            + TestXML.paragraph("0000B001", "<w:bookmarkEnd w:id=\"9\"/>" + TestXML.run("格")) + "</w:tc></w:tr></w:tbl>"
+        let body = TestXML.paragraph("0000A001", "<w:bookmarkStart w:id=\"9\" w:name=\"x\"/>" + TestXML.run("前"))
+            + inside + p("0000A002") + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000B001"])), .markerUnderCompatibilityRules("0000B001"))
+    }
+
+    func testRemovedTableAndTheCutLeavingNothingBeforeIsRefused() {
+        let body = table("0000B001") + p("0000A001") + p("0000A002") + TestXML.bodySection
+        XCTAssertEqual(refusal(body, FormPlan(removedTables: ["0000B001"], truncateFrom: "0000A001")),
+                       .removalsLeaveNothingBeforeCut("0000A001"))
+    }
+
+    func testPartWithTwoBodiesIsRefusedWhenDeleting() {
+        let xml = Array(("<?xml version=\"1.0\" encoding=\"UTF-8\"?><w:document \(TestXML.namespaces)><w:body>"
+            + p("0000A001") + table("0000B001") + p("0000A002") + "</w:body><w:body>" + p("0000A003")
+            + "</w:body></w:document>").utf8)
+        XCTAssertThrowsError(try FormPlan(removedTables: ["0000B001"]).apply(toDocumentXML: xml)) {
+            guard case .malformedPart? = $0 as? FormError else { return XCTFail("\($0)") }
+        }
+    }
+
+    /// The content control around a removed table stays, now empty
+    /// (documented in SKILL.md).
+    func testContentControlAroundARemovedTableIsLeftEmpty() throws {
+        let wrapped = "<w:sdt><w:sdtPr/><w:sdtContent>" + table("0000B001") + "</w:sdtContent></w:sdt>"
+        let out = try apply(p("0000A001") + wrapped + p("0000A002") + TestXML.bodySection,
+                            FormPlan(removedTables: ["0000B001"]))
+        XCTAssertTrue(out.contains("<w:sdtContent></w:sdtContent>"), out)
+    }
+
+    func testTextBoxMessageNamesTheParagraph() {
+        XCTAssertTrue(FormError.inTextBox("0000K001").description.contains("0000K001"))
+        XCTAssertTrue(FormError.tablesWouldJoin(["0000A002"]).description.contains("--remove-table"))
+    }
 }

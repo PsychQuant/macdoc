@@ -456,7 +456,7 @@ swift build
 只以字串修改 `word/document.xml` 裡被點名的元素，不經 ooxml-swift 的 typed 模型（typed 重新序列化會改寫正文，ooxml-swift#133）；其他 part 逐位元組不變。
 - `Sources/DocxForm/XMLTagIndex.swift` - quote-aware 的 tag 索引（不用 regex；跳過註解、CDATA、PI；拒絕 DOCTYPE；巢狀深度與 tag 數上限；建立時一次建好 paraId 與元素名對照表，#252）
 - `Sources/DocxForm/FormClassifier.swift` - 段落類型（封閉列舉，依結構判定，不靠字面）
-- `Sources/DocxForm/FormOperations.swift`、`FormPlan.swift` - 各項操作與全有全無的計畫（所有 paraId 先驗、衝突整次拒絕、固定順序 field → tick-list → insert → checkbox-font → remove → truncate）
+- `Sources/DocxForm/FormOperations.swift`、`FormPlan.swift` - 各項操作與全有全無的計畫（所有 paraId 先驗、衝突整次拒絕、固定順序 field → tick-list → insert → checkbox-font → remove（段落與表格）→ truncate）
 - `Sources/DocxForm/FormEditing.swift` - 字串層編輯與 ECMA-376 子元素順序
 - `Sources/DocxForm/FormRanges.swift` - `--remove`／`--remove-table`／`--truncate-from` 的跨段落標記：成對範圍標記的保留與搬移、欄位與註解引用的拆開檢查、Markup Compatibility 標記的拒絕（#253）
 - `Sources/DocxForm/DocxPackage.swift` - 只換 `word/document.xml` 的封裝改寫（0700 暫存資料夾、排他 rename、不覆寫既有輸出）；entry 數與名稱檢查、只解壓指定 part 的 `readParts`（#252）
