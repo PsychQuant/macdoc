@@ -152,12 +152,12 @@ extension MacDoc.Word.Form {
         var insertAfter: [String] = []
 
         @Option(name: .customLong("remove"),
-                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算）",
+                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算），會拆開欄位或讓註解失去引用時也拒絕；另一半在段落外的書籤等範圍標記留在原處",
                                    valueName: "paraId"))
         var remove: [String] = []
 
         @Option(name: .customLong("truncate-from"),
-                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定", valueName: "paraId"))
+                help: ArgumentHelp("從本文的這一段刪到結尾；保留內容的最後一個區塊是自帶分節符的段落時沿用它，否則沿用被刪範圍第一個分節設定；會拆開欄位或讓註解失去引用時拒絕，另一半保留的書籤等範圍標記移到保留內容的結尾", valueName: "paraId"))
         var truncateFrom: String?
 
         func validate() throws {
@@ -217,8 +217,24 @@ extension MacDoc.Word.Form {
                     FileHandle.standardError.write(Data(
                         "note: 有 \(outcome.skippedCheckboxRuns) 個含方框字元的 run 未改字型（另含其他內容、需要拆開但帶格式修訂，或在原生核取方塊內容控制項裡）\n".utf8))
                 }
+                for skip in outcome.skippedCleanups {
+                    FileHandle.standardError.write(Data(Self.cleanupNote(skip).utf8))
+                }
             }
             FileHandle.standardError.write(Data("已寫入: \(toDocx)\n".utf8))
+        }
+
+        /// One stderr line per `--field` whose cell cleanup was skipped (#253).
+        static func cleanupNote(_ skip: CleanupSkip) -> String {
+            let names = skip.reasons.map { reason -> String in
+                switch reason {
+                case .nestedTable: return "巢狀表格（w:tbl）"
+                case .contentControl: return "內容控制項（w:sdt）"
+                case .customXML: return "自訂 XML（w:customXml）"
+                }
+            }
+            return "note: --field \(TerminalText.sanitize(skip.paragraphId)) 所在的儲存格含"
+                + names.joined(separator: "、") + "，依規格不清除同格的空段落\n"
         }
     }
 }
