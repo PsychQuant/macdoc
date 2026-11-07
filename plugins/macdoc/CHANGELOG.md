@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `plugin.json` description field. Section categorization is best-effort —
 > review and refine `Added` / `Changed` / `Fixed` etc. as needed.
 
+## [Unreleased]
+
+### Fixed
+
+- `macdoc word form apply`（需要下一版 CLI）的幾個邊界不再靜默略過或留下不完整的標記（PsychQuant/macdoc#253）：
+  - `--field` 因同格有巢狀表格、內容控制項或 `w:customXml` 而不清空段落時，stderr 註明是哪一欄、哪一種結構；欄位段落裡內容控制項既有的 `w:sdtPr/w:rPr` 也設成欄位字級。
+  - 帶自己清單編號（`w:numId` 為 0 的除外）或段落標記修訂的段落不再被當成空段落刪掉。
+  - `--remove` 與 `--truncate-from` 保留另一半不在被刪範圍裡的書籤、註解範圍、移動範圍與權限範圍標記；會把一個欄位拆開、或刪掉註解引用而留下它的範圍時改成拒絕（原本會成功寫出斷掉的欄位或沒有錨點的註解）。
+
 ## [1.14.0] - 2026-11-04
 
 ### Added
