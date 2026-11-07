@@ -91,44 +91,60 @@ enum FormRanges {
             + index.string(tag.attributes.upperBound..<index.elementRange(marker).upperBound)
     }
 
-    static let markupCompatibilityNamespace = "http://schemas.openxmlformats.org/markup-compatibility/2006"
-
-    /// Markup Compatibility attributes whose values name prefixes (ECMA-376
-    /// Part 3; closed list, no other attribute value is read). The flag says
-    /// whether a bare token is itself a prefix (`Ignorable="w14 w15"`); the
-    /// others hold qualified names (`ProcessContent="w14:sdt"`), so only the
-    /// part before the colon is a prefix (#253 verify R3).
-    static let prefixListAttributes: [String: Bool] = [
-        "Ignorable": true, "MustUnderstand": true,
-        "ProcessContent": false, "PreserveElements": false, "PreserveAttributes": false,
-    ]
-
-    /// Prefixes the marker depends on, in first-use order: those of its own
-    /// name and attribute names, and those named in the value of a Markup
-    /// Compatibility attribute. "" stands for the default namespace of an
-    /// unprefixed element. Unprefixed attributes and the reserved `xml`
-    /// prefix bind nothing.
+    /// Prefixes the marker's own name and attribute names use, in first-use
+    /// order; "" stands for the default namespace of an unprefixed element.
+    /// Unprefixed attributes and the reserved `xml` prefix bind nothing.
+    /// Prefixes named inside Markup Compatibility values are never needed:
+    /// a marker that carries such an attribute is not moved (#253 verify R4).
     private static func usedPrefixes(of element: Int, index: XMLTagIndex) -> [String] {
         func prefix(_ name: String) -> String? { name.firstIndex(of: ":").map { String(name[..<$0]) } }
         var out: [String] = [prefix(index.tags[element].name) ?? ""]
-        func add(_ p: String) { if !p.isEmpty, p != "xml", p != "xmlns", !out.contains(p) { out.append(p) } }
         for attribute in attributes(of: element, index: index) {
-            guard attribute.name != "xmlns", !attribute.name.hasPrefix("xmlns:"), let p = prefix(attribute.name) else { continue }
-            add(p)
-            // An MC attribute is known by the namespace its prefix resolves
-            // to on the marker, not by the spelling `mc`.
-            guard let bareIsPrefix = prefixListAttributes[String(attribute.name.dropFirst(p.count + 1))],
-                  binding(of: p, from: element, index: index).map(unquoted) == markupCompatibilityNamespace else { continue }
-            for token in unquoted(attribute.value).split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }) {
-                if let colon = token.firstIndex(of: ":") { add(String(token[..<colon])) } else if bareIsPrefix { add(String(token)) }
-            }
+            guard attribute.name != "xmlns", !attribute.name.hasPrefix("xmlns:"),
+                  let p = prefix(attribute.name), p != "xml", !out.contains(p) else { continue }
+            out.append(p)
         }
         return out
     }
 
-    /// An attribute value as read by `attributes(of:)`, without its quotes.
-    private static func unquoted(_ value: String) -> String {
-        value.count >= 2 ? String(value.dropFirst().dropLast()) : value
+    static let markupCompatibilityNamespace = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+
+    /// Whether `element` carries a Markup Compatibility attribute (any local
+    /// name): one whose prefix resolves, on the element, to the
+    /// markup-compatibility namespace, with character references in the
+    /// declared URI decoded. The spelling of the prefix does not matter.
+    static func carriesCompatibilityAttribute(_ element: Int, index: XMLTagIndex) -> Bool {
+        attributes(of: element, index: index).contains { attribute in
+            guard attribute.name != "xmlns", !attribute.name.hasPrefix("xmlns:"),
+                  let colon = attribute.name.firstIndex(of: ":") else { return false }
+            let prefix = String(attribute.name[..<colon])
+            guard prefix != "xml", let quoted = binding(of: prefix, from: element, index: index) else { return false }
+            return XMLText.decode(String(quoted.dropFirst().dropLast())) == markupCompatibilityNamespace
+        }
+    }
+
+    /// Whether moving `marker` to become a child of `destination` would change
+    /// the Markup Compatibility rules that apply to it (#253 verify R4). The
+    /// rules come from the marker and its ancestors, so they change when an
+    /// element between the marker and the lowest common ancestor of the two
+    /// positions carries one: on the source side the marker itself and the
+    /// elements removed around it, on the destination side the elements the
+    /// marker would newly sit inside. Rules above the common ancestor apply
+    /// in both places.
+    static func compatibilityContextChanges(_ marker: Int, destination: Int, index: XMLTagIndex) -> Bool {
+        func chain(_ from: Int) -> [Int] {
+            var out: [Int] = []
+            var current: Int? = from
+            while let c = current { out.append(c); current = index.tags[c].parent }
+            return out
+        }
+        let destinationChain = chain(destination)
+        let common = Set(destinationChain)
+        let sourceChain = chain(marker)
+        guard let lca = sourceChain.first(where: { common.contains($0) }) else { return true }
+        let lost = sourceChain.prefix { $0 != lca }
+        let gained = destinationChain.prefix { $0 != lca }
+        return (Array(lost) + Array(gained)).contains { carriesCompatibilityAttribute($0, index: index) }
     }
 
     /// The quoted value (source text, quotes included) declaring `prefix` on

@@ -480,6 +480,8 @@ enum FormOperations {
         // Nothing to delete: no pairing or container question arises, and the
         // whole-part scans below are skipped (#253 verify R3).
         guard !ids.isEmpty || truncateFrom != nil else { return [] }
+        var distinct: Set<String> = []
+        let ids = ids.filter { distinct.insert($0).inserted }
         for id in ids { try checkRemove(id, in: index) }
         var spans = try ids.map { FormRanges.DeletionSpan(id: $0, range: index.elementRange(try locate($0, in: index))) }
         if let id = truncateFrom { spans.append(.init(id: id, range: try truncationRange(from: id, in: index))) }
@@ -501,6 +503,30 @@ enum FormOperations {
             }
             if let last = remaining.last, index.tags[last].name != "w:p" {
                 throw FormError.removalsEndWithoutParagraph(ids(named.filter { $0 > last }))
+            }
+        }
+        if let id = truncateFrom, !removedSet.isEmpty {
+            let (cut, body) = try checkTruncate(id, in: index)
+            let before = index.children(of: body).filter { index.tags[$0].start < index.tags[cut].start }
+            if contentBlocks(before, in: index).allSatisfy({ removedSet.contains($0) }) {
+                throw FormError.removalsLeaveNothingBeforeCut(id)
+            }
+        }
+        // A kept marker goes where deleteAll puts it; refuse when that would
+        // change the Markup Compatibility rules applying to it (R4).
+        let deleted = spans.map(\.range)
+        for p in removedSet.sorted() {
+            let destination = survivingParagraphBefore(p, removed: removedSet, in: index) ?? index.tags[p].parent!
+            for marker in FormRanges.keptMarkers(in: index.elementRange(p), deleted: deleted, index: index)
+            where FormRanges.compatibilityContextChanges(marker, destination: destination, index: index) {
+                throw FormError.markerUnderCompatibilityRules(index.attribute("w14:paraId", of: p) ?? "")
+            }
+        }
+        if let id = truncateFrom, let span = spans.last(where: { $0.id == id }) {
+            let body = try checkTruncate(id, in: index).body
+            for marker in FormRanges.keptMarkers(in: span.range, deleted: deleted, index: index)
+            where FormRanges.compatibilityContextChanges(marker, destination: body, index: index) {
+                throw FormError.markerUnderCompatibilityRules(id)
             }
         }
         return spans
@@ -560,7 +586,8 @@ enum FormOperations {
         return before
     }
 
-    /// Unchecked: reached only through `deleteAll`, which has judged the cut.
+    /// Reached only through `deleteAll`, which has judged the whole deletion;
+    /// here only the cut's own structure is checked again, not the pairing.
     private static func truncate(from id: String, keptMarkers: String, editor: inout XMLEditor) throws {
         let (p, body) = try checkTruncate(id, in: editor.index)
         let index = editor.index

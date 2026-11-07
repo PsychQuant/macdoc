@@ -458,18 +458,96 @@ final class Issue253BoundaryTests: XCTestCase {
             + "<w:document \(TestXML.namespaces) \(extra)><w:body>" + body + "</w:body></w:document>").utf8)
     }
 
-    /// R3 #1: a Markup Compatibility attribute names prefixes in its value.
-    /// The binding of such a prefix, declared only on the removed paragraph,
-    /// must travel with the marker even though no element or attribute name
-    /// uses it.
-    func testMovedMarkerKeepsAPrefixNamedOnlyInAnIgnorableValue() throws {
-        let mc = "xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\""
-        let xml = document(root: mc,
+    // MARK: verify round 4 — Markup Compatibility context is never moved
+
+    private let mcURI = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+
+    private func refusal(_ xml: [UInt8], _ plan: FormPlan) -> FormError? {
+        do { _ = try plan.apply(toDocumentXML: xml); return nil } catch { return error as? FormError }
+    }
+
+    /// R4 #1: a kept marker that carries a Markup Compatibility attribute is
+    /// not moved: its value names prefixes whose meaning depends on where the
+    /// marker sits, so the removal is refused instead.
+    func testKeptMarkerCarryingAnIgnorableAttributeIsRefused() {
+        let xml = document(root: "xmlns:mc=\"\(mcURI)\"",
             "<w:p w14:paraId=\"0000R370\" xmlns:foo=\"urn:x\">"
-            + "<w:bookmarkStart w:id=\"41\" w:name=\"i\" mc:Ignorable=\"foo w14\"/>" + TestXML.run("刪") + "</w:p>"
+            + "<w:bookmarkStart w:id=\"41\" w:name=\"i\" mc:Ignorable=\"f&#111;o w14\"/>" + TestXML.run("刪") + "</w:p>"
             + TestXML.paragraph("0000A370", TestXML.run("後") + "<w:bookmarkEnd w:id=\"41\"/>") + TestXML.bodySection)
-        let out = TestXML.string(try FormPlan(removals: ["0000R370"]).apply(toDocumentXML: xml).documentXML)
-        XCTAssertTrue(out.contains("<w:bookmarkStart w:id=\"41\" w:name=\"i\" mc:Ignorable=\"foo w14\" xmlns:foo=\"urn:x\"/>"), out)
+        XCTAssertEqual(refusal(xml, FormPlan(removals: ["0000R370"])), .markerUnderCompatibilityRules("0000R370"))
+    }
+
+    /// R4 #2: the rule on a removed ancestor would stop applying to the marker.
+    func testKeptMarkerUnderARemovedParagraphWithCompatibilityRulesIsRefused() {
+        let xml = document(root: "xmlns:mc=\"\(mcURI)\"",
+            "<w:p w14:paraId=\"0000R371\" xmlns:foo=\"urn:x\" mc:Ignorable=\"foo\">"
+            + "<w:bookmarkStart w:id=\"44\" w:name=\"j\" foo:tag=\"1\"/>" + TestXML.run("刪") + "</w:p>"
+            + TestXML.paragraph("0000A371", TestXML.run("後") + "<w:bookmarkEnd w:id=\"44\"/>") + TestXML.bodySection)
+        XCTAssertEqual(refusal(xml, FormPlan(removals: ["0000R371"])), .markerUnderCompatibilityRules("0000R371"))
+    }
+
+    /// R4 #2: the rule on the destination paragraph would start applying.
+    func testKeptMarkerMovingIntoAParagraphWithCompatibilityRulesIsRefused() {
+        let cell = "<w:p w14:paraId=\"0000A372\" mc:Ignorable=\"w14\">" + TestXML.run("前") + "</w:p>"
+            + TestXML.paragraph("0000R372", "<w:bookmarkStart w:id=\"45\" w:name=\"k\"/>" + TestXML.run("刪"))
+        let xml = document(root: "xmlns:mc=\"\(mcURI)\"", TestXML.table([TestXML.cell(cell)])
+            + TestXML.paragraph("0000A373", "<w:bookmarkEnd w:id=\"45\"/>") + TestXML.bodySection)
+        XCTAssertEqual(refusal(xml, FormPlan(removals: ["0000R372"])), .markerUnderCompatibilityRules("0000R372"))
+    }
+
+    /// R4 #3: an MC attribute is known by the namespace its prefix resolves
+    /// to, with character references in the declared URI decoded, not by the
+    /// spelling `mc`.
+    func testCompatibilityAttributesAreKnownByNamespace() {
+        for root in ["xmlns:compat=\"\(mcURI)\"", "xmlns:compat=\"http&#58;//schemas.openxmlformats.org/markup-compatibility/2006\""] {
+            let xml = document(root: root,
+                TestXML.paragraph("0000R374", "<w:bookmarkStart w:id=\"46\" w:name=\"l\" compat:ProcessContent=\"w14:sdt\"/>"
+                                  + TestXML.run("刪"))
+                + TestXML.paragraph("0000A374", "<w:bookmarkEnd w:id=\"46\"/>") + TestXML.bodySection)
+            XCTAssertEqual(refusal(xml, FormPlan(removals: ["0000R374"])), .markerUnderCompatibilityRules("0000R374"), root)
+        }
+    }
+
+    /// An attribute that is merely named Ignorable in another namespace is
+    /// not a compatibility rule, and a removed paragraph with MC rules but no
+    /// marker that stays is removed as usual.
+    func testCompatibilityRefusalIsLimitedToMovedMarkers() throws {
+        let plain = document(root: "xmlns:foo=\"urn:x\"",
+            TestXML.paragraph("0000R375", "<w:bookmarkStart w:id=\"47\" w:name=\"m\" foo:Ignorable=\"w14\"/>" + TestXML.run("刪"))
+            + TestXML.paragraph("0000A375", "<w:bookmarkEnd w:id=\"47\"/>") + TestXML.bodySection)
+        XCTAssertTrue(TestXML.string(try FormPlan(removals: ["0000R375"]).apply(toDocumentXML: plain).documentXML)
+            .contains("<w:bookmarkStart w:id=\"47\" w:name=\"m\" foo:Ignorable=\"w14\"/>"))
+        let unmarked = document(root: "xmlns:mc=\"\(mcURI)\"",
+            "<w:p w14:paraId=\"0000R376\" mc:Ignorable=\"w14\">" + TestXML.run("刪") + "</w:p>"
+            + TestXML.paragraph("0000A376", TestXML.run("留")) + TestXML.bodySection)
+        XCTAssertFalse(TestXML.string(try FormPlan(removals: ["0000R376"]).apply(toDocumentXML: unmarked).documentXML)
+            .contains("0000R376"))
+    }
+
+    /// R4 #2 for the cut: the marker would leave the cut paragraph's rules.
+    func testTruncatedMarkerUnderCompatibilityRulesIsRefused() {
+        let xml = document(root: "xmlns:mc=\"\(mcURI)\"",
+            TestXML.paragraph("0000A377", "<w:bookmarkStart w:id=\"48\" w:name=\"n\"/>" + TestXML.run("留"))
+            + "<w:p w14:paraId=\"0000T377\" mc:Ignorable=\"w14\">" + TestXML.run("切") + "<w:bookmarkEnd w:id=\"48\"/></w:p>"
+            + TestXML.bodySection)
+        XCTAssertEqual(refusal(xml, FormPlan(truncateFrom: "0000T377")), .markerUnderCompatibilityRules("0000T377"))
+    }
+
+    /// R4 #4: removing everything before the cut is refused before any edit,
+    /// naming the cut and saying why.
+    func testRemovingEverythingBeforeTheCutIsRefusedUpFront() {
+        let body = TestXML.paragraph("0000R378", TestXML.run("唯一")) + TestXML.paragraph("0000T378", TestXML.run("切"))
+            + TestXML.bodySection
+        XCTAssertEqual(refusal(TestXML.document(body), FormPlan(removals: ["0000R378"], truncateFrom: "0000T378")),
+                       .removalsLeaveNothingBeforeCut("0000T378"))
+    }
+
+    /// R4 #5: a repeated --remove id is one paragraph, named once.
+    func testRepeatedRemovalIdIsNamedOnce() {
+        let cell = TestXML.paragraph("0000R379", TestXML.run("一")) + TestXML.paragraph("0000R380", TestXML.run("二"))
+        let body = TestXML.table([TestXML.cell(cell)]) + TestXML.paragraph(nil) + TestXML.bodySection
+        XCTAssertEqual(refusal(TestXML.document(body), FormPlan(removals: ["0000R379", "0000R379", "0000R380"])),
+                       .removalsLeaveNoParagraph(["0000R379", "0000R380"]))
     }
 
     /// R3 #3: the truncation destination is the body, so a prefix the cut
