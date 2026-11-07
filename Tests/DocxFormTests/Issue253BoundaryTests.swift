@@ -352,6 +352,105 @@ final class Issue253BoundaryTests: XCTestCase {
         XCTAssertEqual(out.skippedCleanups, [])
     }
 
+    // MARK: verify round 2 (#253)
+
+    /// R2 #1: the last two paragraphs of a cell, removed in either order.
+    func testRemovingTheLastTwoParagraphsOfACellKeepsTheirMarkersInEitherOrder() throws {
+        let cell = TestXML.paragraph("0000A300", TestXML.run("前"))
+            + TestXML.paragraph("0000R300", "<w:bookmarkStart w:id=\"31\" w:name=\"p\"/>" + TestXML.run("一"))
+            + TestXML.paragraph("0000R301", "<w:permStart w:id=\"32\"/>" + TestXML.run("二"))
+        let body = TestXML.table([TestXML.cell(cell)])
+            + TestXML.paragraph("0000A301", TestXML.run("後") + "<w:bookmarkEnd w:id=\"31\"/><w:permEnd w:id=\"32\"/>")
+            + TestXML.bodySection
+        for order in [["0000R300", "0000R301"], ["0000R301", "0000R300"]] {
+            let out = try apply(body, FormPlan(removals: order))
+            let index = try XMLTagIndex(out)
+            let tc = index.elements(named: "w:tc").first!
+            XCTAssertEqual(index.tags[index.children(of: tc).last!].name, "w:p", "\(order)")
+            let kept = index.elementString(index.children(of: tc).last!)
+            XCTAssertTrue(kept.contains("<w:bookmarkStart w:id=\"31\" w:name=\"p\"/><w:permStart w:id=\"32\"/></w:p>"), "\(order): \(kept)")
+            XCTAssertTrue(out.contains("<w:bookmarkEnd w:id=\"31\"/>") && out.contains("<w:permEnd w:id=\"32\"/>"))
+        }
+    }
+
+    func testRemovedParagraphsWithASurvivingBlockAfterThemKeepMarkersInPlace() throws {
+        let cell = TestXML.paragraph("0000A310", TestXML.run("前"))
+            + TestXML.paragraph("0000R310", "<w:bookmarkStart w:id=\"34\" w:name=\"q\"/>" + TestXML.run("一"))
+            + TestXML.paragraph("0000R311", TestXML.run("二"))
+            + TestXML.paragraph("0000A311", TestXML.run("留"))
+        let body = TestXML.table([TestXML.cell(cell)])
+            + TestXML.paragraph("0000A312", "<w:bookmarkEnd w:id=\"34\"/>") + TestXML.bodySection
+        let out = try apply(body, FormPlan(removals: ["0000R311", "0000R310"]))
+        let start = try XCTUnwrap(out.range(of: "<w:bookmarkStart w:id=\"34\" w:name=\"q\"/>"))
+        XCTAssertLessThan(try XCTUnwrap(out.range(of: "0000A310")).lowerBound, start.lowerBound)
+        XCTAssertLessThan(start.lowerBound, try XCTUnwrap(out.range(of: "0000A311")).lowerBound)
+    }
+
+    /// R2 #2: the moved marker keeps the binding it had, not the destination's.
+    func testMovedMarkerKeepsItsNamespaceWhenTheDestinationRebindsThePrefix() throws {
+        let xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<w:document \(TestXML.namespaces) xmlns:foo=\"urn:a\"><w:body>"
+            + TestXML.table([TestXML.cell(
+                "<w:p w14:paraId=\"0000A320\" xmlns:foo=\"urn:b\">" + TestXML.run("前") + "</w:p>"
+                + TestXML.paragraph("0000R320", "<w:bookmarkStart w:id=\"35\" w:name=\"r\" foo:tag=\"1\"/>" + TestXML.run("刪")))])
+            + TestXML.paragraph("0000A321", "<w:bookmarkEnd w:id=\"35\"/>") + TestXML.bodySection
+            + "</w:body></w:document>"
+        let out = TestXML.string(try FormPlan(removals: ["0000R320"]).apply(toDocumentXML: Array(xml.utf8)).documentXML)
+        XCTAssertTrue(out.contains("<w:bookmarkStart w:id=\"35\" w:name=\"r\" foo:tag=\"1\" xmlns:foo=\"urn:a\"/>"), out)
+    }
+
+    /// R2 #3: text that only looks like a declaration inside a value is not one.
+    func testAnAttributeValueMentioningXmlnsIsNotADeclaration() throws {
+        let removed = "<w:p w14:paraId=\"0000R330\" w:rsidR='xmlns:foo=\"urn:evil\"'>"
+            + "<w:bookmarkStart w:id=\"36\" w:name=\"s\"/>" + TestXML.run("刪") + "</w:p>"
+        let body = TestXML.paragraph("0000A330", TestXML.run("前")) + removed
+            + TestXML.paragraph("0000A331", "<w:bookmarkEnd w:id=\"36\"/>") + TestXML.bodySection
+        let out = try apply(body, FormPlan(removals: ["0000R330"]))
+        XCTAssertTrue(out.contains("<w:bookmarkStart w:id=\"36\" w:name=\"s\"/>"), out)
+        XCTAssertFalse(out.contains("urn:evil"))
+    }
+
+    /// R2 #8: the batch removal entry point checks fields itself.
+    func testRemoveAllRefusesASplitFieldWithoutThePlan() throws {
+        let body = TestXML.paragraph("0000A340", TestXML.run("前"))
+            + TestXML.paragraph("0000R340", begin + separate + TestXML.run("目錄"))
+            + TestXML.paragraph("0000A341", TestXML.run("項目") + end)
+            + TestXML.bodySection
+        var editor = try XMLEditor(TestXML.document(body))
+        XCTAssertThrowsError(try FormOperations.removeAll(["0000R340"], truncateFrom: nil, editor: &editor)) {
+            XCTAssertEqual($0 as? FormError, .splitsField("0000R340"))
+        }
+    }
+
+    func testRemovingEveryParagraphOfACellIsRefusedAsAWhole() {
+        let cell = TestXML.paragraph("0000R350", TestXML.run("一")) + TestXML.paragraph("0000R351", TestXML.run("二"))
+        let body = TestXML.table([TestXML.cell(cell)]) + TestXML.paragraph(nil) + TestXML.bodySection
+        XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R350", "0000R351"]))) {
+            XCTAssertEqual($0 as? FormError, .removalsLeaveNoParagraph(["0000R350", "0000R351"]))
+        }
+    }
+
+    /// Removing P2 or P3 alone leaves a paragraph last, but removing both
+    /// leaves the nested table last. Only the paragraphs after the last block
+    /// that stays exposed it, so only they are named; P0, removed before the
+    /// table, is not.
+    func testRemovalsThatTogetherEndACellWithATableNameTheParagraphsAfterIt() {
+        let nested = TestXML.table([TestXML.cell(TestXML.paragraph("0000N360", TestXML.run("內層")))])
+        let cell = TestXML.paragraph("0000R360", TestXML.run("零")) + TestXML.paragraph("0000R361", TestXML.run("一"))
+            + nested + TestXML.paragraph("0000R362", TestXML.run("二")) + TestXML.paragraph("0000R363", TestXML.run("三"))
+        let body = TestXML.table([TestXML.cell(cell)]) + TestXML.paragraph(nil) + TestXML.bodySection
+        XCTAssertThrowsError(try apply(body, FormPlan(removals: ["0000R363", "0000R360", "0000R362"]))) {
+            XCTAssertEqual($0 as? FormError, .removalsEndWithoutParagraph(["0000R362", "0000R363"]))
+        }
+    }
+
+    func testBatchCellRefusalsNameEveryParagraph() {
+        let empty = FormError.removalsLeaveNoParagraph(["0000R350", "0000R351"]).description
+        XCTAssertTrue(empty.contains("0000R350") && empty.contains("0000R351"))
+        let table = FormError.removalsEndWithoutParagraph(["0000R362", "0000R363"]).description
+        XCTAssertTrue(table.contains("0000R362") && table.contains("0000R363"))
+    }
+
     func testRefusalMessagesSayWhatToDo() {
         XCTAssertTrue(FormError.splitsField("0000R060").description.contains("0000R060"))
         XCTAssertTrue(FormError.splitsField("0000R060").description.contains("w:fldChar"))

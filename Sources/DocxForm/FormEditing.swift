@@ -15,6 +15,12 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     case noOwnNumbering(String)
     case onlyParagraphInCell(String)
     case cellWouldEndWithoutParagraph(String)
+    /// Several `--remove` paragraphs that each could go alone but together
+    /// take every paragraph of one cell or text box (#253 verify R2).
+    case removalsLeaveNoParagraph([String])
+    /// Several `--remove` paragraphs after the last block that stays, whose
+    /// removal together leaves a cell or text box ending with a table.
+    case removalsEndWithoutParagraph([String])
     case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
     case splitsField(String)
@@ -44,12 +50,16 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "段落 \(id) 是儲存格裡唯一的段落，刪掉它會讓儲存格失效"
         case .cellWouldEndWithoutParagraph(let id):
             return "刪掉段落 \(id) 後，所在儲存格會以表格結尾；Word 要求儲存格最後一個元素是段落"
+        case .removalsLeaveNoParagraph(let ids):
+            return "段落 \(ids.joined(separator: "、")) 是所在儲存格（或文字方塊）裡全部的段落，一起刪掉會讓它失效；請至少留下一段"
+        case .removalsEndWithoutParagraph(let ids):
+            return "一起刪掉段落 \(ids.joined(separator: "、")) 後，所在儲存格（或文字方塊）會以表格結尾；Word 要求最後一個元素是段落，請至少留下表格之後的一段"
         case .conflictingOperations(let id, let detail):
             return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):
             return "段落 \(id) 帶有分節符（w:sectPr），刪掉它會改變分節設定"
         case .splitsField(let id):
-            return "從段落 \(id) 刪除的範圍只含一個欄位（w:fldChar 的開頭、分隔、結尾）的一部分，刪掉會讓欄位斷掉；請把欄位所在的每一段都列入 --remove（或一起截斷），或先在 Word 裡把欄位轉成一般文字"
+            return "從段落 \(id) 刪除的範圍只含一個欄位（w:fldChar 的開頭、分隔、結尾）的一部分，刪掉會讓欄位斷掉；請把開頭、分隔、結尾所在的段落都列入 --remove（或一起截斷），或先在 Word 裡把欄位轉成一般文字"
         case .splitsComment(let id):
             return "從段落 \(id) 刪除的範圍含有註解的引用（w:commentReference），但這個註解的範圍標記留在範圍外；刪掉會讓註解失去錨點。請把註解範圍所在的段落一起列入 --remove，或先在 Word 裡刪除或移動這個註解"
         case .notBodyChild(let id):

@@ -140,9 +140,9 @@ For each `--insert-after <paraId>=<text>`, `macdoc word form apply` SHALL insert
 
 ### Requirement: Paragraphs are removed only when named
 
-For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that carries a `w:sectPr`, and a paragraph inside a `w:tc` or `w:txbxContent` whose removal would leave that cell or text box with no paragraph or ending with a block other than a paragraph, where the cell's blocks are counted through `w:sdt`/`w:sdtContent` and `w:customXml` wrappers.
+For each `--remove <paraId>`, `macdoc word form apply` SHALL remove the paragraph. It SHALL refuse a paragraph that carries a `w:sectPr`, and removals that would leave a `w:tc` or `w:txbxContent` with no paragraph or ending with a block other than a paragraph, where the container's blocks are counted through `w:sdt`/`w:sdtContent` and `w:customXml` wrappers and are judged after every paragraph that `--remove` names in that container is gone. A paragraph that breaks its container alone is named alone; when only the combination breaks it, the message SHALL name every named paragraph in the container for a container left without a paragraph, and the named paragraphs after the last block that stays for a container left ending with another block.
 
-Removal SHALL NOT leave unpaired markup, judged against the deleted set: the union of every paragraph named by `--remove` and the range `--truncate-from` cuts, all taken on the original part. The paired range markers are a closed list, each pairing a start and an end of the same kind with the same `w:id`: `w:bookmarkStart`/`w:bookmarkEnd`, `w:commentRangeStart`/`w:commentRangeEnd`, `w:moveFromRangeStart`/`w:moveFromRangeEnd`, `w:moveToRangeStart`/`w:moveToRangeEnd`, `w:permStart`/`w:permEnd`, and the four `w:customXml…RangeStart`/`…RangeEnd` pairs (insert, delete, move-from, move-to). A paired range marker inside a removed paragraph whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept where the paragraph was, in document order, carrying every namespace declaration it inherited from the removed elements; when the removed paragraph is the last block of a `w:tc` or `w:txbxContent`, the kept markers SHALL go at the end of the paragraph before it instead, so the container still ends with a paragraph. A marker whose partner is also in the deleted set SHALL be removed with it. The command SHALL refuse a deleted set that holds some but not all of the `begin`, `separate` and `end` `w:fldChar` of one complex field (a paragraph wholly inside a field's result holds none of them and may go; naming every paragraph of a field removes it whole), and a deleted set holding a `w:commentReference` whose comment keeps a `w:commentRangeStart` or `w:commentRangeEnd` outside it; the message names the paragraph whose range holds the part that would go.
+Removal SHALL NOT leave unpaired markup, judged against the deleted set: the union of every paragraph named by `--remove` and the range `--truncate-from` cuts, all taken on the original part. The paired range markers are a closed list, each pairing a start and an end of the same kind with the same `w:id`: `w:bookmarkStart`/`w:bookmarkEnd`, `w:commentRangeStart`/`w:commentRangeEnd`, `w:moveFromRangeStart`/`w:moveFromRangeEnd`, `w:moveToRangeStart`/`w:moveToRangeEnd`, `w:permStart`/`w:permEnd`, and the four `w:customXml…RangeStart`/`…RangeEnd` pairs (insert, delete, move-from, move-to). A paired range marker inside a removed paragraph whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept where the paragraph was, in document order; when no block that stays follows the removed paragraph in its `w:tc` or `w:txbxContent`, the kept markers SHALL go at the end of the nearest paragraph before it that stays instead, so the container still ends with a paragraph whatever order the ids are given in. For every prefix that a kept marker's name and attribute names use, the marker SHALL carry a declaration of the namespace that prefix had at its original position whenever its new position would resolve the prefix to another namespace or to none; a declaration is an `xmlns` or `xmlns:` attribute, never text inside another attribute's value. A marker whose partner is also in the deleted set SHALL be removed with it. The command SHALL refuse a deleted set that holds some but not all of the `begin`, `separate` and `end` `w:fldChar` of one complex field (a paragraph wholly inside a field's result holds none of them and may go; naming every paragraph of a field removes it whole), and a deleted set holding a `w:commentReference` whose comment keeps a `w:commentRangeStart` or `w:commentRangeEnd` outside it; the message names the paragraph whose range holds the part that would go.
 
 #### Scenario: Bookmark start kept when its end stays
 
@@ -169,6 +169,21 @@ Removal SHALL NOT leave unpaired markup, judged against the deleted set: the uni
 - **WHEN** the last paragraph of a cell holds a `w:bookmarkStart` whose end is after the table, and `--remove` names it
 - **THEN** the `w:bookmarkStart` is at the end of the cell's previous paragraph and the cell's last child is a `w:p`
 
+#### Scenario: Last two paragraphs of a cell removed in either order
+
+- **WHEN** a cell holds paragraphs A, R1 and R2, R1 holds a `w:bookmarkStart` and R2 a `w:permStart` whose partners are after the table, and `--remove` names R1 and R2 in either order
+- **THEN** both markers are at the end of A in document order and the cell's last child is a `w:p`
+
+#### Scenario: Moved marker keeps the namespace of its prefix
+
+- **WHEN** the root binds `foo` to `urn:a`, the cell's previous paragraph rebinds `foo` to `urn:b`, and the cell's last paragraph, named by `--remove`, holds a `w:bookmarkStart` with a `foo:tag` attribute whose end stays
+- **THEN** the `w:bookmarkStart` is at the end of the previous paragraph carrying `xmlns:foo="urn:a"`
+
+#### Scenario: Field split between a removal and the cut
+
+- **WHEN** a field's `begin` and `separate` are in the paragraph named by `--remove` and its `end` is in the paragraph named by `--truncate-from`
+- **THEN** the command succeeds and no `w:fldChar` of that field remains
+
 #### Scenario: Removal would orphan a comment
 
 - **WHEN** the removed paragraph holds the `w:commentReference` of a comment whose range markers are in the previous paragraph
@@ -178,6 +193,16 @@ Removal SHALL NOT leave unpaired markup, judged against the deleted set: the uni
 
 - **WHEN** a cell holds a paragraph, a nested table and a last paragraph, and `--remove` names the last paragraph
 - **THEN** the command fails naming that paragraph id and writes no output
+
+#### Scenario: Paragraphs that together empty a cell
+
+- **WHEN** a cell holds paragraphs P1 and P2 and `--remove` names both
+- **THEN** the command fails naming P1 and P2 and writes no output
+
+#### Scenario: Paragraphs that together end a cell with a table
+
+- **WHEN** a cell holds P0, P1, a nested table, P2 and P3, and `--remove` names P0, P2 and P3
+- **THEN** the command fails naming P2 and P3, not P0, and writes no output
 
 #### Scenario: Only paragraph of a cell inside a content control
 
@@ -193,7 +218,7 @@ Removal SHALL NOT leave unpaired markup, judged against the deleted set: the uni
 
 For `--truncate-from <paraId>`, the paragraph SHALL be a direct child of `w:body` with at least one content block before it (a block as defined below; range markers alone do not count, so cutting after nothing but a bookmark is refused like cutting at the first child). `macdoc word form apply` SHALL remove everything from that paragraph to the end of the body and SHALL make the first live section properties in the removed range the body's final `w:sectPr`: a `w:sectPr` that is a child of the own `w:pPr` of a paragraph directly under `w:body` or inside a body-level `w:sdt`, or the body's own `w:sectPr`. A `w:sectPr` inside `w:pPrChange` is revision history and SHALL NOT be used. When the last kept block (looking through body-level `w:sdt` and `w:customXml`; every element counts as a block except range markers such as bookmarks, comment ranges and permission ranges, so a `w:altChunk` or a table after the break is the last block) is a paragraph that carries its own `w:sectPr`, the cut removed whole sections: that `w:sectPr` SHALL be moved from the paragraph to the end of the body as its final `w:sectPr` and the removed range's section properties SHALL be dropped, so the result never ends with a section that has no content.
 
-Truncation SHALL NOT leave unpaired markup, using the paired range markers and the deleted set defined under "Paragraphs are removed only when named": a paired marker in the removed range whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept at the end of the kept content, before the body's final `w:sectPr`, in document order and carrying the namespace declarations it inherited from removed elements; a marker whose partner is also in the deleted set SHALL be removed. The field and comment-reference refusals of that requirement apply to the cut in the same way.
+Truncation SHALL NOT leave unpaired markup, using the paired range markers and the deleted set defined under "Paragraphs are removed only when named": a paired marker in the removed range whose partner lies outside the deleted set, or that has no partner in the part, SHALL be kept at the end of the kept content, before the body's final `w:sectPr`, in document order, carrying namespace declarations by the same rule as for `--remove`; a marker whose partner is also in the deleted set SHALL be removed. The field and comment-reference refusals of that requirement apply to the cut in the same way.
 
 #### Scenario: Kept bookmark end moves before the final section
 

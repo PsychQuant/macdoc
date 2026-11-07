@@ -152,7 +152,7 @@ extension MacDoc.Word.Form {
         var insertAfter: [String] = []
 
         @Option(name: .customLong("remove"),
-                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算），會拆開欄位或讓註解失去引用時也拒絕；另一半不在這次要刪的範圍裡的書籤等範圍標記留下",
+                help: ArgumentHelp("移除段落（可重複）；帶分節符的段落、儲存格或文字方塊唯一的段落、刪掉後儲存格會以表格結尾的段落會拒絕（穿過內容控制項計算，同一格要刪的幾段合起來判斷），會拆開欄位或讓註解失去引用時也拒絕；另一半不在這次要刪的範圍裡的書籤等範圍標記留下",
                                    valueName: "paraId"))
         var remove: [String] = []
 

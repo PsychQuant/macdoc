@@ -67,23 +67,23 @@ enum FormRanges {
         }.map(\.element)
     }
 
-    /// The kept markers of `span`, serialized in document order. A marker
-    /// leaves its deleted ancestors behind, so the namespace declarations it
-    /// inherited from them travel with it (#253 verify R1).
-    static func keptMarkerXML(in span: Range<Int>, deleted: [Range<Int>], index: XMLTagIndex) -> String {
-        keptMarkers(in: span, deleted: deleted, index: index).map { serialize($0, leaving: span, index: index) }.joined()
+    /// The kept markers of `span`, serialized in document order for placement
+    /// under `destination` (the element they will be children of). A moved
+    /// marker must keep the namespace each of its prefixes had where it was, so
+    /// a binding is declared on the marker whenever the destination would
+    /// resolve that prefix differently or not at all (#253 verify R1, R2).
+    static func keptMarkerXML(in span: Range<Int>, deleted: [Range<Int>], destination: Int?, index: XMLTagIndex) -> String {
+        keptMarkers(in: span, deleted: deleted, index: index)
+            .map { serialize($0, under: destination, index: index) }.joined()
     }
 
-    private static func serialize(_ marker: Int, leaving span: Range<Int>, index: XMLTagIndex) -> String {
-        var declared = Set(namespaceDeclarations(of: marker, index: index).map(\.prefix))
+    private static func serialize(_ marker: Int, under destination: Int?, index: XMLTagIndex) -> String {
+        let own = Set(declarations(of: marker, index: index).map(\.prefix))
         var carried: [String] = []
-        var current = index.tags[marker].parent
-        while let c = current, span.contains(index.tags[c].start) {
-            for declaration in namespaceDeclarations(of: c, index: index) where !declared.contains(declaration.prefix) {
-                declared.insert(declaration.prefix)
-                carried.append(declaration.text)
-            }
-            current = index.tags[c].parent
+        for prefix in usedPrefixes(of: marker, index: index) where !own.contains(prefix) {
+            guard let source = binding(of: prefix, from: marker, index: index),
+                  source != binding(of: prefix, from: destination, index: index) else { continue }
+            carried.append((prefix.isEmpty ? "xmlns" : "xmlns:" + prefix) + "=" + source)
         }
         guard !carried.isEmpty else { return index.elementString(marker) }
         let tag = index.tags[marker]
@@ -91,16 +91,68 @@ enum FormRanges {
             + index.string(tag.attributes.upperBound..<index.elementRange(marker).upperBound)
     }
 
-    private static let declaration = try! NSRegularExpression(
-        pattern: #"(xmlns(?::[^\s=/>]+)?)\s*=\s*("[^"]*"|'[^']*')"#)
-
-    /// `xmlns` / `xmlns:p` attributes of an element, as (prefix, source text).
-    private static func namespaceDeclarations(of element: Int, index: XMLTagIndex) -> [(prefix: String, text: String)] {
-        let attributes = index.string(index.tags[element].attributes)
-        let ns = attributes as NSString
-        return declaration.matches(in: attributes, range: NSRange(location: 0, length: ns.length)).map {
-            (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range))
+    /// Prefixes the marker's own name and attribute names use, in first-use
+    /// order; "" stands for the default namespace of an unprefixed element.
+    /// Unprefixed attributes and the reserved `xml` prefix bind nothing.
+    private static func usedPrefixes(of element: Int, index: XMLTagIndex) -> [String] {
+        func prefix(_ name: String) -> String? { name.firstIndex(of: ":").map { String(name[..<$0]) } }
+        var out: [String] = [prefix(index.tags[element].name) ?? ""]
+        for attribute in attributes(of: element, index: index) {
+            guard attribute.name != "xmlns", !attribute.name.hasPrefix("xmlns:"),
+                  let p = prefix(attribute.name), p != "xml", !out.contains(p) else { continue }
+            out.append(p)
         }
+        return out
+    }
+
+    /// The quoted value (source text, quotes included) declaring `prefix` on
+    /// the nearest element from `element` up to the root.
+    private static func binding(of prefix: String, from element: Int?, index: XMLTagIndex) -> String? {
+        var current = element
+        while let c = current {
+            if let found = declarations(of: c, index: index).first(where: { $0.prefix == prefix }) { return found.value }
+            current = index.tags[c].parent
+        }
+        return nil
+    }
+
+    /// `xmlns` / `xmlns:p` attributes of an element, as (prefix, quoted value).
+    private static func declarations(of element: Int, index: XMLTagIndex) -> [(prefix: String, value: String)] {
+        attributes(of: element, index: index).compactMap { attribute in
+            if attribute.name == "xmlns" { return ("", attribute.value) }
+            if attribute.name.hasPrefix("xmlns:") { return (String(attribute.name.dropFirst(6)), attribute.value) }
+            return nil
+        }
+    }
+
+    /// Attributes of an element, read with quote awareness so text inside a
+    /// value is never taken for another attribute (#253 verify R2). Values keep
+    /// their quotes and escapes; parsing stops at anything malformed.
+    static func attributes(of element: Int, index: XMLTagIndex) -> [(name: String, value: String)] {
+        let text = Array(index.string(index.tags[element].attributes).unicodeScalars)
+        var out: [(String, String)] = []
+        var i = 0
+        func isSpace(_ c: Unicode.Scalar) -> Bool { c == " " || c == "\t" || c == "\n" || c == "\r" }
+        while i < text.count {
+            while i < text.count, isSpace(text[i]) { i += 1 }
+            let nameStart = i
+            while i < text.count, !isSpace(text[i]), text[i] != "=" { i += 1 }
+            guard i > nameStart else { break }
+            let name = String(String.UnicodeScalarView(text[nameStart..<i]))
+            while i < text.count, isSpace(text[i]) { i += 1 }
+            guard i < text.count, text[i] == "=" else { break }
+            i += 1
+            while i < text.count, isSpace(text[i]) { i += 1 }
+            guard i < text.count, text[i] == "\"" || text[i] == "'" else { break }
+            let quote = text[i]
+            let valueStart = i
+            i += 1
+            while i < text.count, text[i] != quote { i += 1 }
+            guard i < text.count else { break }
+            i += 1
+            out.append((name, String(String.UnicodeScalarView(text[valueStart..<i]))))
+        }
+        return out
     }
 
     /// Refuses a deletion that would split markup living inside runs, naming

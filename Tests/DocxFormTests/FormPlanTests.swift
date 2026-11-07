@@ -27,15 +27,16 @@ final class FormPlanTests: XCTestCase {
         }
     }
 
-    /// Each removal is legal against the original two-paragraph cell, but
-    /// after the first one runs the second would empty the cell; the remove
-    /// step re-checks and refuses instead.
-    func testSecondRemovalInACellIsRefusedAfterTheFirst() {
+    /// Each removal is legal against the original two-paragraph cell on its
+    /// own, but together they would empty it. The removals are judged as one
+    /// set (#253 verify R2), and the refusal names both paragraphs, since
+    /// neither is the cell's only paragraph.
+    func testRemovalsThatTogetherEmptyACellAreRefusedNamingBoth() {
         let body = TestXML.table([TestXML.cell(TestXML.paragraph("0000R020", TestXML.run("一"))
                                                + TestXML.paragraph("0000R021", TestXML.run("二")))])
-        let plan = FormPlan(removals: ["0000R020", "0000R021"])
+        let plan = FormPlan(removals: ["0000R021", "0000R020"])
         XCTAssertThrowsError(try plan.apply(toDocumentXML: TestXML.document(body))) {
-            XCTAssertEqual($0 as? FormError, .onlyParagraphInCell("0000R021"))
+            XCTAssertEqual($0 as? FormError, .removalsLeaveNoParagraph(["0000R020", "0000R021"]))
         }
     }
 
