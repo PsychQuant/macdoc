@@ -38,9 +38,11 @@ public enum FormClassifier {
         numberingLevels(xml) != nil
     }
 
-    /// The numbering levels, or nil when the part is not well-formed XML.
-    /// The tag index only checks tag pairing, so the part goes through a real
-    /// XML parser first (duplicate attributes, bad entities and the like).
+    /// The numbering levels, or nil when the part cannot be read: the tag scan
+    /// refuses it (unpaired tags, a DOCTYPE, more nesting or tags than the
+    /// scan limits, #252) or a real XML parser does (duplicate attributes, bad
+    /// entities and the like). The tag index only checks tag pairing, so the
+    /// part goes through the parser as well.
     static func numberingLevels(_ xml: [UInt8]?) -> NumberingLevels? {
         // The tag index runs first so a DOCTYPE (and with it any entity
         // definition) is refused before a real XML parser ever sees the part,
@@ -171,11 +173,14 @@ enum FormLocator {
         case notOnParagraph(carrier: String)
     }
 
+    /// Looks the id up in the index's paraId table (#252); the carriers come
+    /// in document order, so the first non-paragraph carrier is reported as
+    /// before the table existed.
     static func paragraph(withId id: String, in index: XMLTagIndex) -> Lookup {
         var paragraphs: [Int] = []
         var otherCarrier: String?
-        for (i, tag) in index.tags.enumerated() where tag.kind != .close && !tag.attributes.isEmpty {
-            guard index.attribute("w14:paraId", of: i) == id else { continue }
+        for i in index.tags(withParaId: id) {
+            let tag = index.tags[i]
             if tag.name == "w:p" {
                 paragraphs.append(i)
             } else if otherCarrier == nil {

@@ -313,6 +313,50 @@ Truncation SHALL NOT leave unpaired markup, using the paired range markers and t
 - **WHEN** a form is processed with `--field` and `--checkbox-font`
 - **THEN** `word/styles.xml`, `word/numbering.xml` and every other entry except `word/document.xml` have the same bytes as in the input, in the same order
 
+### Requirement: Packages and parts are read within fixed limits
+
+`macdoc word form classify` and `macdoc word form apply` SHALL refuse a package with more than 10,000 entries, and a package holding an entry whose name starts with `/` or `\`, starts with an ASCII letter followed by `:` (a Windows drive), or has a segment equal to `..` between `/` or `\` separators, the name read as Unicode scalars (closed list; no other name is refused for resembling these), naming that entry with its control characters shown as spaces. The uncompressed-size limit of 512 MB SHALL count only the entries the command extracts: `apply` extracts every entry, `classify` extracts only `word/document.xml` and `word/numbering.xml`. Scanning an XML part SHALL refuse more than 257 nested elements (the deepest nesting the output check's XML parser accepts) and more than 5,000,000 tags. A character reference SHALL be decoded only when it is `&#` followed by ASCII decimal digits, or `&#x` (lowercase `x`) followed by ASCII hexadecimal digits, and names a character the XML 1.0 Char production allows; any other reference SHALL be kept as written.
+
+#### Scenario: Too many entries
+
+- **WHEN** the package holds 10,001 entries
+- **THEN** both commands fail naming the limit and `apply` writes no output
+
+#### Scenario: Entry name with a parent segment
+
+- **WHEN** the package holds an entry named `../evil.xml`
+- **THEN** both commands fail naming `../evil.xml`
+
+#### Scenario: A separator joined with a combining mark
+
+- **WHEN** the package holds an entry whose name is `../`, a combining acute accent (U+0301) and `x.xml`
+- **THEN** both commands fail naming that entry
+
+#### Scenario: Entry name with a drive letter
+
+- **WHEN** the package holds an entry named `C:\x.xml`
+- **THEN** both commands fail naming `C:\x.xml`
+
+#### Scenario: Classify ignores the size of parts it does not read
+
+- **WHEN** a media entry alone exceeds the size limit and the main and numbering parts are small
+- **THEN** `classify` lists the paragraphs, while `apply` fails naming the limit
+
+#### Scenario: Nesting deeper than the limit
+
+- **WHEN** the main part nests 258 elements
+- **THEN** both commands fail naming the limit of 257, and a part nesting 257 elements is read
+
+#### Scenario: More tags than the limit
+
+- **WHEN** the main part holds more than 5,000,000 tags, close tags counted
+- **THEN** both commands fail naming the limit
+
+#### Scenario: A reference to a control character is not decoded
+
+- **WHEN** a paragraph's text holds `&#x1B;`, `&#+65;` or `&#X41;`
+- **THEN** the index reads the reference as written, not as ESC or `A`
+
 ### Requirement: Reverse names the follow-up for slots that need one
 
 In full-fidelity mode, `macdoc word reverse --slot <name>=<paraId>` SHALL classify each designated paragraph found in the source's main part and, for kinds `table-field`, `checkbox-line` and `list-checkbox`, print one stderr line naming the slot, the kind and the `macdoc word form apply` option that handles it. It SHALL print nothing for `body` slots, in paragraphs-only mode, or for ids not found in the main part. When `word/numbering.xml` is not well-formed XML (judged the same way as `classify` judges it) and at least one slot is designated, it SHALL print one stderr line naming the numbering part, as `classify` does.

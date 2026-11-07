@@ -54,7 +54,9 @@ enum FormRanges {
     static func keptMarkers(in span: Range<Int>, deleted: [Range<Int>], index: XMLTagIndex) -> [Int] {
         var positions: [Key: [Int]] = [:]
         var inside: [(element: Int, key: Key?)] = []
-        for (i, tag) in index.tags.enumerated() where tag.kind != .close {
+        // Only the marker elements are walked, from the index's name table (#252).
+        for i in index.elements(namedAnyOf: pairedMarkers.keys) {
+            let tag = index.tags[i]
             guard let marker = pairedMarkers[tag.name] else { continue }
             let key = index.attribute("w:id", of: i).map { Key(kind: marker.kind, id: $0, isStart: marker.isStart) }
             if let key { positions[key, default: []].append(tag.start) }
@@ -224,7 +226,8 @@ enum FormRanges {
     static func fieldSplit(_ spans: [DeletionSpan], index: XMLTagIndex) -> String? {
         let ranges = spans.map(\.range)
         var open: [[Int]] = []
-        for (i, tag) in index.tags.enumerated() where tag.kind != .close && tag.name == "w:fldChar" {
+        for i in index.elements(named: "w:fldChar") {
+            let tag = index.tags[i]
             switch index.attribute("w:fldCharType", of: i) {
             case "begin":
                 open.append([tag.start])
@@ -248,7 +251,8 @@ enum FormRanges {
         let ranges = spans.map(\.range)
         var rangeKept: Set<String> = []
         var references: [(id: String, offset: Int)] = []
-        for (i, tag) in index.tags.enumerated() where tag.kind != .close {
+        for i in index.elements(namedAnyOf: ["w:commentRangeStart", "w:commentRangeEnd", "w:commentReference"]) {
+            let tag = index.tags[i]
             switch tag.name {
             case "w:commentRangeStart", "w:commentRangeEnd":
                 if !inAny(tag.start, ranges), let id = index.attribute("w:id", of: i) { rangeKept.insert(id) }
