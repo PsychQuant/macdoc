@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `macdoc word form apply --table-defaults <paraId>=col:<欄>/row:<列>`（需要下一版 CLI，PsychQuant/macdoc#250）：以表格裡任一段落點名表格，用格線欄列號點名填寫欄，整格落在範圍內的儲存格一次照 `--field` 處理（字級、靠左、垂直置中、清空段落），和 `--field` 共用字級與衝突檢查；標籤欄與只有一部分在範圍內的儲存格不動，後者列在 stderr；同一張表點名多次取聯集。格線無法判讀、欄列號超出表格、沒有選到任何填寫欄、選到的段落沒有 `w14:paraId` 時拒絕。`--field-size` 現在也可以只搭配 `--table-defaults`。
+- `macdoc word form classify --grid`（需要下一版 CLI，PsychQuant/macdoc#250）：在類型與文字之間多印一欄儲存格的格線位置（`t1:r2c3`，合併儲存格寫範圍，不在儲存格裡印 `-`，格線讀不懂的表格印 `t<n>:?` 並在 stderr 註明）；不加 `--grid` 時輸出不變。
 - `macdoc word form apply --remove-table <paraId>`（需要下一版 CLI）：刪掉段落所在的整張本文層表格，和 `--remove`、`--truncate-from` 一起判斷；表格裡另一半留下的書籤等範圍標記留在表格原本的位置，巢狀表格、文字方塊裡的表格與段落、帶分節符的表格內段落，以及被其他選項點名的段落會拒絕（PsychQuant/macdoc#250）。
 
 ### Changed

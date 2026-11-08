@@ -1,6 +1,6 @@
 ## Purpose
 
-Form normalization makes a filled Word form uniform after its values are in place: it classifies paragraphs by structural kind and applies string-level edits to the main document part (table field normalization, box glyph font, list-bullet tick, inheriting insert, removal and truncation) without re-serializing any part through the typed model, so raw-channel forms keep every byte outside the edited elements.
+Form normalization makes a filled Word form uniform after its values are in place: it classifies paragraphs by structural kind and applies string-level edits to the main document part (table field normalization, whole-table field normalization by named grid columns and rows, box glyph font, list-bullet tick, inheriting insert, removal and truncation) without re-serializing any part through the typed model, so raw-channel forms keep every byte outside the edited elements.
 
 ## ADDED Requirements
 
@@ -35,12 +35,17 @@ The classifier SHALL assign every paragraph exactly one kind from the closed set
 
 ### Requirement: The classify command lists every addressable paragraph
 
-`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId` of exactly eight ASCII hexadecimal digits, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with every control character (Unicode general category Cc, including tab, line breaks and ESC), the line and paragraph separators (Zl, Zp) and the bidirectional formatting characters (U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) replaced by a space. Paragraphs without a `w14:paraId` SHALL NOT be listed; paragraphs whose `w14:paraId` is any other value SHALL NOT be listed either and SHALL be counted on stderr, so a crafted id cannot put terminal sequences or extra columns on stdout. When `word/numbering.xml` is not well-formed XML (it is first scanned like the main part, which refuses a DOCTYPE, and then judged by an XML parser, not only by tag pairing), the command SHALL still list every paragraph with list-checkbox detection disabled and SHALL name the numbering part on stderr.
+`macdoc word form classify <in.docx>` SHALL write to stdout one line per paragraph that carries a `w14:paraId` of exactly eight ASCII hexadecimal digits, in document order, formatted as the paragraph id, a tab, the kind, a tab, and the first 30 characters of the visible text with every control character (Unicode general category Cc, including tab, line breaks and ESC), the line and paragraph separators (Zl, Zp) and the bidirectional formatting characters (U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) replaced by a space. Paragraphs without a `w14:paraId` SHALL NOT be listed; paragraphs whose `w14:paraId` is any other value SHALL NOT be listed either and SHALL be counted on stderr, so a crafted id cannot put terminal sequences or extra columns on stdout. When `word/numbering.xml` is not well-formed XML (it is first scanned like the main part, which refuses a DOCTYPE, and then judged by an XML parser, not only by tag pairing), the command SHALL still list every paragraph with list-checkbox detection disabled and SHALL name the numbering part on stderr. With `--grid` (PsychQuant/macdoc#250), each line SHALL carry one more column between the kind and the text: the position of the paragraph's cell on its table's grid, as defined under "A table's fill cells are normalized by naming the table and its fill columns or rows", written `t<table>:r<rows>c<columns>`, where tables are numbered from 1 in document order (nested tables included) and rows and columns are each one number or `A-B`; a paragraph in a continuation cell takes the position of the merged cell it continues. A paragraph outside any cell (including one in a text box that sits in a cell) SHALL get `-`, and a paragraph of a table whose grid cannot be read SHALL get `t<table>:?`, with a note on stderr; `classify` SHALL NOT fail for it. Without `--grid` the output SHALL be unchanged.
 
 #### Scenario: Two addressable paragraphs and one without an id
 
 - **WHEN** the main part holds a body paragraph `1A2B3C4D` with text `申請人`, a cell paragraph `5E6F7A8B` with text `王小明`, and a paragraph without `w14:paraId`
 - **THEN** stdout is exactly `1A2B3C4D\tbody\t申請人` followed by `5E6F7A8B\ttable-field\t王小明`, one per line
+
+#### Scenario: Grid positions with --grid
+
+- **WHEN** the same part is classified with `--grid`, the cell paragraph being in the second grid column of the first row of the document's only table
+- **THEN** stdout is exactly `1A2B3C4D\tbody\t-\t申請人` followed by `5E6F7A8B\ttable-field\tt1:r1c2\t王小明`
 
 ### Requirement: Table field normalization makes designated fields uniform
 
@@ -83,7 +88,7 @@ For each `--field <paraId>`, `macdoc word form apply` SHALL remove the paragraph
 
 ### Requirement: The default field size is the most common designated size
 
-When `--field` is given without `--field-size`, the field size SHALL be the most common explicit `w:sz` value collected from the designated paragraphs, where each run with text contributes the value in its own `w:rPr` and a designated paragraph with no run with text contributes its paragraph-mark value. Ties SHALL go to the larger value. The chosen size SHALL be printed to stderr. When no explicit value is collected the command SHALL fail and ask for `--field-size`. `--field-size` SHALL be refused unless `--field` is also given, and SHALL accept, as a whole-string match, digits with at most one fractional part (no sign, exponent or second decimal point), from 1 to 1638 points in steps of 0.5, and be written as half-points.
+When `--field` or `--table-defaults` is given without `--field-size`, the field size SHALL be the most common explicit `w:sz` value collected from the designated paragraphs (those named by `--field` and the field paragraphs `--table-defaults` selects, taken together), where each run with text contributes the value in its own `w:rPr` and a designated paragraph with no run with text contributes its paragraph-mark value. Ties SHALL go to the larger value. The chosen size SHALL be printed to stderr. When no explicit value is collected the command SHALL fail and ask for `--field-size`. `--field-size` SHALL be refused unless `--field` or `--table-defaults` is also given, and SHALL accept, as a whole-string match, digits with at most one fractional part (no sign, exponent or second decimal point), from 1 to 1638 points in steps of 0.5, and be written as half-points.
 
 #### Scenario: Most common size wins
 
@@ -100,6 +105,76 @@ When `--field` is given without `--field-size`, the field size SHALL be the most
 | (none) | (none) | refused |
 | 18 | 10.3 | refused (not a step of 0.5) |
 | 18 | 12.5.3 | refused (not a number) |
+
+### Requirement: A table's fill cells are normalized by naming the table and its fill columns or rows
+
+`macdoc word form apply --table-defaults <paraId>=<selection>` (repeatable; PsychQuant/macdoc#250) SHALL apply the table field normalization of `--field` to every fill cell of the table around the named paragraph and SHALL leave every other cell of that table unchanged; the command SHALL NOT infer which cells are fill cells from their content. The table is the paragraph's nearest enclosing `w:tbl`, which may be nested in another table; a paragraph in no table, and a paragraph in a text box (`w:txbxContent`) that sits in a table, SHALL be refused, naming the paragraph. The selection SHALL be `col:<list>`, `row:<list>`, or both joined by `/` in either order, each at most once; a missing axis means all of it. A list SHALL be comma-separated items `N`, `A-B` with A ≤ B, or `A-` (from A to the last), written in ASCII digits from 1 with no spaces; anything else SHALL be refused before the input is read, quoting the value as written.
+
+Columns SHALL be grid columns: each row starts after its `w:gridBefore` grid columns and each cell covers `w:gridSpan` of them. Rows SHALL be the table's `w:tr` in document order. Rows and cells SHALL be counted through `w:sdt`, `w:sdtContent` and `w:customXml`. A cell whose `w:vMerge` is `restart` covers every row of the continuation cells below it (`w:vMerge` without a value or with `continue`); a continuation cell is not a cell of its own. The table SHALL be refused, naming the paragraph, when its grid cannot be read this way; this is a closed list: a `w:gridSpan` that is not a positive integer, a `w:gridBefore` that is not a non-negative integer, a grid position too large to compute, a legacy `w:hMerge`, a `w:vMerge` value other than `restart` or `continue`, and a continuation cell with no `restart` or continuation cell of the same grid columns directly above it. A selection that names a column or row beyond the table SHALL be refused, naming the paragraph.
+
+A cell SHALL be a fill cell when every grid column and every row it covers is selected. A cell that covers both selected and unselected grid columns or rows SHALL be left unchanged and listed on stderr by its position (`r1c1-4`), unless another `--table-defaults` on the same table makes it a fill cell: repeated selections on one table take the union of their fill cells. A `--table-defaults` that selects no fill cell SHALL be refused, naming the paragraph, even when another one selects some. A fill cell's field paragraphs SHALL be its own paragraphs (those whose nearest container, looking through `w:sdt`, `w:sdtContent` and `w:customXml`, is that cell) that are not empty under the closed definition of "Table field normalization makes designated fields uniform", or its first own paragraph when every one is empty. A field paragraph without a `w14:paraId` SHALL be refused, naming the cell's position. Field paragraphs SHALL then be handled exactly as paragraphs named by `--field`: they join the `--field` paragraphs without duplicates, share one field size with them, count as named by `--field` in every conflict check, and are not removed as empty siblings. The paragraph that names the table only identifies it: it is not a field paragraph unless selected, and it may be removed as an empty sibling. Stderr SHALL name, for each `--table-defaults`, how many fill cells it selected.
+
+#### Scenario: Fill columns are normalized and labels are left alone
+
+- **WHEN** a table has a title row spanning grid columns 1–4, a row of label, fill, label, fill, and a row of a label and an address spanning grid columns 2–4, and `--table-defaults <a paragraph of the table>=col:2,4` is given
+- **THEN** the two fills of the second row are normalized as `--field` would normalize them, every other cell is byte-for-byte unchanged, and stderr lists `r1c1-4` and `r3c2-4` as left unchanged
+
+#### Scenario: Two selections on one table take their union
+
+- **WHEN** the same table is also named by `col:2-4/row:3`
+- **THEN** the address is normalized as well, all three fields share one size, and stderr no longer lists `r3c2-4`
+
+#### Scenario: Columns and rows together select their intersection
+
+- **WHEN** a table has a header row and a label column, and `col:2-/row:2-` is given
+- **THEN** only the cells below the header row and right of the label column are normalized
+
+#### Scenario: Adjacent column numbers cover a merged cell
+
+- **WHEN** a cell spans grid columns 2–4 and `col:2,3,4/row:3` names its row
+- **THEN** the cell is a fill cell
+
+#### Scenario: A vertically merged fill cell
+
+- **WHEN** a fill-column cell starts a vertical merge over two rows
+- **THEN** its paragraphs are normalized and the continuation cell is byte-for-byte unchanged
+
+#### Scenario: Selection with no fill cell
+
+- **WHEN** every selected cell is only partly inside the selection
+- **THEN** the command fails naming the paragraph and writes no output
+
+#### Scenario: Column beyond the table
+
+- **WHEN** `col:5` names a table four grid columns wide
+- **THEN** the command fails naming the paragraph and writes no output
+
+#### Scenario: Grid that cannot be read
+
+- **WHEN** a cell of the named table carries `w:hMerge`
+- **THEN** the command fails naming the paragraph and writes no output
+
+#### Scenario: Fill paragraph without an id
+
+- **WHEN** a fill cell's paragraph carries no `w14:paraId`
+- **THEN** the command fails naming the cell's position and writes no output
+
+#### Scenario: Removing a field paragraph
+
+- **WHEN** `--remove` names a paragraph of a fill cell
+- **THEN** the command fails as for a paragraph named by both `--field` and `--remove`
+
+##### Example: which cells are fill cells
+
+Table with grid columns 1–4: r1 title across c1–c4; r2 `姓名` c1, fill c2, `電話` c3, fill c4; r3 `地址` c1, address across c2–c4.
+
+| Selections | Fill cells | Listed on stderr |
+| --- | --- | --- |
+| `col:2,4` | r2c2, r2c4 | r1c1-4, r3c2-4 |
+| `col:2,4` and `col:2-4/row:3` | r2c2, r2c4, r3c2-4 | r1c1-4 |
+| `col:2,3,4/row:3` | r3c2-4 | (none) |
+| `col:3-4/row:3` | (none) | refused |
+| `col:5` | — | refused |
 
 ### Requirement: Box glyphs are drawn in one font
 
