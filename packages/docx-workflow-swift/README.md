@@ -68,6 +68,17 @@ if let assertions = manifest.verify {
 
 The executor emits a warning to the `warnHandler` for each pending step and continues without applying, matching the `try?` idiom established in `word-builder-swift` v1.0.0 examples.
 
+### `insert_paragraph` and the anchor's format
+
+By default the inserted paragraph has no formatting of its own. Add `"inherit_anchor_format": true` to make it take the anchor's paragraph and text format, by the same rules as `macdoc word form apply --insert-after` (ooxml-swift 3.20.0, [macdoc#251](https://github.com/PsychQuant/macdoc/issues/251)):
+
+```json
+{ "type": "insert_paragraph", "anchor": { "after_text": "Name:" }, "content": "Inserted entry",
+  "inherit_anchor_format": true }
+```
+
+The anchor's own `w:pPr` is copied without list numbering, page break before, the section break and revision marks; the `w:rPr` of its first run with text is copied without revision marks. Inserted after the anchor, the anchor's section break moves to the new paragraph; inserted before it, nothing moves.
+
 ## Anchor semantics (deterministic)
 
 | Outcome | Behavior |

@@ -18,12 +18,19 @@ let package = Package(
         // resolved revision and overrides the graph's version ranges, and
         // copying it here is how the anti-pattern propagated one level up.
         .package(url: "https://github.com/PsychQuant/word-builder-swift.git", from: "1.0.2"),
+        // Direct floor for the OOXMLEdit API this library calls (macdoc#251):
+        // insertParagraph / insertParagraphBefore gained `inheritAnchorFormat`
+        // in 3.20.0. word-builder-swift only requires `from: "3.7.0"`, so
+        // relying on it transitively would let a standalone build resolve an
+        // ooxml-swift that lacks the parameter.
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.20.0"),
     ],
     targets: [
         .target(
             name: "DocxWorkflowLib",
             dependencies: [
                 .product(name: "WordBuilderSwift", package: "word-builder-swift"),
+                .product(name: "OOXMLSwift", package: "ooxml-swift"),
             ]
         ),
         .testTarget(

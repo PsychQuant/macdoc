@@ -93,4 +93,69 @@ final class EditPlannerTests: XCTestCase {
         XCTAssertEqual(stepType, "set_bold")
         XCTAssertTrue(tracker.contains("anchor missing"))
     }
+
+    // MARK: - insert_paragraph `inherit_anchor_format` (PsychQuant/macdoc#251)
+
+    /// Compiles one insert_paragraph step and returns the OOXMLEdit it became.
+    private func compileInsert(anchor: Anchor, inherit: Bool?, ref: ParagraphRef) throws -> OOXMLEdit {
+        let step = Step.insertParagraph(
+            InsertParagraphStep(anchor: anchor, content: "new", inheritAnchorFormat: inherit))
+        guard case .functional(let edit) = EditPlanner().compile(step, anchorRef: ref),
+              let ooxmlEdit = edit as? OOXMLEdit
+        else {
+            XCTFail("expected a functional OOXMLEdit for \(anchor)")
+            throw XCTSkip("compile did not produce an OOXMLEdit")
+        }
+        return ooxmlEdit
+    }
+
+    func testInsertAfterTextPassesInheritAnchorFormat() throws {
+        let ref = makeRef()
+        let edit = try compileInsert(anchor: .afterText("intro"), inherit: true, ref: ref)
+        guard case .insertParagraph(let after, let content, let styleId, let inherit) = edit else {
+            return XCTFail("after_text must compile to OOXMLEdit.insertParagraph, got \(edit)")
+        }
+        XCTAssertEqual(after, ref.elementID)
+        XCTAssertEqual(content, "new")
+        XCTAssertNil(styleId, "the manifest shape exposes no style id")
+        XCTAssertTrue(inherit, "inherit_anchor_format: true must reach the reducer")
+    }
+
+    func testInsertAfterParagraphIndexPassesInheritAnchorFormat() throws {
+        let ref = makeRef()
+        let edit = try compileInsert(anchor: .paragraphIndex(0), inherit: true, ref: ref)
+        guard case .insertParagraph(_, _, _, let inherit) = edit else {
+            return XCTFail("paragraph_index must compile to OOXMLEdit.insertParagraph, got \(edit)")
+        }
+        XCTAssertTrue(inherit)
+    }
+
+    func testInsertBeforeTextPassesInheritAnchorFormat() throws {
+        let ref = makeRef()
+        let edit = try compileInsert(anchor: .beforeText("intro"), inherit: true, ref: ref)
+        guard case .insertParagraphBefore(let before, let content, let styleId, let inherit) = edit else {
+            return XCTFail("before_text must compile to OOXMLEdit.insertParagraphBefore, got \(edit)")
+        }
+        XCTAssertEqual(before, ref.elementID)
+        XCTAssertEqual(content, "new")
+        XCTAssertNil(styleId)
+        XCTAssertTrue(inherit, "inherit_anchor_format: true must reach the reducer")
+    }
+
+    func testInsertWithoutTheFieldOrWithFalseDoesNotInherit() throws {
+        let ref = makeRef()
+        for inherit in [nil, false] as [Bool?] {
+            let after = try compileInsert(anchor: .afterText("intro"), inherit: inherit, ref: ref)
+            guard case .insertParagraph(_, _, _, let afterFlag) = after else {
+                return XCTFail("expected insertParagraph, got \(after)")
+            }
+            XCTAssertFalse(afterFlag, "inherit_anchor_format \(String(describing: inherit)) must keep the old output")
+
+            let before = try compileInsert(anchor: .beforeText("intro"), inherit: inherit, ref: ref)
+            guard case .insertParagraphBefore(_, _, _, let beforeFlag) = before else {
+                return XCTFail("expected insertParagraphBefore, got \(before)")
+            }
+            XCTAssertFalse(beforeFlag, "inherit_anchor_format \(String(describing: inherit)) must keep the old output")
+        }
+    }
 }
