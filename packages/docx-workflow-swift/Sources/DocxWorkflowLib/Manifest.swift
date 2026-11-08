@@ -166,11 +166,27 @@ public struct InsertParagraphStep: Codable, Equatable {
     public let type: String
     public let anchor: Anchor
     public let content: String
+    /// `inherit_anchor_format` (PsychQuant/macdoc#251): when `true`, the new
+    /// paragraph takes the anchor paragraph's format — ooxml-swift's
+    /// `OOXMLEdit.insertParagraph(..., inheritAnchorFormat:)`, the same rules
+    /// as `macdoc word form apply --insert-after`. `nil` when the manifest
+    /// leaves it out; `nil` and `false` both keep the old output, and `nil` is
+    /// not written back, so a manifest written before this field round-trips
+    /// unchanged.
+    public let inheritAnchorFormat: Bool?
 
-    public init(anchor: Anchor, content: String) {
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case anchor
+        case content
+        case inheritAnchorFormat = "inherit_anchor_format"
+    }
+
+    public init(anchor: Anchor, content: String, inheritAnchorFormat: Bool? = nil) {
         self.type = "insert_paragraph"
         self.anchor = anchor
         self.content = content
+        self.inheritAnchorFormat = inheritAnchorFormat
     }
 }
 

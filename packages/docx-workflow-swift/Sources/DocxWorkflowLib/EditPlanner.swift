@@ -7,7 +7,10 @@
 //
 // Phase 1 runtime-functional set (per word-builder-swift v1.0.0 +
 // ooxml-swift Phase 2c shipped cases):
-//   - insert_paragraph    → OOXMLEdit.insertParagraph(after:, content:, styleId:)
+//   - insert_paragraph    → OOXMLEdit.insertParagraph(after:, content:, styleId:,
+//                            inheritAnchorFormat:) (`inherit_anchor_format`,
+//                            ooxml-swift 3.20.0, PsychQuant/macdoc#251);
+//                            before_text → insertParagraphBefore
 //   - remove_paragraph    → OOXMLEdit.removeParagraph(target:)
 //   - wrap_link           → OOXMLEdit.wrapWithHyperlink(target:, href:)
 //   - set_bold            → OOXMLEdit.setBoldInRange(target:, substring:,
@@ -51,22 +54,27 @@ internal struct EditPlanner {
         case .insertParagraph(let payload):
             // After-text / paragraph-index anchors compile to insertParagraph;
             // before-text uses insertParagraphBefore. Style not exposed by the
-            // Phase 1 manifest shape — pass nil.
+            // Phase 1 manifest shape — pass nil. `inherit_anchor_format`
+            // (macdoc#251) goes through in both directions; the reducer copies
+            // the anchor's format at apply time, so nothing here reads it.
             guard let ref = anchorRef else {
                 return .pending(stepType: "insert_paragraph", tracker: "internal: anchor missing")
             }
+            let inheritAnchorFormat = payload.inheritAnchorFormat ?? false
             switch payload.anchor {
             case .beforeText:
                 return .functional(OOXMLEdit.insertParagraphBefore(
                     before: ref.elementID,
                     content: payload.content,
-                    styleId: nil
+                    styleId: nil,
+                    inheritAnchorFormat: inheritAnchorFormat
                 ))
             case .afterText, .paragraphIndex:
                 return .functional(OOXMLEdit.insertParagraph(
                     after: ref.elementID,
                     content: payload.content,
-                    styleId: nil
+                    styleId: nil,
+                    inheritAnchorFormat: inheritAnchorFormat
                 ))
             }
 
