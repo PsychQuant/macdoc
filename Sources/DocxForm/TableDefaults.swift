@@ -23,7 +23,23 @@ public struct GridSelection: Equatable {
 
     public let items: [Item]
 
-    public init(items: [Item]) { self.items = items }
+    /// Refuses what the parser refuses (verify R1): an empty list, a number
+    /// below 1, and a range whose start is past its end. A selection that
+    /// exists is therefore always safe to turn into ranges.
+    public init(items: [Item]) throws {
+        guard !items.isEmpty else { throw FormError.invalidGridSelection("清單是空的") }
+        for item in items {
+            switch item {
+            case .single(let n) where n < 1, .from(let n) where n < 1:
+                throw FormError.invalidGridSelection("欄列號從 1 開始，\(n) 不合法")
+            case .range(let a, let b) where a < 1 || a > b:
+                throw FormError.invalidGridSelection("範圍 \(a)-\(b) 不合法（須從 1 開始，起點不大於終點）")
+            default:
+                continue
+            }
+        }
+        self.items = items
+    }
 
     /// The largest number the selection writes; `A-` writes A.
     var largestNamed: Int {
@@ -101,7 +117,7 @@ public struct TableDefaults: Equatable {
 
     private static func list(_ text: Substring, refuse: (String) -> FormError) throws -> GridSelection {
         guard !text.isEmpty else { throw refuse("col: 或 row: 後面的清單是空的") }
-        return GridSelection(items: try text.split(separator: ",", omittingEmptySubsequences: false).map { item in
+        return try GridSelection(items: try text.split(separator: ",", omittingEmptySubsequences: false).map { item in
             func number(_ digits: Substring) throws -> Int {
                 guard !digits.isEmpty, digits.utf8.allSatisfy({ (0x30...0x39).contains($0) }),
                       let value = Int(digits), value >= 1 else {
@@ -129,11 +145,17 @@ public struct TableDefaultsReport: Equatable {
     /// labels in document order; a cell another selection tidies is not
     /// listed.
     public let partialCells: [String]
+    /// Fill cells left alone because no paragraph of theirs can be named:
+    /// a cell with no paragraph of its own, or one whose paragraphs are all
+    /// empty and whose first carries no `w14:paraId` (verify R1). Listed once,
+    /// under the first selection that reaches them.
+    public let skippedCells: [String]
 
-    public init(anchor: String, fillCells: Int, partialCells: [String]) {
+    public init(anchor: String, fillCells: Int, partialCells: [String], skippedCells: [String] = []) {
         self.anchor = anchor
         self.fillCells = fillCells
         self.partialCells = partialCells
+        self.skippedCells = skippedCells
     }
 }
 
@@ -189,39 +211,58 @@ extension FormOperations {
 
         var fields: [String] = []
         var seen: Set<String> = []
+        var listedSkips: Set<Int> = []
+        var reports: [TableDefaultsReport] = []
         for selection in selections {
+            var tidied = 0
+            var skipped: [TableGrid.Cell] = []
             for cell in selection.fill {
-                for id in try fieldParagraphs(of: cell, anchor: selection.spec.anchor, in: index) where seen.insert(id).inserted {
-                    fields.append(id)
+                switch try fieldParagraphs(of: cell, anchor: selection.spec.anchor, in: index) {
+                case .paragraphs(let ids):
+                    tidied += 1
+                    for id in ids where seen.insert(id).inserted { fields.append(id) }
+                case .unaddressable:
+                    skipped.append(cell)
                 }
             }
-        }
-        let reports = selections.map { selection in
-            TableDefaultsReport(anchor: selection.spec.anchor, fillCells: selection.fill.count,
-                                partialCells: selection.partial.filter { !fillTags.contains($0.tc) }.map(\.label))
+            // Doing nothing while reporting success is the silent failure the
+            // no-fill-cell refusal exists to stop, so it stops this too.
+            guard tidied > 0 else { throw FormError.noTidyableFillCells(selection.spec.anchor, cells: skipped.map(\.label)) }
+            reports.append(TableDefaultsReport(
+                anchor: selection.spec.anchor, fillCells: tidied,
+                partialCells: selection.partial.filter { !fillTags.contains($0.tc) }.map(\.label),
+                skippedCells: skipped.filter { listedSkips.insert($0.tc).inserted }.map(\.label)))
         }
         return TableDefaultsExpansion(fields: fields, reports: reports)
     }
 
+    enum FieldParagraphs: Equatable {
+        case paragraphs([String])
+        /// Nothing of the cell can be named: no paragraph of its own, or only
+        /// empty paragraphs and the first carries no `w14:paraId`.
+        case unaddressable
+    }
+
     /// The paragraphs of a fill cell that `--field` tidies: the cell's own
     /// paragraphs (not those of a nested table or a text box) that hold
-    /// content, or the first one when none does. Each must carry a
-    /// `w14:paraId`, because every later step finds paragraphs by id.
-    static func fieldParagraphs(of cell: TableGrid.Cell, anchor: String, in index: XMLTagIndex) throws -> [String] {
+    /// content, or the first one when none does. Every later step finds
+    /// paragraphs by id, so a paragraph with content and no `w14:paraId` is
+    /// refused; an empty cell that cannot be named holds nothing to tidy and
+    /// is left alone (verify R1).
+    static func fieldParagraphs(of cell: TableGrid.Cell, anchor: String, in index: XMLTagIndex) throws -> FieldParagraphs {
         let own = index.descendants(of: cell.tc).filter {
             index.tags[$0].name == "w:p" && FormClassifier.enclosingCell(of: $0, in: index) == cell.tc
         }
-        guard let first = own.first else {
-            throw FormError.tableGridUnreadable(anchor, detail: "\(cell.label) 的儲存格裡沒有段落")
-        }
+        guard let first = own.first else { return .unaddressable }
         let filled = own.filter { hasContent($0, in: index) }
-        return try (filled.isEmpty ? [first] : filled).map { p in
+        if filled.isEmpty, index.attribute("w14:paraId", of: first) == nil { return .unaddressable }
+        return .paragraphs(try (filled.isEmpty ? [first] : filled).map { p in
             guard let id = index.attribute("w14:paraId", of: p) else {
                 throw FormError.fillCellWithoutParaId(anchor, cell: cell.label)
             }
             _ = try locate(id, in: index)   // an id carried by two paragraphs is refused, not guessed
             return id
-        }
+        })
     }
 
     private static func checkInRange(_ selection: GridSelection?, count: Int, axis: String, anchor: String) throws {

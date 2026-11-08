@@ -554,6 +554,23 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
 
+    func testApplyTableDefaultsNotesFillCellsItCannotAddress() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/><w:gridCol w:w=\"3000\"/></w:tblGrid>"
+            + "<w:tr>" + cell(paragraph("0000E201", run("姓名"))) + cell(paragraph("0000E202", run("值"))) + "</w:tr>"
+            + "<w:tr>" + cell(paragraph("0000E203", run("電話"))) + cell("<w:p/>") + "</w:tr>"
+            + "</w:tbl><w:p/>"
+        try makeForm(at: form, extraBody: table)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path,
+            "--table-defaults", "0000E201=col:2", "--field-size", "12",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: --table-defaults 0000E201：r2c2 沒有可以定位的段落"), result.stderr)
+    }
+
     func testClassifyGridAddsEachCellsPosition() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")

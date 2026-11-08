@@ -86,14 +86,14 @@ final class Issue250TableDefaultsTests: XCTestCase {
     func testColumnListWithRangesAndAnOpenEndParses() throws {
         let parsed = try spec("0000A001=col:2,4-5,7-")
         XCTAssertEqual(parsed.anchor, "0000A001")
-        XCTAssertEqual(parsed.columns, GridSelection(items: [.single(2), .range(4, 5), .from(7)]))
+        XCTAssertEqual(parsed.columns, try GridSelection(items: [.single(2), .range(4, 5), .from(7)]))
         XCTAssertNil(parsed.rows)
     }
 
     func testColumnsAndRowsTogetherParseInEitherOrder() throws {
         let parsed = try spec("0000A001=row:3-/col:2")
-        XCTAssertEqual(parsed.columns, GridSelection(items: [.single(2)]))
-        XCTAssertEqual(parsed.rows, GridSelection(items: [.from(3)]))
+        XCTAssertEqual(parsed.columns, try GridSelection(items: [.single(2)]))
+        XCTAssertEqual(parsed.rows, try GridSelection(items: [.from(3)]))
     }
 
     func testMalformedSelectionsAreRefusedWithTheValueAsWritten() {
@@ -110,6 +110,18 @@ final class Issue250TableDefaultsTests: XCTestCase {
                 XCTAssertEqual(value, raw)
             }
         }
+    }
+
+    /// Verify R1 (codex): the public initialiser enforces what the parser
+    /// enforces, so a library caller cannot build a selection that crashes.
+    func testASelectionBuiltDirectlyIsCheckedAtConstruction() throws {
+        let invalid: [[GridSelection.Item]] = [[], [.single(0)], [.single(-1)], [.range(3, 2)], [.range(0, 2)], [.from(0)]]
+        for items in invalid {
+            XCTAssertThrowsError(try GridSelection(items: items), "\(items)") { error in
+                guard case FormError.invalidGridSelection = error else { return XCTFail("\(items): \(error)") }
+            }
+        }
+        XCTAssertNoThrow(try GridSelection(items: [.single(1), .range(2, 2), .from(3)]))
     }
 
     // MARK: grid
@@ -315,6 +327,34 @@ final class Issue250TableDefaultsTests: XCTestCase {
         XCTAssertEqual(refusal(exampleTable, FormPlan(tableDefaults: [
             try spec("0000L001=col:2,4"), try spec("0000L003=col:3-4/row:3"),
         ])), .noFillCells("0000L003"))
+    }
+
+    /// Verify R1 (logic, devil's advocate): an empty fill cell whose first
+    /// paragraph has no id holds nothing to tidy, so it is left alone and
+    /// listed instead of stopping the whole table; so is a cell with no paragraph.
+    func testFillCellsWithoutAnAddressableParagraphAreLeftAloneAndListed() throws {
+        let nested = tbl(tr(tc(p("0000N001", "內層"))))
+        let table = tbl(
+            tr(tc(p("0000L001", "姓名")), tc(p("0000F001", "王小明", size: 20))),
+            tr(tc(p("0000L002", "電話")), tc(p(nil))),
+            tr(tc(p("0000L003", "備註")), tc(nested)))
+        let before = TestXML.document(table + TestXML.bodySection)
+        let result = try apply(table, FormPlan(tableDefaults: [try spec("0000L001=col:2")]))
+        XCTAssertTrue(try TestXML.paragraphXML("0000F001", in: result.documentXML).contains("<w:jc w:val=\"left\"/>"))
+        let index = try XMLTagIndex(result.documentXML)
+        let original = try XMLTagIndex(before)
+        let cells = index.elements(named: "w:tc"), originalCells = original.elements(named: "w:tc")
+        XCTAssertEqual(index.elementString(cells[3]), original.elementString(originalCells[3]), "the empty cell is unchanged")
+        XCTAssertFalse(try TestXML.paragraphXML("0000N001", in: result.documentXML).contains("w:jc"), "the nested table is untouched")
+        XCTAssertEqual(result.tableDefaultsReports, [
+            TableDefaultsReport(anchor: "0000L001", fillCells: 1, partialCells: [], skippedCells: ["r2c2", "r3c2"]),
+        ])
+    }
+
+    func testASelectionNoneOfWhoseFillCellsCanBeTidiedIsRefused() throws {
+        let table = tbl(tr(tc(p("0000L001", "電話")), tc(p(nil))))
+        XCTAssertEqual(refusal(table, FormPlan(fieldSize: FieldSize(halfPoints: 24), tableDefaults: [try spec("0000L001=col:2")])),
+                       .noTidyableFillCells("0000L001", cells: ["r1c2"]))
     }
 
     func testAFillParagraphWithoutAParaIdIsRefused() throws {

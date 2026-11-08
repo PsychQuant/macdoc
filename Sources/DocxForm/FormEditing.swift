@@ -63,8 +63,14 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     case tableSelectionOutOfRange(String, detail: String)
     /// No cell lies wholly inside the selection.
     case noFillCells(String)
-    /// A paragraph of a selected fill cell carries no `w14:paraId`.
+    /// A paragraph with content in a selected fill cell carries no `w14:paraId`.
     case fillCellWithoutParaId(String, cell: String)
+    /// Every fill cell of the selection is one that cannot be named (no
+    /// paragraph, or only empty paragraphs without an id) (verify R1).
+    case noTidyableFillCells(String, cells: [String])
+    /// A `GridSelection` built directly, not through the parser, with an
+    /// empty list, a number below 1 or a reversed range (verify R1).
+    case invalidGridSelection(String)
     case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
     case splitsField(String)
@@ -129,7 +135,11 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
         case .noFillCells(let id):
             return "--table-defaults \(id) 沒有選到任何填寫欄：沒有一格整個落在點名的欄列之內。可用 macdoc word form classify --grid 查看每一格的欄列範圍"
         case .fillCellWithoutParaId(let id, let cell):
-            return "--table-defaults \(id) 選到的儲存格 \(cell) 裡有段落沒有 w14:paraId，無法定位；請先用 Word 存一次檔（Word 會補上 paraId），或改用 --field"
+            return "--table-defaults \(id) 選到的儲存格 \(cell) 裡有內容的段落沒有 w14:paraId，無法定位；請先用 Word 存一次檔（Word 會補上 paraId）"
+        case .noTidyableFillCells(let id, let cells):
+            return "--table-defaults \(id) 選到的填寫欄 \(cells.joined(separator: "、")) 都沒有可以定位的段落（沒有段落，或只有空段落且沒有 w14:paraId），沒有任何一格可以處理"
+        case .invalidGridSelection(let detail):
+            return "無效的欄列選取：\(detail)"
         case .conflictingOperations(let id, let detail):
             return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):

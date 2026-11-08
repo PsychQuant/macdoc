@@ -270,6 +270,9 @@ extension MacDoc.Word.Form {
             if !report.partialCells.isEmpty {
                 out += "note: --table-defaults \(id)：\(report.partialCells.joined(separator: "、")) 只有一部分在點名的欄列內，未處理\n"
             }
+            if !report.skippedCells.isEmpty {
+                out += "note: --table-defaults \(id)：\(report.skippedCells.joined(separator: "、")) 沒有可以定位的段落（沒有段落，或只有空段落且沒有 w14:paraId），未處理\n"
+            }
             return out
         }
 

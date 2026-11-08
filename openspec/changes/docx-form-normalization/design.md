@@ -68,7 +68,7 @@ When `--field` is given without `--field-size`, the size is the most common expl
 - A cell is a fill cell only when it lies wholly inside the selection. A cell only partly inside (a title row across the table, an address across a label column) is left alone and listed on stderr; refusing instead would make column selection unusable on most forms, which have a full-width row somewhere.
 - Several selections on one table take the union, so a form with a regular part and an irregular part can be named in two pieces. Each selection must still find a fill cell of its own, which catches a mistyped number.
 - A grid that cannot be read (bad numbers, the legacy `w:hMerge`, a continuation cell with nothing above it) is refused rather than guessed; `--field` stays available for such tables.
-- A fill cell's field paragraphs are its non-empty paragraphs, or its first paragraph when all are empty, so the existing cleanup still removes its empty paragraphs; they must carry a `w14:paraId`, because every later step finds paragraphs by id.
+- A fill cell's field paragraphs are its non-empty paragraphs, or its first paragraph when all are empty, so the existing cleanup still removes its empty paragraphs; a paragraph with content must carry a `w14:paraId`, because every later step finds paragraphs by id. An empty cell that cannot be named, or a cell with no paragraph, holds nothing to tidy and is left alone and listed (verify round 1), as long as the selection tidies at least one cell.
 
 ### All paragraph ids are validated before any edit, operations run in a fixed order
 
