@@ -6,7 +6,7 @@ All notable changes to `docx-workflow-swift` are recorded here.
 
 ### Added
 
-- **`insert_paragraph` 可沿用錨點的格式**（macdoc#251）：step 加 `"inherit_anchor_format": true`，新段落取錨點的段落與文字格式，規則與 `macdoc word form apply --insert-after`（macdoc#249）相同：錨點自己的 `w:pPr` 去掉清單編號、段前分頁、分節符與修訂紀錄，第一個有文字的 run 的 `w:rPr` 去掉修訂紀錄；插在錨點之後時，錨點的分節符移到新段落，插在之前則不移動。`EditPlanner` 把旗標傳給 ooxml-swift 3.20.0 的 `OOXMLEdit.insertParagraph`／`insertParagraphBefore(…, inheritAnchorFormat:)`，複製在 reducer 套用時做，只改 `word/document.xml`。沒寫這個欄位時解出 `nil`、輸出不變，編碼時也不寫回，既有 manifest 的 round-trip 不變；值不是 JSON boolean 時解碼失敗。
+- **`insert_paragraph` 可沿用錨點的格式**（macdoc#251）：step 加 `"inherit_anchor_format": true`，新段落取錨點的段落與文字格式，規則與 `macdoc word form apply --insert-after`（macdoc#249）相同：錨點自己的 `w:pPr` 去掉清單編號、段前分頁、分節符與修訂紀錄，第一個有文字的 run 的 `w:rPr` 去掉修訂紀錄；插在錨點之後時，錨點的分節符移到新段落，插在之前則不移動。`EditPlanner` 把旗標傳給 ooxml-swift 3.20.0 的 `OOXMLEdit.insertParagraph`／`insertParagraphBefore(…, inheritAnchorFormat:)`，複製在 reducer 套用時做，只改 `word/document.xml`。沒寫這個欄位或寫 `null` 時解出 `nil`、輸出不變，編碼時也不寫回，既有 manifest 的 round-trip 不變；其他不是 JSON boolean 的值解碼失敗。插入經 op-log 寫進樹、由 overlay writer 寫出，不經 typed 重序列化（ooxml-swift#133 不影響這條路徑）。
 - **直接依賴 ooxml-swift `from: "3.20.0"`**：上面的參數 3.20.0 才有，word-builder-swift 只要求 `from: "3.7.0"`，只靠它的話，單獨 build 本套件可能解析到沒有這個參數的版本。
 
 ### Fixed

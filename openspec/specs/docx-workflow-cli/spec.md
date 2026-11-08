@@ -171,7 +171,7 @@ An `insert_paragraph` step MAY carry a boolean field `inherit_anchor_format` (Ps
 - the `w:rPr` of the anchor's first own run with text, without `w:rPrChange`;
 - for an `after_text` or `paragraph_index` anchor, the anchor's `w:sectPr` moved to the new paragraph, so the new paragraph stays in the anchor's section. For a `before_text` anchor no `w:sectPr` is copied or moved.
 
-When the field is absent or `false`, the output SHALL be what it was before the field existed. A manifest that leaves the field out SHALL encode back without it. A value that is not a JSON boolean SHALL fail decoding with `DecodingError.typeMismatch`. The copy happens when the reducer applies the step, so the step SHALL change only `word/document.xml`.
+When the field is absent, `null` or `false`, the output SHALL be what it was before the field existed; `null` is treated exactly like an absent field, as for the manifest's other optional fields. A manifest that leaves the field out or sets it to `null` SHALL encode back without it. Any other value that is not a JSON boolean SHALL fail decoding with `DecodingError.typeMismatch`. The copy happens when the reducer applies the step, so the step SHALL change only `word/document.xml`.
 
 #### Scenario: Inserting after a form field takes its format
 
@@ -196,7 +196,7 @@ When the field is absent or `false`, the output SHALL be what it was before the 
 #### Scenario: Leaving the field out keeps the old output
 
 - **GIVEN** the same baseline
-- **WHEN** the step has no `inherit_anchor_format`, or has `"inherit_anchor_format": false`
+- **WHEN** the step has no `inherit_anchor_format`, or has `"inherit_anchor_format": false` or `null`
 - **THEN** the new paragraph MUST have no `w:pPr` and its run no `w:rPr`, and `"Name:"` MUST keep its section break
 
 ---

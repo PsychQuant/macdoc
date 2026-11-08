@@ -163,6 +163,20 @@ final class InsertParagraphInheritAnchorFormatTests: XCTestCase {
                        "the anchor keeps everything except the section break, which now ends section 1 one paragraph later")
     }
 
+    // MARK: - paragraph_index: same branch as after_text (verify R1)
+
+    func testParagraphIndexAnchorAlsoTakesOverTheSectionBreak() throws {
+        let result = try apply(anchor: .paragraphIndex(0), inherit: true)
+        XCTAssertEqual(result.paragraphs.map(\.text), ["Name:", "Inserted entry", "Signature"])
+
+        let inserted = try paragraph("Inserted entry", in: result.paragraphs)
+        XCTAssertEqual(childNames(child(inserted, "pPr")), ["pStyle", "spacing", "ind", "rPr", "sectPr"],
+                       "a paragraph_index anchor inserts after, so the section break moves like after_text")
+        XCTAssertEqual(childNames(child(firstRun(inserted), "rPr")), ["rFonts", "sz"])
+        XCTAssertEqual(childNames(child(try paragraph("Name:", in: result.paragraphs), "pPr")),
+                       ["pStyle", "pageBreakBefore", "numPr", "spacing", "ind", "rPr"])
+    }
+
     // MARK: - before_text: format copied, section break stays on the anchor
 
     func testInsertBeforeAnchorInheritsItsFormatAndLeavesTheSectionBreak() throws {
@@ -176,6 +190,22 @@ final class InsertParagraphInheritAnchorFormatTests: XCTestCase {
 
         let anchor = try paragraph("Name:", in: result.paragraphs)
         XCTAssertEqual(childNames(child(anchor, "pPr")), Self.anchorPPrChildren, "the anchor is untouched")
+
+        // Verify R1 (devil's advocate on the swiftify note): the insert goes
+        // through the op log and the overlay writer, not typed
+        // re-serialization (ooxml-swift#133), so with nothing moving, the
+        // output is the baseline document.xml plus the new paragraph, byte
+        // for byte.
+        let before = try String(decoding: XCTUnwrap(partBytes(of: result.baseline)["word/document.xml"]), as: UTF8.self)
+        let after = try String(decoding: XCTUnwrap(partBytes(of: result.output)["word/document.xml"]), as: UTF8.self)
+        let insertedXML = try NSRegularExpression(
+            pattern: #"<w:p[ >](?:(?!<w:p[ >]).)*?Inserted entry.*?</w:p>"#, options: [.dotMatchesLineSeparators])
+        let range = try XCTUnwrap(
+            insertedXML.firstMatch(in: after, range: NSRange(after.startIndex..., in: after))
+                .flatMap { Range($0.range, in: after) },
+            "the inserted paragraph's XML is missing")
+        XCTAssertEqual(after.replacingCharacters(in: range, with: ""), before,
+                       "document.xml outside the inserted paragraph must be the baseline, byte for byte")
     }
 
     // MARK: - field absent: the output is what it was before #251

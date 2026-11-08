@@ -170,9 +170,10 @@ public struct InsertParagraphStep: Codable, Equatable {
     /// paragraph takes the anchor paragraph's format — ooxml-swift's
     /// `OOXMLEdit.insertParagraph(..., inheritAnchorFormat:)`, the same rules
     /// as `macdoc word form apply --insert-after`. `nil` when the manifest
-    /// leaves it out; `nil` and `false` both keep the old output, and `nil` is
-    /// not written back, so a manifest written before this field round-trips
-    /// unchanged.
+    /// leaves it out or sets it to JSON `null` (like the manifest's other
+    /// optional fields); `nil` and `false` both keep the old output, and `nil`
+    /// is not written back, so a manifest written before this field
+    /// round-trips unchanged.
     public let inheritAnchorFormat: Bool?
 
     private enum CodingKeys: String, CodingKey {

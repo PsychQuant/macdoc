@@ -111,6 +111,15 @@ final class ManifestDecodingTests: XCTestCase {
         XCTAssertNil(step.inheritAnchorFormat, "a manifest written before #251 must decode exactly as before")
     }
 
+    func testInheritAnchorFormatNullIsTreatedAsAbsent() throws {
+        // Verify R1 (codex): JSON null decodes like an absent field, the same
+        // as the manifest's other optional fields; the spec says so.
+        let step = try decodeInsertStep(
+            #"{ "type": "insert_paragraph", "anchor": { "after_text": "Name:" }, "content": "x", "inherit_anchor_format": null }"#)
+        XCTAssertNil(step.inheritAnchorFormat)
+        XCTAssertNil(try encodedObject(step)["inherit_anchor_format"], "null is not written back")
+    }
+
     func testInheritAnchorFormatRejectsANonBooleanValue() {
         XCTAssertThrowsError(try decodeInsertStep(
             #"{ "type": "insert_paragraph", "anchor": { "after_text": "Name:" }, "content": "x", "inherit_anchor_format": "yes" }"#)
