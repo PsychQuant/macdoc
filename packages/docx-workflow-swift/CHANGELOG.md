@@ -4,6 +4,11 @@ All notable changes to `docx-workflow-swift` are recorded here.
 
 ## Unreleased
 
+### Added
+
+- **`insert_paragraph` 可沿用錨點的格式**（macdoc#251）：step 加 `"inherit_anchor_format": true`，新段落取錨點的段落與文字格式，規則與 `macdoc word form apply --insert-after`（macdoc#249）相同：錨點自己的 `w:pPr` 去掉清單編號、段前分頁、分節符與修訂紀錄，第一個有文字的 run 的 `w:rPr` 去掉修訂紀錄；插在錨點之後時，錨點的分節符移到新段落，插在之前則不移動。`EditPlanner` 把旗標傳給 ooxml-swift 3.20.0 的 `OOXMLEdit.insertParagraph`／`insertParagraphBefore(…, inheritAnchorFormat:)`，複製在 reducer 套用時做，只改 `word/document.xml`。沒寫這個欄位或寫 `null` 時解出 `nil`、輸出不變，編碼時也不寫回，既有 manifest 的 round-trip 不變；其他不是 JSON boolean 的值解碼失敗。插入經 op-log 寫進樹、由 overlay writer 寫出，不經 typed 重序列化（ooxml-swift#133 不影響這條路徑）。
+- **直接依賴 ooxml-swift `from: "3.20.0"`**：上面的參數 3.20.0 才有，word-builder-swift 只要求 `from: "3.7.0"`，只靠它的話，單獨 build 本套件可能解析到沒有這個參數的版本。
+
 ### Fixed
 
 - **`set_bold` 對任何文件都會失敗，manifest 必填的 `substring` 欄位從未被使用**（macdoc#232）。`EditPlanner` 過去把 `set_bold` 編譯成 `OOXMLEdit.setBold(target: 錨點段落 ID, value: true)`——`setBold` 對應 ooxml-swift 的 `Operation.setRunFormat`，reducer 要求目標是 `<w:r>`，指向段落一律失敗（`ReducerError.malformedOp("setRunFormat target must be <w:r>")`），`substring` 完全沒被讀取。改用 ooxml-swift 3.16.0 新增的 `OOXMLEdit.setBoldInRange(target:substring:value:instance:)`：以段落 ElementID＋`substring` 定位段落中的一段文字，必要時就地切分 run，只對比對到的範圍套格式，段落其餘文字與其他 run 不受影響；`instance` 用預設第 1 次出現。空字串的 `substring` 在 `EditPlanner.compile` 階段就以 `.pending` 回報（與 `wrap_link` 對不可解析 URL 的既有處理一致），不會被送到 reducer 才失敗。同版 ooxml-swift 也讓 `ReducerError` 實作 `LocalizedError`，`macdoc docx apply` 找不到 substring（或範圍跨越修訂、超連結等邊界）時，錯誤輸出改為含 ooxml-swift 給的具體原因（例如 `setRunFormatInRange: substring "X" occurrence 1 not found`），不再只剩泛用的「error 1」；失敗時 CLI 以非零 exit 結束，輸出檔完全不寫入（#137 的交易語意，`Executor.apply` 在 `doc.apply(edit)` 拋錯時位於 `DocxWriter.write` 之前，候選檔從未產生）。

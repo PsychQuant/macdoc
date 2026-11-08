@@ -163,6 +163,43 @@ code:
 -->
 
 ---
+### Requirement: insert_paragraph can inherit the anchor's format
+
+An `insert_paragraph` step MAY carry a boolean field `inherit_anchor_format` (PsychQuant/macdoc#251). When it is `true`, the Executor SHALL insert the paragraph through ooxml-swift's `OOXMLEdit.insertParagraph` / `insertParagraphBefore` with `inheritAnchorFormat: true` (ooxml-swift 3.20.0), so that the new paragraph takes the anchor paragraph's format by the rules of `macdoc word form apply --insert-after` (PsychQuant/macdoc#249):
+
+- the anchor's own `w:pPr`, without `w:numPr`, `w:sectPr`, `w:pPrChange` and `w:pageBreakBefore`, and with `w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` and `w:rPrChange` removed from its paragraph-mark `w:rPr`;
+- the `w:rPr` of the anchor's first own run with text, without `w:rPrChange`;
+- for an `after_text` or `paragraph_index` anchor, the anchor's `w:sectPr` moved to the new paragraph, so the new paragraph stays in the anchor's section. For a `before_text` anchor no `w:sectPr` is copied or moved.
+
+When the field is absent, `null` or `false`, the output SHALL be what it was before the field existed; `null` is treated exactly like an absent field, as for the manifest's other optional fields. A manifest that leaves the field out or sets it to `null` SHALL encode back without it. Any other value that is not a JSON boolean SHALL fail decoding with `DecodingError.typeMismatch`. The copy happens when the reducer applies the step, so the step SHALL change only `word/document.xml`.
+
+#### Scenario: Inserting after a form field takes its format
+
+- **GIVEN** a baseline whose paragraph `"Name:"` has a `w:pPr` with a style, page break before, list numbering, spacing, indentation, a tracked insertion on its paragraph mark and its own section break, and a run with fonts and size
+- **WHEN** the Executor applies `{ "type": "insert_paragraph", "anchor": { "after_text": "Name:" }, "content": "Inserted entry", "inherit_anchor_format": true }`
+- **THEN** the new paragraph MUST carry the style, spacing, indentation and paragraph-mark format but not the list numbering, the page break before or the tracked insertion; its run MUST carry the anchor run's fonts and size; the section break MUST be on the new paragraph and no longer on `"Name:"`; and every part other than `word/document.xml` MUST be byte-identical to the baseline
+
+##### Example: Paragraph properties before and after
+
+| | `"Name:"` `w:pPr` children | new paragraph `w:pPr` children |
+|---|---|---|
+| baseline | `pStyle`, `pageBreakBefore`, `numPr`, `spacing`, `ind`, `rPr`, `sectPr` | — |
+| after `after_text: "Name:"` | `pStyle`, `pageBreakBefore`, `numPr`, `spacing`, `ind`, `rPr` | `pStyle`, `spacing`, `ind`, `rPr`, `sectPr` |
+| after `before_text: "Name:"` | unchanged | `pStyle`, `spacing`, `ind`, `rPr` |
+
+#### Scenario: Inserting before the anchor leaves the section break in place
+
+- **GIVEN** the same baseline
+- **WHEN** the step uses `{ "before_text": "Name:" }` with `"inherit_anchor_format": true`
+- **THEN** the new paragraph MUST come before `"Name:"`, carry the copied format without a `w:sectPr`, and `"Name:"` MUST be unchanged
+
+#### Scenario: Leaving the field out keeps the old output
+
+- **GIVEN** the same baseline
+- **WHEN** the step has no `inherit_anchor_format`, or has `"inherit_anchor_format": false` or `null`
+- **THEN** the new paragraph MUST have no `w:pPr` and its run no `w:rPr`, and `"Name:"` MUST keep its section break
+
+---
 ### Requirement: Phase-2c-pending step types compile but warn at runtime
 
 Step types whose backing `OOXMLEdit` / `WordEdit` Reducer cases have not yet shipped (per ooxml-swift#71 Phase 2c follow-up) SHALL be accepted by the manifest decoder and SHALL be represented as concrete step type values. When the Executor encounters such a step at runtime, it SHALL emit a warning to stderr in the form `"warn: step type '<step_type>' has no Reducer support yet (tracker: ooxml-swift#71); skipping"` and continue to the next step. The exit code SHALL NOT be set to non-zero solely because of skipped pending steps.

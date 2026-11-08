@@ -260,6 +260,74 @@ final class MacDocDocxIntegrationTests: XCTestCase {
         XCTAssertTrue(found, "expected to find the 'intro' paragraph in the output")
     }
 
+    // MARK: - insert_paragraph inherit_anchor_format (PsychQuant/macdoc#251)
+
+    func testInsertParagraphInheritAnchorFormatCopiesTheAnchorFormat() throws {
+        // Spec: an `insert_paragraph` step with `inherit_anchor_format: true`
+        // gives the new paragraph its anchor's paragraph and text format, so
+        // a field added to a form does not fall back to the document defaults.
+        // The copy rules live in ooxml-swift; this pins that the field
+        // survives the CLI's manifest decoding and reaches the reducer.
+        guard let binary = macdocBinary else {
+            throw XCTSkip("Built macdoc binary not found")
+        }
+        let synthetic = try makeSyntheticBaseline(texts: ["placeholder"])
+        defer { try? FileManager.default.removeItem(at: synthetic) }
+        let w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        let dir = try ZipHelper.unzip(synthetic)
+        defer { ZipHelper.cleanup(dir) }
+        try Data("""
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <w:document xmlns:w="\(w)"><w:body>\
+            <w:p><w:pPr><w:spacing w:after="240"/></w:pPr><w:r><w:rPr><w:sz w:val="28"/></w:rPr><w:t>Name:</w:t></w:r></w:p>\
+            <w:p><w:r><w:t>Signature</w:t></w:r></w:p><w:sectPr/></w:body></w:document>
+            """.utf8).write(to: dir.appendingPathComponent("word/document.xml"))
+
+        let temp = FileManager.default.temporaryDirectory
+        let baseline = temp.appendingPathComponent("baseline-251-\(UUID().uuidString).docx")
+        let manifestURL = temp.appendingPathComponent("manifest-\(UUID().uuidString).json")
+        let outputURL = temp.appendingPathComponent("out-\(UUID().uuidString).docx")
+        defer {
+            try? FileManager.default.removeItem(at: baseline)
+            try? FileManager.default.removeItem(at: manifestURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        try ZipHelper.zip(dir, to: baseline)
+
+        let json = #"""
+        {
+          "baseline": "\#(baseline.path)",
+          "output": "\#(outputURL.path)",
+          "steps": [
+            { "type": "insert_paragraph", "anchor": { "after_text": "Name:" }, "content": "Inserted entry",
+              "inherit_anchor_format": true }
+          ]
+        }
+        """#
+        try Data(json.utf8).write(to: manifestURL)
+
+        let (stdout, stderr, exitCode) = try runProcessFull(
+            binary: binary,
+            args: ["docx", "apply", manifestURL.path, "--input", baseline.path, "--output", outputURL.path]
+        )
+        guard exitCode == 0 else {
+            XCTFail("Expected exit 0, got \(exitCode). stdout: \(stdout) stderr: \(stderr)")
+            return
+        }
+
+        let outDir = try ZipHelper.unzip(outputURL)
+        defer { ZipHelper.cleanup(outDir) }
+        let xml = try XMLDocument(contentsOf: outDir.appendingPathComponent("word/document.xml"), options: [])
+        let inserted = try XCTUnwrap(
+            xml.nodes(forXPath: "//*[local-name()='p'][.//*[local-name()='t']='Inserted entry']").first as? XMLElement,
+            "the inserted paragraph is missing from the output")
+        let spacing = try inserted.nodes(forXPath: "./*[local-name()='pPr']/*[local-name()='spacing']")
+        XCTAssertEqual(spacing.count, 1, "the anchor's paragraph format must be copied")
+        let size = try inserted.nodes(forXPath: "./*[local-name()='r']/*[local-name()='rPr']/*[local-name()='sz']")
+        XCTAssertEqual((size.first as? XMLElement)?.attribute(forLocalName: "val", uri: w)?.stringValue, "28",
+                       "the anchor run's text format must be copied")
+    }
+
     func testSetBoldSubstringNotFoundFailsWithReasonAndLeavesOutputAbsent() throws {
         // Spec: a `substring` that does not occur in the anchor paragraph
         // surfaces ooxml-swift's specific reason (not the issue's "error
