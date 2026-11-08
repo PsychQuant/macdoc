@@ -590,23 +590,37 @@ enum FormOperations {
     /// around it, which must be a body-level block (looking through
     /// body-level content controls and custom XML) (#250).
     static func tableToRemove(_ id: String, in index: XMLTagIndex) throws -> Int {
-        let p = try locate(id, in: index)
-        var current = index.tags[p].parent
-        while let c = current, index.tags[c].name != "w:tbl" {
-            // A text box is its own story: the table around it is not the
-            // paragraph's table, so the walk stops here (#250 verify R1).
-            if index.tags[c].name == "w:txbxContent" {
-                var outer = index.tags[c].parent
-                while let o = outer, index.tags[o].name != "w:tbl" { outer = index.tags[o].parent }
-                throw outer == nil ? FormError.notInTable(id) : FormError.inTextBox(id)
-            }
-            current = index.tags[c].parent
+        let table: Int
+        switch enclosingTable(of: try locate(id, in: index), in: index) {
+        case .table(let t): table = t
+        case .notInTable: throw FormError.notInTable(id)
+        case .inTextBox: throw FormError.inTextBox(id)
         }
-        guard let table = current else { throw FormError.notInTable(id) }
         guard let container = blockContainer(of: table, in: index), index.tags[container].name == "w:body" else {
             throw FormError.tableNotBodyLevel(id)
         }
         return table
+    }
+
+    enum TableLookup: Equatable {
+        case table(Int)
+        case notInTable
+        /// The paragraph is in a text box inside a table.
+        case inTextBox
+    }
+
+    /// The nearest table around a paragraph. A text box is its own story:
+    /// the table around it is not the paragraph's table, so the walk stops
+    /// there (#250 verify R1).
+    static func enclosingTable(of p: Int, in index: XMLTagIndex) -> TableLookup {
+        var current = index.tags[p].parent
+        while let c = current, index.tags[c].name != "w:tbl" {
+            if index.tags[c].name == "w:txbxContent" {
+                return index.ancestor(of: c, named: "w:tbl") == nil ? .notInTable : .inTextBox
+            }
+            current = index.tags[c].parent
+        }
+        return current.map { .table($0) } ?? .notInTable
     }
 
     /// Each table named by `ids` once, under the first id naming it, in

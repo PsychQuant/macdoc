@@ -63,6 +63,10 @@ extension MacDoc.Word.Form {
         @Argument(help: "輸入的 .docx 檔案")
         var input: String
 
+        @Flag(name: .customLong("grid"),
+              help: "在類型與文字之間多印一欄：段落所在儲存格在表格格線上的位置（t<表格>:r<列>c<欄>，合併儲存格寫範圍），供 apply --table-defaults 點名欄列；不在儲存格裡的段落印 -，格線無法判讀的表格印 t<表格>:?")
+        var grid = false
+
         func run() throws {
             let inputURL = try validatedInputURL(input)
             do {
@@ -78,14 +82,26 @@ extension MacDoc.Word.Form {
                         "note: \(DocxPackage.numberingPart) 無法解析，略過 list-checkbox 判定\n".utf8))
                 }
                 let paragraphs = try FormClassifier.classify(documentXML: Array(document.data),
-                                                             numberingXML: numbering.map { Array($0.data) })
+                                                             numberingXML: numbering.map { Array($0.data) },
+                                                             withCells: grid)
                 // A w14:paraId is eight hexadecimal digits. Any other value comes
                 // from a damaged or crafted file; printing it could inject
                 // terminal sequences or fake columns, so such rows are counted.
                 var skipped = 0
+                var unreadableTables: Set<Int> = []
                 for paragraph in paragraphs {
                     guard Self.isParaId(paragraph.paraId) else { skipped += 1; continue }
-                    print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(Self.preview(paragraph.text))")
+                    guard grid else {
+                        print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(Self.preview(paragraph.text))")
+                        continue
+                    }
+                    if case .unreadableTable(let table)? = paragraph.cell { unreadableTables.insert(table) }
+                    let position = paragraph.cell?.description ?? "-"
+                    print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(position)\t\(Self.preview(paragraph.text))")
+                }
+                for table in unreadableTables.sorted() {
+                    FileHandle.standardError.write(Data(
+                        "note: 第 \(table) 張表格的欄列位置無法判讀，座標印 t\(table):?；apply --table-defaults 會說明原因\n".utf8))
                 }
                 if skipped > 0 {
                     FileHandle.standardError.write(Data(
@@ -117,7 +133,7 @@ extension MacDoc.Word.Form {
     struct Apply: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "apply",
-            abstract: "整理已填寫的表單：統一填寫欄、方框字型、清單勾選、插入、移除、截斷"
+            abstract: "整理已填寫的表單：統一填寫欄（逐欄或整張表）、方框字型、清單勾選、插入、移除、截斷"
         )
 
         @Argument(help: "輸入的 .docx 檔案")
@@ -138,6 +154,11 @@ extension MacDoc.Word.Form {
                 help: ArgumentHelp("填寫欄字級（pt，0.5 為單位）；省略時取指定欄位字級的眾數，同票取大",
                                    valueName: "pt"))
         var fieldSize: String?
+
+        @Option(name: .customLong("table-defaults"),
+                help: ArgumentHelp("整張表的填寫欄（可重複）：以表格裡任一段落點名表格，用 col:<欄>、row:<列> 或 col:<欄>/row:<列> 點名填寫欄的格線欄列（從 1 開始，逗號分隔，可寫範圍，如 col:2,4-5 或 row:3-）；整格落在點名欄列內的儲存格照 --field 處理，其他儲存格不動，只有一部分在範圍內的儲存格列在 stderr；同一張表點名多次取聯集。欄列位置用 classify --grid 查看",
+                                   valueName: "paraId=col:欄/row:列"))
+        var tableDefaults: [String] = []
 
         @Option(name: .customLong("checkbox-font"),
                 help: ArgumentHelp("本文（word/document.xml）的方框字元（□ ■ ☐ ☑ ☒）改用同一字型，字級不變；頁首、頁尾、註腳不處理", valueName: "font"))
@@ -171,10 +192,10 @@ extension MacDoc.Word.Form {
             let plan = try makePlan()
             guard plan.hasOperations else {
                 throw ValidationError(
-                    "至少要指定一個操作：--field、--checkbox-font、--tick-list、--insert-after、--remove、--remove-table 或 --truncate-from")
+                    "至少要指定一個操作：--field、--table-defaults、--checkbox-font、--tick-list、--insert-after、--remove、--remove-table 或 --truncate-from")
             }
-            if fieldSize != nil, fields.isEmpty {
-                throw ValidationError("--field-size 需要搭配 --field")
+            if fieldSize != nil, fields.isEmpty, tableDefaults.isEmpty {
+                throw ValidationError("--field-size 需要搭配 --field 或 --table-defaults")
             }
         }
 
@@ -188,14 +209,16 @@ extension MacDoc.Word.Form {
                 insertions.append(FormInsertion(anchor: String(pieces[0]), text: String(pieces[1])))
             }
             let size: FieldSize?
+            let tables: [TableDefaults]
             do {
                 size = try fieldSize.map { try FieldSize.parse(points: $0) }
+                tables = try tableDefaults.map { try TableDefaults.parse($0) }
             } catch let error as FormError {
-                throw ValidationError(error.description)
+                throw ValidationError(TerminalText.sanitize(error.description))
             }
             return FormPlan(fields: fields, fieldSize: size, checkboxFont: checkboxFont, tickList: tickList,
                             insertions: insertions, removals: remove, removedTables: removeTable,
-                            truncateFrom: truncateFrom)
+                            truncateFrom: truncateFrom, tableDefaults: tables)
         }
 
         func run() throws {
@@ -225,6 +248,9 @@ extension MacDoc.Word.Form {
                     FileHandle.standardError.write(Data(
                         "note: 有 \(outcome.skippedCheckboxRuns) 個含方框字元的 run 未改字型（另含其他內容、需要拆開但帶格式修訂，或在原生核取方塊內容控制項裡）\n".utf8))
                 }
+                for report in outcome.tableDefaultsReports {
+                    FileHandle.standardError.write(Data(Self.tableDefaultsNotes(report).utf8))
+                }
                 for skip in outcome.skippedCleanups {
                     FileHandle.standardError.write(Data(Self.cleanupNote(skip).utf8))
                 }
@@ -234,6 +260,17 @@ extension MacDoc.Word.Form {
                 }
             }
             FileHandle.standardError.write(Data("已寫入: \(toDocx)\n".utf8))
+        }
+
+        /// One stderr line per `--table-defaults`, and one more listing the
+        /// cells only partly inside its selection (#250 requirement 1).
+        static func tableDefaultsNotes(_ report: TableDefaultsReport) -> String {
+            let id = TerminalText.sanitize(report.anchor)
+            var out = "--table-defaults \(id)：處理 \(report.fillCells) 個填寫欄儲存格\n"
+            if !report.partialCells.isEmpty {
+                out += "note: --table-defaults \(id)：\(report.partialCells.joined(separator: "、")) 只有一部分在點名的欄列內，未處理\n"
+            }
+            return out
         }
 
         /// One stderr line per `--field` whose cell cleanup was skipped (#253).
