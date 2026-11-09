@@ -50,6 +50,27 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
     /// block carries its own section break and the body has its own final
     /// section properties (#250).
     case lastSectionWouldBeEmpty([String])
+    /// `--table-defaults` written in a form the parser does not accept
+    /// (#250 requirement 1); carries the value as written.
+    case invalidTableDefaults(String, detail: String)
+    /// `--table-defaults` named a paragraph that is in no table.
+    case tableDefaultsNotInTable(String)
+    /// `--table-defaults` named a paragraph in a text box inside a table.
+    case tableDefaultsInTextBox(String)
+    /// The named table's grid cannot be read (see `TableGrid.Unreadable`).
+    case tableGridUnreadable(String, detail: String)
+    /// A column or row number beyond the named table.
+    case tableSelectionOutOfRange(String, detail: String)
+    /// No cell lies wholly inside the selection.
+    case noFillCells(String)
+    /// A paragraph with content in a selected fill cell carries no `w14:paraId`.
+    case fillCellWithoutParaId(String, cell: String)
+    /// Every fill cell of the selection is one that cannot be named (no
+    /// paragraph, or only empty paragraphs without an id) (verify R1).
+    case noTidyableFillCells(String, cells: [String])
+    /// A `GridSelection` built directly, not through the parser, with an
+    /// empty list, a number below 1 or a reversed range (verify R1).
+    case invalidGridSelection(String)
     case conflictingOperations(String, detail: String)
     case carriesSectionBreak(String)
     case splitsField(String)
@@ -101,6 +122,24 @@ public enum FormError: Error, Equatable, CustomStringConvertible {
             return "刪掉 \(ids.joined(separator: "、")) 後，本文不會留下任何內容；請至少留下一段"
         case .lastSectionWouldBeEmpty(let ids):
             return "刪掉 \(ids.joined(separator: "、")) 後，最後一節沒有任何內容（保留的最後一段帶有分節符），Word 會多出一頁空白；請留下分節符之後的一段，或改用 --truncate-from"
+        case .invalidTableDefaults(let value, let detail):
+            return "無效的 --table-defaults: \(value)（\(detail)）。格式為 <paraId>=col:<欄>、<paraId>=row:<列> 或 <paraId>=col:<欄>/row:<列>；欄列號從 1 開始，以逗號分隔，可寫範圍，例如 col:2,4-5 或 row:3-"
+        case .tableDefaultsNotInTable(let id):
+            return "段落 \(id) 不在表格裡，不能用 --table-defaults"
+        case .tableDefaultsInTextBox(let id):
+            return "段落 \(id) 在文字方塊裡，文字方塊外面的表格不算它的表格，不能用 --table-defaults；請點名表格儲存格本身的段落"
+        case .tableGridUnreadable(let id, let detail):
+            return "段落 \(id) 所在表格的欄列位置無法判讀：\(detail)；請改用 --field 逐欄點名"
+        case .tableSelectionOutOfRange(let id, let detail):
+            return "--table-defaults \(id) 點名了\(detail)。欄號是格線欄，可用 macdoc word form classify --grid 查看每一格的欄列範圍"
+        case .noFillCells(let id):
+            return "--table-defaults \(id) 沒有選到任何填寫欄：沒有一格整個落在點名的欄列之內。可用 macdoc word form classify --grid 查看每一格的欄列範圍"
+        case .fillCellWithoutParaId(let id, let cell):
+            return "--table-defaults \(id) 選到的儲存格 \(cell) 裡有內容的段落沒有 w14:paraId，無法定位；請先用 Word 存一次檔（Word 會補上 paraId）"
+        case .noTidyableFillCells(let id, let cells):
+            return "--table-defaults \(id) 選到的填寫欄 \(cells.joined(separator: "、")) 都沒有可以定位的段落（沒有段落，或只有空段落且沒有 w14:paraId），沒有任何一格可以處理"
+        case .invalidGridSelection(let detail):
+            return "無效的欄列選取：\(detail)"
         case .conflictingOperations(let id, let detail):
             return "段落 \(id) 同時被互相衝突的操作點名：\(detail)"
         case .carriesSectionBreak(let id):

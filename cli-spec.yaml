@@ -1086,8 +1086,12 @@ commands:
       - name: input
         required: true
         help: "輸入的 .docx 檔案"
+    flags:
+      - names: ["--grid"]
+        required: false
+        help: "在類型與文字之間多印一欄：段落所在儲存格在表格格線上的位置（t<表格>:r<列>c<欄>，合併儲存格寫範圍），供 apply --table-defaults 點名欄列；不在儲存格裡的段落印 -，格線無法判讀的表格印 t<表格>:?"
   - path: "macdoc word form apply"
-    abstract: "整理已填寫的表單：統一填寫欄、方框字型、清單勾選、插入、移除、截斷"
+    abstract: "整理已填寫的表單：統一填寫欄（逐欄或整張表）、方框字型、清單勾選、插入、移除、截斷"
     arguments:
       - name: input
         required: true
@@ -1106,6 +1110,11 @@ commands:
         value_name: pt
         required: false
         help: "填寫欄字級（pt，0.5 為單位）；省略時取指定欄位字級的眾數，同票取大"
+      - names: ["--table-defaults"]
+        value_name: "paraId=col:欄/row:列"
+        required: false
+        repeating: true
+        help: "整張表的填寫欄（可重複）：以表格裡任一段落點名表格，用 col:<欄>、row:<列> 或 col:<欄>/row:<列> 點名填寫欄的格線欄列（從 1 開始，逗號分隔，可寫範圍，如 col:2,4-5 或 row:3-）；整格落在點名欄列內的儲存格照 --field 處理，其他儲存格不動，只有一部分在範圍內的儲存格列在 stderr；同一張表點名多次取聯集。欄列位置用 classify --grid 查看"
       - names: ["--checkbox-font"]
         value_name: font
         required: false

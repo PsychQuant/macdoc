@@ -87,6 +87,8 @@ public struct FormResult {
     /// True when the deletions left the body ending with a table (or another
     /// block that is not a paragraph) and an empty final paragraph was added (#250).
     public let addedFinalParagraph: Bool
+    /// What each `--table-defaults` did, in plan order (#250 requirement 1).
+    public let tableDefaultsReports: [TableDefaultsReport]
 }
 
 public struct FormPlan: Equatable {
@@ -99,10 +101,13 @@ public struct FormPlan: Equatable {
     /// Paragraph ids whose body-level table `--remove-table` deletes (#250).
     public var removedTables: [String]
     public var truncateFrom: String?
+    /// Tables whose fill columns or rows are tidied as `--field` tidies one
+    /// paragraph (#250 requirement 1).
+    public var tableDefaults: [TableDefaults]
 
     public init(fields: [String] = [], fieldSize: FieldSize? = nil, checkboxFont: String? = nil,
                 tickList: [String] = [], insertions: [FormInsertion] = [], removals: [String] = [],
-                removedTables: [String] = [], truncateFrom: String? = nil) {
+                removedTables: [String] = [], truncateFrom: String? = nil, tableDefaults: [TableDefaults] = []) {
         self.fields = fields
         self.fieldSize = fieldSize
         self.checkboxFont = checkboxFont
@@ -111,21 +116,22 @@ public struct FormPlan: Equatable {
         self.removals = removals
         self.removedTables = removedTables
         self.truncateFrom = truncateFrom
+        self.tableDefaults = tableDefaults
     }
 
     public var hasOperations: Bool {
         !fields.isEmpty || checkboxFont != nil || !tickList.isEmpty || !insertions.isEmpty
-            || !removals.isEmpty || !removedTables.isEmpty || truncateFrom != nil
+            || !removals.isEmpty || !removedTables.isEmpty || truncateFrom != nil || !tableDefaults.isEmpty
     }
 
     /// Every paragraph id the plan names, without duplicates, in plan order.
     var namedIds: [String] {
-        unique(fields + tickList + insertions.map(\.anchor) + removals + removedTables + (truncateFrom.map { [$0] } ?? []))
+        unique(fields + tableDefaults.map(\.anchor) + tickList + insertions.map(\.anchor) + removals + removedTables
+            + (truncateFrom.map { [$0] } ?? []))
     }
 
     public func apply(toDocumentXML input: [UInt8]) throws -> FormResult {
         var editor = try XMLEditor(input)
-        let fields = unique(self.fields)
         let ticks = unique(self.tickList)
         let removals = unique(self.removals)
         let tables = unique(self.removedTables)
@@ -137,7 +143,12 @@ public struct FormPlan: Equatable {
         }
         for id in namedIds { _ = try FormOperations.locate(id, in: editor.index) }
         for id in tables { _ = try FormOperations.tableToRemove(id, in: editor.index) }
-        try checkConflicts(fields: fields, ticks: ticks, removals: removals, index: editor.index)
+        // A table's fill paragraphs join the fields and go through every check
+        // a --field goes through (#250 requirement 1).
+        let expansion = try FormOperations.expandTableDefaults(tableDefaults, in: editor.index)
+        let fields = unique(self.fields + expansion.fields)
+        try checkConflicts(fields: fields, ticks: ticks, removals: removals,
+                           named: unique(namedIds + expansion.fields), index: editor.index)
         for id in fields { try FormOperations.checkField(id, in: editor.index) }
         for id in ticks { try FormOperations.checkTick(id, in: editor.index) }
         for id in removals { try FormOperations.checkRemove(id, in: editor.index) }
@@ -164,8 +175,9 @@ public struct FormPlan: Equatable {
             }
         }
 
-        // 2. Run the operations in the fixed order.
-        let protected = Set(namedIds)
+        // 2. Run the operations in the fixed order. A --table-defaults anchor
+        // only says which table is meant, so it is not kept from cleanup.
+        let protected = Set(fields + ticks + insertions.map(\.anchor) + removals + tables + (truncateFrom.map { [$0] } ?? []))
         var cleanupSkips: [CleanupSkip] = []
         if let size {
             for id in fields {
@@ -189,14 +201,16 @@ public struct FormPlan: Equatable {
         try Self.checkWellFormed(editor.bytes)
         return FormResult(documentXML: editor.bytes, fieldSize: size, fieldSizeWasDerived: derived,
                           skippedCheckboxRuns: skipped, skippedCleanups: cleanupSkips,
-                          addedFinalParagraph: addedFinalParagraph)
+                          addedFinalParagraph: addedFinalParagraph, tableDefaultsReports: expansion.reports)
     }
 
     /// Refuses plans whose later steps would silently undo earlier ones: a
     /// removed paragraph that another operation also names, a paragraph that
     /// another operation names inside a table `--remove-table` deletes, and
     /// any named paragraph inside the range `--truncate-from` cuts away.
-    func checkConflicts(fields: [String], ticks: [String], removals: [String], index: XMLTagIndex) throws {
+    /// `named` is every id the plan names plus the fields `--table-defaults` selects.
+    func checkConflicts(fields: [String], ticks: [String], removals: [String], named: [String],
+                        index: XMLTagIndex) throws {
         let edited = Set(fields + ticks + insertions.map(\.anchor))
         if let id = removals.first(where: { edited.contains($0) }) {
             throw FormError.conflictingOperations(id, detail: "--remove 會刪掉 --field / --tick-list / --insert-after 處理過的段落")
@@ -205,7 +219,7 @@ public struct FormPlan: Equatable {
         // text box) would disappear with it while the command reports success.
         for removed in removals {
             let range = index.elementRange(try FormOperations.locate(removed, in: index))
-            for id in namedIds where id != removed {
+            for id in named where id != removed {
                 let start = index.tags[try FormOperations.locate(id, in: index)].start
                 if range.contains(start) {
                     throw FormError.conflictingOperations(id, detail: "位在 --remove \(removed) 會刪掉的段落裡（例如文字方塊）")
@@ -214,7 +228,9 @@ public struct FormPlan: Equatable {
         }
         // A paragraph another operation names inside a removed table would
         // vanish with it while the command reports success (#250).
-        let others = unique(fields + ticks + insertions.map(\.anchor) + removals + (truncateFrom.map { [$0] } ?? []))
+        // A --table-defaults anchor comes first, so a conflict names the id the caller wrote.
+        let others = unique(tableDefaults.map(\.anchor) + fields + ticks + insertions.map(\.anchor) + removals
+            + (truncateFrom.map { [$0] } ?? []))
         for tableId in unique(removedTables) {
             let range = index.elementRange(try FormOperations.tableToRemove(tableId, in: index))
             for id in others where range.contains(index.tags[try FormOperations.locate(id, in: index)].start) {
@@ -226,7 +242,7 @@ public struct FormPlan: Equatable {
             throw FormError.conflictingOperations(cutId, detail: "--truncate-from 會把這一段一起截掉")
         }
         let cut = index.tags[try FormOperations.locate(cutId, in: index)].start
-        for id in namedIds where id != cutId {
+        for id in named where id != cutId {
             if index.tags[try FormOperations.locate(id, in: index)].start >= cut {
                 throw FormError.conflictingOperations(id, detail: "位在 --truncate-from \(cutId) 會截掉的範圍內")
             }

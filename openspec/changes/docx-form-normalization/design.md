@@ -27,7 +27,7 @@ Constraints found while scouting:
 - Changing raw-channel slot substitution semantics or the `// @slot-raw` directive grammar.
 - Headers, footers, footnotes and other parts. Only `word/document.xml` is edited.
 - Resolving list numbering inherited from paragraph styles; only a paragraph's own `w:numPr` counts.
-- Applying field normalization to a whole table at once. The maintainer decided (2026-11-04) that a table-wide pass leaves label cells untouched; how fill cells are told from label cells is still to be decided (PsychQuant/macdoc#250). Removing a whole table in the middle of the body was added in PsychQuant/macdoc#250 (`--remove-table`).
+- Telling fill cells from label cells by their content. A whole table is tidied with `--table-defaults`, but only the cells the caller names by grid column and row are fill cells (PsychQuant/macdoc#250; see "Whole-table field normalization is named on the grid"). Removing a whole table in the middle of the body was added in the same issue (`--remove-table`).
 
 ## Decisions
 
@@ -59,6 +59,16 @@ The box glyphs are exactly U+25A1 □, U+25A0 ■, U+2610 ☐, U+2611 ☑ and U+
 ### Field size defaults to the most common designated size
 
 When `--field` is given without `--field-size`, the size is the most common explicit `w:sz` value among the designated paragraphs: each text-bearing run's own `w:rPr` contributes its value; a designated paragraph with no text-bearing run contributes its paragraph-mark size. Ties go to the larger value. The chosen size is printed to stderr. When no explicit size is found, `apply` refuses and asks for `--field-size`. `--field-size` takes points in steps of 0.5 between 1 and 1638 and is written as half-points.
+
+### Whole-table field normalization is named on the grid
+
+`--table-defaults <paraId>=col:…/row:…` tidies every fill cell of one table as `--field` tidies one paragraph (PsychQuant/macdoc#250). The maintainer decided that label cells stay untouched (2026-11-04) and that the caller names the fill cells by column or row number (2026-11-08); comparing against a blank template and dropping the whole-table pass were the other candidates. Five choices follow from that:
+
+- Columns are grid columns (`w:gridBefore`, `w:gridSpan`), not the n-th `w:tc` of a row, because the number of cells per row changes with merged cells. `classify --grid` prints each cell's position, since Word does not show grid column numbers and an irregular form has more grid columns than visible columns.
+- A cell is a fill cell only when it lies wholly inside the selection. A cell only partly inside (a title row across the table, an address across a label column) is left alone and listed on stderr; refusing instead would make column selection unusable on most forms, which have a full-width row somewhere.
+- Several selections on one table take the union, so a form with a regular part and an irregular part can be named in two pieces. Each selection must still find a fill cell of its own, which catches a mistyped number.
+- A grid that cannot be read (bad numbers, the legacy `w:hMerge`, a continuation cell with nothing above it) is refused rather than guessed; `--field` stays available for such tables.
+- A fill cell's field paragraphs are its non-empty paragraphs, or its first paragraph when all are empty, so the existing cleanup still removes its empty paragraphs; a paragraph with content must carry a `w14:paraId`, because every later step finds paragraphs by id. An empty cell that cannot be named, or a cell with no paragraph, holds nothing to tidy and is left alone and listed (verify round 1), as long as the selection tidies at least one cell.
 
 ### All paragraph ids are validated before any edit, operations run in a fixed order
 
@@ -111,4 +121,6 @@ Alternatives: always using a plain rename after an existence check (round-1 defe
 - [Exclusive rename is unavailable on some filesystems] → falls back to an existence check plus a plain rename; the race window remains there.
 - [Two steps (render, then apply) instead of one] → the swiftify skill documents the order and the kind → option table.
 - [MCP callers do not get the operations] → recorded as a non-goal; PsychQuant/che-word-mcp#300.
-- [The table-level default is per designated paragraph] → decided by the maintainer and tracked in PsychQuant/macdoc#250; a whole table in the middle of the body is removed with `--remove-table` (#250).
+- [Grid column numbers are not what a person counts in Word] → `classify --grid` prints them, and a cell only partly inside a selection is left alone and listed rather than tidied (PsychQuant/macdoc#250).
+- [An empty fill cell that cannot be named is left untidied while the command succeeds] → its first paragraph has no `w14:paraId`, so it cannot be addressed; it is listed on stderr, and a selection that tidies nothing is refused. Word gives every paragraph an id when it saves, so this only reaches paragraphs written by other tools, or added by them after the last Word save; a caller that must have every cell tidied reads stderr, or saves the form in Word first (verify round 2).
+- [One field size for every field of a run] → `--table-defaults` fields share the size with `--field` fields, as the existing rule takes one size for all designated paragraphs; two tables with different conventions are tidied in two runs or with `--field-size`.

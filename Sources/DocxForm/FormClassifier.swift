@@ -68,6 +68,26 @@ public struct ClassifiedParagraph: Equatable {
     public let paraId: String
     public let kind: ParagraphKind
     public let text: String
+    /// Where the paragraph's cell sits on its table's grid; only filled when
+    /// `classify(…, withCells: true)` asks for it, and nil outside cells.
+    public var cell: CellPosition? = nil
+}
+
+/// A cell's place on its table's grid, as `--table-defaults` counts it
+/// (#250 requirement 1). Tables are numbered in document order, nested
+/// tables included; rows and grid columns count from 1.
+public enum CellPosition: Equatable, CustomStringConvertible {
+    case cell(table: Int, rows: ClosedRange<Int>, columns: ClosedRange<Int>)
+    /// The table's grid cannot be read (see `TableGrid.Unreadable`).
+    case unreadableTable(table: Int)
+
+    /// `t1:r2c3`, `t1:r2-4c2-3`, or `t2:?`.
+    public var description: String {
+        switch self {
+        case .cell(let table, let rows, let columns): return "t\(table):" + TableGrid.label(rows: rows, columns: columns)
+        case .unreadableTable(let table): return "t\(table):?"
+        }
+    }
 }
 
 public enum FormClassifier {
@@ -102,15 +122,19 @@ public enum FormClassifier {
 
     /// Every paragraph that carries a `w14:paraId`, in document order. An
     /// unreadable numbering part disables list-checkbox detection only.
-    public static func classify(documentXML: [UInt8], numberingXML: [UInt8]?) throws -> [ClassifiedParagraph] {
+    /// `withCells` adds each cell paragraph's grid position (#250).
+    public static func classify(documentXML: [UInt8], numberingXML: [UInt8]?,
+                                withCells: Bool = false) throws -> [ClassifiedParagraph] {
         let index = try XMLTagIndex(documentXML)
         let numbering = numberingLevels(numberingXML)
+        var positions = CellPositions(index: index)
         var out: [ClassifiedParagraph] = []
         for p in index.elements(named: "w:p") {
             guard let id = index.attribute("w14:paraId", of: p) else { continue }
             out.append(ClassifiedParagraph(paraId: id,
                                            kind: kind(of: p, in: index, numbering: numbering),
-                                           text: ownText(of: p, in: index)))
+                                           text: ownText(of: p, in: index),
+                                           cell: withCells ? positions.position(of: p) : nil))
         }
         return out
     }
@@ -155,6 +179,29 @@ public enum FormClassifier {
         FormLocator.ownElements(named: "w:t", of: p, in: index)
             .map { index.text(of: $0) }
             .joined()
+    }
+}
+
+/// Grid positions of cell paragraphs, reading each table's grid once.
+struct CellPositions {
+    let index: XMLTagIndex
+    private var ordinals: [Int: Int] = [:]
+    private var grids: [Int: TableGrid?] = [:]
+
+    init(index: XMLTagIndex) {
+        self.index = index
+        for (k, table) in index.elements(named: "w:tbl").enumerated() { ordinals[table] = k + 1 }
+    }
+
+    mutating func position(of p: Int) -> CellPosition? {
+        guard let tc = FormClassifier.enclosingCell(of: p, in: index),
+              let table = index.ancestor(of: tc, named: "w:tbl"),
+              let ordinal = ordinals[table] else { return nil }
+        if grids[table] == nil { grids[table] = .some(try? TableGrid(table: table, in: index)) }
+        guard let grid = grids[table] ?? nil, let cell = grid.cell(containing: tc) else {
+            return .unreadableTable(table: ordinal)
+        }
+        return .cell(table: ordinal, rows: cell.rows, columns: cell.columns)
     }
 }
 

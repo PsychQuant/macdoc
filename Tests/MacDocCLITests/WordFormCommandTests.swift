@@ -475,4 +475,125 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("0000B0D1") && result.stderr.contains("不在表格裡"), result.stderr)
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
+
+    // MARK: --table-defaults and classify --grid (#250 requirement 1)
+
+    private func cell(_ content: String, tcPr extra: String = "") -> String {
+        "<w:tc><w:tcPr><w:tcW w:w=\"3000\" w:type=\"dxa\"/>\(extra)</w:tcPr>\(content)</w:tc>"
+    }
+
+    /// Two rows of a label column and a fill column, after the form's body.
+    private var labelFillTable: String {
+        let sized = "<w:rPr><w:sz w:val=\"20\"/></w:rPr>"
+        return "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/><w:gridCol w:w=\"3000\"/></w:tblGrid>"
+            + "<w:tr>" + cell(paragraph("0000D001", run("姓名"))) + cell(paragraph("0000D002", run("王小明", rPr: sized)) + "<w:p/>") + "</w:tr>"
+            + "<w:tr>" + cell(paragraph("0000D003", run("電話"))) + cell(paragraph("0000D004", run("0912", rPr: sized))) + "</w:tr>"
+            + "</w:tbl><w:p/>"
+    }
+
+    func testApplyTableDefaultsTidiesTheNamedColumnOnly() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        try makeForm(at: form, extraBody: labelFillTable)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--table-defaults", "0000D001=col:2",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("填寫欄字級：10 pt"), result.stderr)
+        XCTAssertTrue(result.stderr.contains("--table-defaults 0000D001：處理 2 個填寫欄儲存格"), result.stderr)
+        let xml = try documentXML(output)
+        for id in ["0000D002", "0000D004"] {
+            XCTAssertTrue(xml.contains("<w:p w14:paraId=\"\(id)\"><w:pPr><w:jc w:val=\"left\"/>"), id)
+        }
+        XCTAssertTrue(xml.contains(paragraph("0000D001", run("姓名"))), "the label column is unchanged")
+        XCTAssertTrue(xml.contains(paragraph("0000D003", run("電話"))), "the label column is unchanged")
+    }
+
+    func testApplyTableDefaultsNotesCellsOnlyPartlySelected() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/><w:gridCol w:w=\"3000\"/></w:tblGrid>"
+            + "<w:tr>" + cell(paragraph("0000E001", run("申請表")), tcPr: "<w:gridSpan w:val=\"2\"/>") + "</w:tr>"
+            + "<w:tr>" + cell(paragraph("0000E002", run("姓名"))) + cell(paragraph("0000E003", run("值"))) + "</w:tr>"
+            + "</w:tbl><w:p/>"
+        try makeForm(at: form, extraBody: table)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path,
+            "--table-defaults", "0000E002=col:2", "--field-size", "12",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: --table-defaults 0000E002：r1c1-2 只有一部分在點名的欄列內，未處理"), result.stderr)
+        XCTAssertTrue(try documentXML(output).contains("<w:sz w:val=\"24\"/>"), "--field-size applies to table fields")
+    }
+
+    func testApplyRefusesAMalformedTableDefaults() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        try makeForm(at: form, extraBody: labelFillTable)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--table-defaults", "0000D001=column:2",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("無效的 --table-defaults: 0000D001=column:2"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testApplyRefusesAColumnBeyondTheTable() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        try makeForm(at: form, extraBody: labelFillTable)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path, "--table-defaults", "0000D001=col:3",
+        ])
+        XCTAssertNotEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.contains("點名了第 3 欄，但這張表只有 2 欄"), result.stderr)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testApplyTableDefaultsNotesFillCellsItCannotAddress() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let output = dir.appendingPathComponent("o.docx")
+        let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/><w:gridCol w:w=\"3000\"/></w:tblGrid>"
+            + "<w:tr>" + cell(paragraph("0000E201", run("姓名"))) + cell(paragraph("0000E202", run("值"))) + "</w:tr>"
+            + "<w:tr>" + cell(paragraph("0000E203", run("電話"))) + cell("<w:p/>") + "</w:tr>"
+            + "</w:tbl><w:p/>"
+        try makeForm(at: form, extraBody: table)
+        let result = try CLITestHelper.run([
+            "word", "form", "apply", form.path, "--to-docx", output.path,
+            "--table-defaults", "0000E201=col:2", "--field-size", "12",
+        ])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: --table-defaults 0000E201：r2c2 沒有可以定位的段落"), result.stderr)
+    }
+
+    func testClassifyGridAddsEachCellsPosition() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        try makeForm(at: form)
+        let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertEqual(result.stdout.split(separator: "\n").map(String.init), [
+            "0000B0D1\tbody\t-\t申請人資料",
+            "0000C0DE\ttable-field\tt1:r1c1\t王小明",
+            "0000C0EE\tcheckbox-line\tt1:r1c2\t)  \u{25A1}",
+            "0000A0A0\tlist-checkbox\t-\t第一個選項",
+        ])
+    }
+
+    func testClassifyGridMarksATableItCannotRead() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/></w:tblGrid><w:tr>"
+            + cell(paragraph("0000E101", run("舊式合併")), tcPr: "<w:hMerge w:val=\"restart\"/>") + "</w:tr></w:tbl><w:p/>"
+        try makeForm(at: form, extraBody: table)
+        let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stdout.contains("0000E101\ttable-field\tt2:?\t舊式合併"), result.stdout)
+        XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀"), result.stderr)
+    }
 }
