@@ -50,7 +50,9 @@ let package = Package(
         // value:instance:) + ReducerError: LocalizedError.
         // 3.20.0 (macdoc#251): OOXMLEdit.insertParagraph / insertParagraphBefore
         // gain inheritAnchorFormat, used by `docx apply`'s insert_paragraph.
-        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.20.0"),
+        // 3.21.0 (macdoc#274): the DocxForm product behind `macdoc word form`,
+        // moved here from this repo (ooxml-swift#238).
+        .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.21.0"),
     ],
     targets: [
         // cli-spec.yaml generator (#72): dump-help decoder, project schema
@@ -64,21 +66,14 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ]
         ),
-        // macdoc#249: form normalization (`macdoc word form`). String-level
-        // edits of word/document.xml only — deliberately no OOXMLSwift
-        // dependency, so a raw-channel form is never re-serialized through
-        // the typed model.
-        .target(
-            name: "DocxForm",
-            dependencies: [
-                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-            ]
-        ),
         .executableTarget(
             name: "MacDocCLI",
             dependencies: [
                 "NotabilityContainerDetection",
-                "DocxForm",
+                // `macdoc word form` (macdoc#249): string-level edits of
+                // word/document.xml, never re-serialized through the typed model.
+                // The library lives in ooxml-swift since 3.21.0 (macdoc#274).
+                .product(name: "DocxForm", package: "ooxml-swift"),
                 .product(name: "CommonConverterSwift", package: "common-converter-swift"),
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "WordToMD", package: "word-to-md-swift"),
@@ -111,7 +106,7 @@ let package = Package(
             dependencies: [
                 "MacDocCLI",
                 "NotabilityContainerDetection",
-                "DocxForm",
+                .product(name: "DocxForm", package: "ooxml-swift"),
                 "CLISpec",
                 .product(name: "NoteCore", package: "note-core-swift"),
                 // Authoring API for building synthetic docx fixtures in tests
@@ -120,13 +115,6 @@ let package = Package(
                 .product(name: "TokenCounter", package: "TokenCounter"),
             ],
             exclude: ["README.md"]
-        ),
-        .testTarget(
-            name: "DocxFormTests",
-            dependencies: [
-                "DocxForm",
-                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-            ]
         ),
     ]
 )
