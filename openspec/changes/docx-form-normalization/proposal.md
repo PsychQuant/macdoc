@@ -4,6 +4,8 @@ Filling a table-dense official form with swiftify puts every value in the right 
 
 ## What Changes
 
+> Since PsychQuant/macdoc#274 the `DocxForm` library is ooxml-swift's `DocxForm` product (3.21.0, PsychQuant/ooxml-swift#238), not a target in this repo; see design.md, "The library lives in ooxml-swift; the command and its flags stay in macdoc". The items below describe the change as first proposed.
+
 - New root-level target `DocxForm`: a paragraph classifier and string-level operations on `word/document.xml` that never re-serialize through the typed model, so raw-channel forms keep every byte outside the edited elements.
 - New command `macdoc word form classify <in.docx>`: lists every paragraph that carries a `w14:paraId` with its kind from a closed enumeration (`list-checkbox`, `checkbox-line`, `table-field`, `body`) and a short text preview.
 - New command `macdoc word form apply <in.docx> --to-docx <out.docx>` with these operations: `--field` (table field normalization: one size, left alignment, vertical centre, no style/indent, no text-less sibling paragraphs), `--field-size`, `--checkbox-font` (box glyphs drawn in one font), `--tick-list` (tick a box that is a list bullet), `--insert-after` (new paragraphs that inherit the anchor's format), `--remove`, `--truncate-from` (cut the body and keep the right section settings).

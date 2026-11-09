@@ -71,3 +71,9 @@
 - [x] 10.5 Add `apply --table-defaults` and `classify --grid`, accept `--field-size` with `--table-defaults`, and regenerate `cli-spec.yaml`. Verify: `WordFormCommandTests`, `CLISpecContractTests` and `CLISpecDriftTests` pass.
 - [x] 10.6 [P] Align documentation: the spec, this design's Non-Goals, Decisions and Risks, the proposal, both skills and the CHANGELOG. Verify: content review and `swift test` passing.
 - [x] 10.7 Verify round 1 fixes: check `GridSelection` at construction so a library caller cannot build a selection that stops the process; leave empty fill cells without an id and cells without a paragraph alone and list them, refusing a selection none of whose fill cells can be tidied; state in the spec that the anchor counts in the conflict checks. Verify: `Issue250TableDefaultsTests` and `WordFormCommandTests` cover each, and each fails when its code is reverted.
+
+## 11. The library moves to ooxml-swift (PsychQuant/macdoc#274)
+
+- [x] 11.1 Depend on ooxml-swift's `DocxForm` product (3.21.0, PsychQuant/ooxml-swift#238) instead of the root-level target, and delete `Sources/DocxForm` and `Tests/DocxFormTests`. Verify: `swift build --build-tests` succeeds; `Package.resolved` pins ooxml-swift 3.21.0.
+- [x] 11.2 Move `ApplyOption` and `ParagraphKind.applyOption` into `Sources/MacDocCLI/WordFormApplyOption.swift`, unchanged apart from access level. Verify: `FormKindHandlingTests` and `WordFormCommandTests` pass.
+- [x] 11.3 [P] Align documentation: this design's library-location decision, the proposal's note, the reverse requirement's sentence on where the mapping lives, `CLAUDE.md`, and the plugin CHANGELOG entry that named DocxForm as the mapping's home. Verify: outside this change's history notes, no file in this repo describes `Sources/DocxForm` as a path here.
