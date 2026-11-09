@@ -52,7 +52,6 @@ macdoc/                        # Monorepo 根目錄（同時也是 CLI 專案）
 │       ├── MacDoc+Bib.swift   # Bib 子命令群（.bib → APA 7 HTML/Markdown/JSON）
 │       ├── MacDoc+Config.swift# Config 子命令群（AI 設定管理）
 │       └── CLIHelpers.swift   # 共用 helpers（validatedInputURL, writeStringOutput 等）
-│   └── DocxForm/              # word form 的表單整理 library（字串層編輯 word/document.xml，只依賴 ZIPFoundation，#249）
 ├── Tests/
 ├── docs/                      # 開發文檔和對話記錄
 │   └── plans/                 # 實作計畫
@@ -101,7 +100,7 @@ pdf-to-latex-swift ──→ pdf-visual-diff-swift (page geometry in compare)
 macdoc CLI ──→ bib-apa-to-html-swift ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ bib-apa-to-md-swift  ──→ bib-apa-swift ──→ biblatex-apa-swift
 macdoc CLI ──→ word-builder-swift ──→ ooxml-swift (fluent Swift API for .docx, 1:1 mirror of docx.js)
-macdoc CLI ──→ DocxForm (in-repo target: string-level form normalization for `word form`, ZIPFoundation only — no ooxml-swift, #249)
+macdoc CLI ──→ ooxml-swift's DocxForm product (string-level form normalization for `word form`, ZIPFoundation only — does not use OOXMLSwift; in this repo until #274, ooxml-swift 3.21.0+)
 
 che-pdf-mcp
 └──→ Vision.framework / surya-swift
@@ -452,16 +451,9 @@ swift build
 - `Sources/MacDocCLI/MacDoc+Bib.swift` - Bib 子命令（.bib → APA 7 HTML/Markdown，支援 --key 過濾）
 - `Sources/MacDocCLI/MacDoc+Config.swift` - Config 子命令（AI 設定管理）
 
-### DocxForm
-只以字串修改 `word/document.xml` 裡被點名的元素，不經 ooxml-swift 的 typed 模型（typed 重新序列化會改寫正文，ooxml-swift#133）；其他 part 逐位元組不變。
-- `Sources/DocxForm/XMLTagIndex.swift` - quote-aware 的 tag 索引（不用 regex；跳過註解、CDATA、PI；拒絕 DOCTYPE；巢狀深度與 tag 數上限；建立時一次建好 paraId 與元素名對照表，#252）
-- `Sources/DocxForm/FormClassifier.swift` - 段落類型（封閉列舉，依結構判定，不靠字面）
-- `Sources/DocxForm/FormOperations.swift`、`FormPlan.swift` - 各項操作與全有全無的計畫（所有 paraId 先驗、衝突整次拒絕、固定順序 field → tick-list → insert → checkbox-font → remove（段落與表格）→ truncate）
-- `Sources/DocxForm/FormEditing.swift` - 字串層編輯與 ECMA-376 子元素順序
-- `Sources/DocxForm/TableGrid.swift` - 表格的格線：每格依 `w:gridBefore`／`w:gridSpan`／`w:vMerge` 算出列與格線欄的範圍，讀不懂的格線拒絕（#250）
-- `Sources/DocxForm/TableDefaults.swift` - `--table-defaults` 的語法解析與展開：整格落在點名欄列內的儲存格才是填寫欄，其段落併入 `--field`（#250）
-- `Sources/DocxForm/FormRanges.swift` - `--remove`／`--remove-table`／`--truncate-from` 的跨段落標記：成對範圍標記的保留與搬移、欄位與註解引用的拆開檢查、Markup Compatibility 標記的拒絕（#253）
-- `Sources/DocxForm/DocxPackage.swift` - 只換 `word/document.xml` 的封裝改寫（0700 暫存資料夾、排他 rename、不覆寫既有輸出）；entry 數與名稱檢查、只解壓指定 part 的 `readParts`（#252）
+### DocxForm（ooxml-swift 的 product，3.21.0 起）
+`macdoc word form` 背後的函式庫，#274 起住在 ooxml-swift（`Sources/DocxForm`，PsychQuant/ooxml-swift#238），macdoc 以 `.product(name: "DocxForm", package: "ooxml-swift")` 依賴它。只以字串修改 `word/document.xml` 裡被點名的元素，不經 ooxml-swift 的 typed 模型（typed 重新序列化會改寫正文，ooxml-swift#133）；其他 part 逐位元組不變。檔案說明見 ooxml-swift 的原始碼；修改表單整理的行為在 ooxml-swift 開 issue。
+- `Sources/MacDocCLI/WordFormApplyOption.swift` - 段落類型 → `word form apply` 旗標的對照（`ApplyOption`、`ParagraphKind.applyOption`，#255）。它是 CLI 的取用方式，不是格式，所以留在 macdoc，不在 ooxml-swift（#274、`.claude/rules/format-library-vs-access-surface.md`）
 
 ### pdf-to-latex-swift
 - `Sources/PDFToLaTeXCore/AIConfig.swift` - AI CLI 工具設定

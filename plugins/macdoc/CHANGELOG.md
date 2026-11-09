@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `word reverse --slot` 的整理提示改由 DocxForm 內的一份對照（`ParagraphKind.applyOption`）產生，輸出不變。swiftify skill 的分流表有測試比對這份對照：每個類別恰好一列、列出同一個選項，沒有整理選項的類別不提任何類別的整理選項。macdoc SKILL.md 以選項為列的說明表仍是手寫（PsychQuant/macdoc#255）。
+- `macdoc word form` 背後的表單整理函式庫改用 ooxml-swift 3.21.0 的 `DocxForm` product（PsychQuant/macdoc#274，PsychQuant/ooxml-swift#238），行為不變。
+- `word reverse --slot` 的整理提示改由 CLI 內的一份對照（`ParagraphKind.applyOption`）產生，輸出不變。swiftify skill 的分流表有測試比對這份對照：每個類別恰好一列、列出同一個選項，沒有整理選項的類別不提任何類別的整理選項。macdoc SKILL.md 以選項為列的說明表仍是手寫（PsychQuant/macdoc#255）。
 - `macdoc word form apply`（需要下一版 CLI）的刪除會守住本文層的結構（PsychQuant/macdoc#250）。原檔本來就是這樣的情況不擋：
   - 刪完後原本被表格以外的區塊隔開的兩張表會緊鄰時拒絕（Word 會把它們併成一張）；以前 `--remove` 刪掉兩張表之間唯一的段落會照樣寫出。
   - 刪到本文沒有內容時拒絕。
