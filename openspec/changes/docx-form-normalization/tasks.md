@@ -76,4 +76,4 @@
 
 - [x] 11.1 Depend on ooxml-swift's `DocxForm` product (3.21.0, PsychQuant/ooxml-swift#238) instead of the root-level target, and delete `Sources/DocxForm` and `Tests/DocxFormTests`. Verify: `swift build --build-tests` succeeds; `Package.resolved` pins ooxml-swift 3.21.0.
 - [x] 11.2 Move `ApplyOption` and `ParagraphKind.applyOption` into `Sources/MacDocCLI/WordFormApplyOption.swift`, unchanged apart from access level. Verify: `FormKindHandlingTests` and `WordFormCommandTests` pass.
-- [x] 11.3 [P] Align documentation: this design's library-location decision, `CLAUDE.md`, and the plugin CHANGELOG entry that named DocxForm as the mapping's home. Verify: no path under `Sources/DocxForm` remains outside the task history.
+- [x] 11.3 [P] Align documentation: this design's library-location decision, the proposal's note, the reverse requirement's sentence on where the mapping lives, `CLAUDE.md`, and the plugin CHANGELOG entry that named DocxForm as the mapping's home. Verify: outside this change's history notes, no file in this repo describes `Sources/DocxForm` as a path here.

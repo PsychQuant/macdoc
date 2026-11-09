@@ -51,7 +51,7 @@ let package = Package(
         // 3.20.0 (macdoc#251): OOXMLEdit.insertParagraph / insertParagraphBefore
         // gain inheritAnchorFormat, used by `docx apply`'s insert_paragraph.
         // 3.21.0 (macdoc#274): the DocxForm product behind `macdoc word form`,
-        // moved here from this repo (ooxml-swift#238).
+        // moved into ooxml-swift from this repo (ooxml-swift#238).
         .package(url: "https://github.com/PsychQuant/ooxml-swift.git", from: "3.21.0"),
     ],
     targets: [
