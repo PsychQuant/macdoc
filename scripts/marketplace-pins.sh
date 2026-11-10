@@ -10,10 +10,12 @@
 #
 # Subcommands
 #   status [--json]
-#       Read-only report: per plugin the plugin.json and marketplace values,
-#       the upstream latest release, whether that release ships the binary and
-#       its .sha256, and the locally installed version; plus the state of this
-#       checkout relative to its upstream branch.
+#       Report: per plugin the plugin.json and marketplace values, the
+#       upstream latest release, whether that release ships the binary and its
+#       .sha256, and the locally installed version; plus the state of this
+#       checkout relative to its upstream branch. Changes no file in the
+#       working tree, the index or any local branch; it does run `git fetch`
+#       (no --prune), which updates remote-tracking refs.
 #   update <plugin> [--to X.Y.Z] [--plugin-version X.Y.Z] [--dry-run]
 #       Moves one plugin's pin to a release (default: latest), commits the
 #       change locally and appends a row to docs/marketplace-pin-history.md.
@@ -29,16 +31,22 @@
 # status exit codes
 #    0  everything consistent and up to date
 #   10  something is known to be behind or inconsistent: a pin older than the
-#       latest release, a marketplace entry that differs from its plugin.json,
-#       an installed version that differs from the pin, or a checkout that is
-#       not in sync with its upstream
+#       latest release, a pinned release (= the latest) missing its binary or
+#       .sha256, a marketplace entry that differs from its plugin.json, an
+#       installed version that differs from the pin, or a checkout that is not
+#       in sync with its upstream (including upstream-gone: the configured
+#       upstream branch does not exist on the remote)
 #    2  nothing is known to be behind, but something could not be determined
-#       (release lookup failed, plugin installed but its installed-version
-#       record missing or unreadable, fetch failed)
+#       (release lookup failed, a pin or latest tag that is not X.Y.Z, plugin
+#       installed but its installed-version record missing or unreadable,
+#       fetch failed)
 #   10 takes precedence over 2: a known problem is reported even when other
 #   facts are unknown. A plugin that is not installed at all (MCP: no
 #   directory in the plugin cache; CLI: no binary in the install dir) affects
 #   neither: it is shown as 未安裝 and as installed_state "not-installed".
+#   Notes that never change the exit code: the latest release is older than
+#   the pin (it may be a prerelease or withdrawn), a newer latest release is
+#   missing an asset, a plugin.json key that the wrappers read appears twice.
 # Other subcommands: 0 success, 1 refused or failed, 64 usage error.
 #
 # Environment overrides (used by scripts/tests/marketplace-pins.sh)
@@ -68,7 +76,13 @@ die() { echo "錯誤：$*" >&2; exit 1; }
 usage_error() { echo "用法錯誤：$*" >&2; echo "用法：$(basename "$0") status [--json] | update <plugin> [--to X.Y.Z] [--plugin-version X.Y.Z] [--dry-run] | sync-local [--no-plugins]" >&2; exit 64; }
 # Every git call in this script runs with submodule recursion off, so a user's
 # submodule.recurse=true never makes it touch a submodule working directory.
-g() { git -c submodule.recurse=false -C "$ROOT" "$@"; }
+# diff.ignoreSubmodules=none makes gitlink changes visible to the staged-path
+# checks even when the user's config hides submodules (per-submodule
+# `ignore` settings are overridden by --ignore-submodules=none at the call
+# sites that inspect the index).
+g() { git -c submodule.recurse=false -c diff.ignoreSubmodules=none -C "$ROOT" "$@"; }
+# Never block on a credential prompt during fetch / ls-remote.
+export GIT_TERMINAL_PROMPT=0
 
 # --------------------------------------------------------------------------
 # Embedded python: all JSON reading/writing. Paths and values are passed as
@@ -99,9 +113,25 @@ def plugins(root, marketplace):
             pj = load(f"{root}/{src}/.claude-plugin/plugin.json")
         except (OSError, ValueError):
             pass
+        dups = []
+        try:
+            dups = duplicate_keys(f"{root}/{src}/.claude-plugin/plugin.json")
+        except OSError:
+            pass
         row = [e["name"], src, e.get("version"), e.get("binary_version"), e.get("binary_sha256"),
-               pj.get("version"), pj.get("binary_version"), pj.get("binary_sha256")]
+               pj.get("version"), pj.get("binary_version"), pj.get("binary_sha256"), ",".join(dups)]
         print("\t".join("-" if v in (None, "") else str(v) for v in row))
+
+PIN_KEYS = ("version", "binary_version", "binary_sha256")
+
+def duplicate_keys(path):
+    """Pin keys that occur more than once in the file text. The wrappers and
+    hooks read the first textual occurrence while JSON parsing keeps the last."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    return [k for k in PIN_KEYS if len(re.findall(r'"%s"\s*:' % k, text)) > 1]
+
+VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 
 def vtuple(v):
     return tuple(int(x) for x in v.split("."))
@@ -120,19 +150,33 @@ def render(fmt, plugin_tsv, *checkout):
     rows = []
     with open(plugin_tsv, encoding="utf-8") as f:
         for line in f:
-            (name, kind, repo, binary, mk_v, mk_b, mk_sha, pj_v, pj_b, pj_sha,
+            (name, kind, repo, binary, mk_v, mk_b, mk_sha, pj_v, pj_b, pj_sha, dups,
              latest, assets, installed, inst_state) = (none_if_dash(x) for x in line.rstrip("\n").split("\t"))
             problems, unknown, notes = [], [], []
             if (mk_v, mk_b, mk_sha) != (pj_v, pj_b, pj_sha):
                 problems.append("marketplace-mismatch")
+            pin_ok = pj_b is not None and bool(VERSION_RE.match(pj_b))
+            latest_ok = latest is not None and bool(VERSION_RE.match(latest))
+            if pj_b is not None and not pin_ok:
+                unknown.append("pin-unparseable")
             if latest is None:
                 unknown.append("latest-release")
-            elif pj_b is not None and vtuple(latest) > vtuple(pj_b):
-                problems.append("pin-behind-release")
-            if latest is not None and assets is None:
+            elif not latest_ok:
+                unknown.append("latest-unparseable")
+            if pin_ok and latest_ok:
+                if vtuple(latest) > vtuple(pj_b):
+                    problems.append("pin-behind-release")
+                elif vtuple(latest) < vtuple(pj_b):
+                    notes.append("pin-ahead-of-release")
+            if latest_ok and assets is None:
                 unknown.append("latest-assets")
             elif assets == "no":
-                notes.append("latest-assets-incomplete")
+                if latest == pj_b:
+                    problems.append("pinned-release-assets-incomplete")
+                else:
+                    notes.append("latest-assets-incomplete")
+            if dups:
+                notes.append("duplicate-keys")
             if inst_state == "unknown":
                 unknown.append("installed")
             elif inst_state == "known" and installed != pj_b:
@@ -145,6 +189,7 @@ def render(fmt, plugin_tsv, *checkout):
                 "latest_assets_complete": None if assets is None else assets == "yes",
                 "installed": installed,
                 "installed_state": inst_state,
+                "duplicate_keys": dups.split(",") if dups else [],
                 "problems": problems, "unknown": unknown, "notes": notes,
             })
     any_problem = any(r["problems"] for r in rows) or state not in ("in-sync", "unknown")
@@ -164,11 +209,17 @@ def render(fmt, plugin_tsv, *checkout):
               "latest-release": "最新 release 查不到",
               "latest-assets": "asset 查不到",
               "installed": "已安裝版本未知",
-              "latest-assets-incomplete": "最新 release 缺 binary 或 .sha256"}
+              "latest-assets-incomplete": "最新 release 缺 binary 或 .sha256",
+              "pinned-release-assets-incomplete": "pin 的 release 缺 binary 或 .sha256（新安裝會失敗）",
+              "pin-unparseable": "pin 不是 X.Y.Z，無法比較",
+              "latest-unparseable": "最新 release 的 tag 不是 X.Y.Z，無法比較",
+              "pin-ahead-of-release": "pin 比最新 release 新（latest 可能是較舊的正式版，pin 可能指向 prerelease 或已撤回的版本）",
+              "duplicate-keys": "plugin.json 有重複的 key"}
     for r in rows:
         pj, mk = r["plugin_json"], r["marketplace"]
         assets = {True: "齊全", False: "不齊", None: U}[r["latest_assets_complete"]]
-        issues = "；".join(labels[k] for k in r["problems"] + r["unknown"] + r["notes"]) or "—"
+        issues = "；".join(labels[k] + (f"（{', '.join(r['duplicate_keys'])}）" if k == "duplicate-keys" else "")
+                          for k in r["problems"] + r["unknown"] + r["notes"]) or "—"
         table.append([r["name"], f"{pj['version'] or U} / {pj['binary_version'] or U}",
                       f"{mk['version'] or U} / {mk['binary_version'] or U}",
                       r["latest_release"] or U, assets,
@@ -209,6 +260,8 @@ def describe_checkout(co):
         return f"有進行中的 git 操作（{co['detail']}），請先完成或中止"
     if s == "no-upstream":
         return f"目前分支沒有設定 upstream（{co['detail']}）"
+    if s == "upstream-gone":
+        return f"已設定 upstream {up}，但遠端沒有這個分支（已被刪除或從未推送）"
     return f"無法判定（{co['detail']}）"
 
 def entry_kind(marketplace, name):
@@ -309,6 +362,10 @@ if cmd == "plugins":
     plugins(*args)
 elif cmd == "render":
     sys.exit(render(*args))
+elif cmd == "dup-keys":
+    dups = duplicate_keys(args[0])
+    print(" ".join(dups))
+    sys.exit(1 if dups else 0)
 elif cmd == "entry-kind":
     sys.exit(entry_kind(*args))
 elif cmd == "consistency":
@@ -331,8 +388,8 @@ PY
 
 # --------------------------------------------------------------------------
 # Checkout state classifier (shared by all subcommands)
-# Sets CO_STATE: in-progress | locked | no-upstream | unknown | in-sync |
-# behind | ahead | diverged, plus CO_BEHIND CO_AHEAD CO_EQUIV CO_UPSTREAM
+# Sets CO_STATE: in-progress | locked | no-upstream | upstream-gone | unknown |
+# in-sync | behind | ahead | diverged, plus CO_BEHIND CO_AHEAD CO_EQUIV CO_UPSTREAM
 # CO_REMOTE CO_DETAIL CO_LOCK_MTIME CO_GIT_RUNNING ("-" when not applicable).
 # Only reports; never removes a lock or touches the working tree.
 # --------------------------------------------------------------------------
@@ -361,17 +418,33 @@ classify_checkout() {
         esac
         return
     fi
-    local branch
+    local branch merge remote_refs
     if ! branch=$(g symbolic-ref -q --short HEAD); then CO_STATE=no-upstream; CO_DETAIL="detached HEAD"; return; fi
-    if ! CO_UPSTREAM=$(g rev-parse -q --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || [ -z "$CO_UPSTREAM" ]; then
-        CO_UPSTREAM=-; CO_STATE=no-upstream; CO_DETAIL=$branch; return
+    # The upstream comes from the branch config, not from @{u}: @{u} needs a
+    # remote-tracking ref, which is missing when the branch was never fetched.
+    CO_REMOTE=$(g config "branch.$branch.remote" 2>/dev/null) || CO_REMOTE=
+    merge=$(g config "branch.$branch.merge" 2>/dev/null) || merge=
+    if [ -z "$CO_REMOTE" ] || [ -z "$merge" ]; then
+        CO_REMOTE=-; CO_STATE=no-upstream; CO_DETAIL=$branch; return
     fi
-    CO_REMOTE=$(g config "branch.$branch.remote" 2>/dev/null || echo -)
-    if [ "$CO_REMOTE" = . ] || [ "$CO_REMOTE" = - ]; then
-        CO_STATE=unknown; CO_DETAIL="upstream $CO_UPSTREAM 不是遠端分支"; return
+    CO_UPSTREAM="$CO_REMOTE/${merge#refs/heads/}"
+    if [ "$CO_REMOTE" = . ]; then
+        CO_STATE=unknown; CO_DETAIL="upstream ${merge} 是本機分支，不是遠端分支"; return
     fi
-    if ! g fetch --quiet --no-recurse-submodules "$CO_REMOTE" >/dev/null 2>&1; then
+    # No --prune: a status run must not delete the user's remote-tracking refs.
+    if ! g fetch --quiet --no-recurse-submodules "$CO_REMOTE" </dev/null >/dev/null 2>&1; then
         CO_STATE=unknown; CO_DETAIL="fetch $CO_REMOTE 失敗，無法確認與 $CO_UPSTREAM 的關係"; return
+    fi
+    # The fetch does not prune, so a stale remote-tracking ref can outlive a
+    # deleted upstream branch; ask the remote whether the branch still exists.
+    if ! remote_refs=$(g ls-remote "$CO_REMOTE" "$merge" </dev/null 2>/dev/null); then
+        CO_STATE=unknown; CO_DETAIL="ls-remote $CO_REMOTE 失敗，無法確認 $CO_UPSTREAM 是否存在"; return
+    fi
+    if ! printf '%s\n' "$remote_refs" | awk -v r="$merge" '$2 == r { found = 1 } END { exit !found }'; then
+        CO_STATE=upstream-gone; CO_DETAIL="遠端 $CO_REMOTE 沒有 $merge"; return
+    fi
+    if ! g rev-parse -q --verify '@{u}' >/dev/null 2>&1; then
+        CO_STATE=unknown; CO_DETAIL="遠端有 ${merge}，但 fetch 後仍沒有對應的 remote-tracking ref（檢查 remote.$CO_REMOTE.fetch）"; return
     fi
     local counts
     counts=$(g rev-list --left-right --count '@{u}...HEAD') || { CO_STATE=unknown; CO_DETAIL="rev-list 失敗"; return; }
@@ -431,11 +504,13 @@ version_gt() {
     return 1
 }
 
-latest_release() {   # latest_release <owner/repo>: prints X.Y.Z, fails when unknown
+# latest_release <owner/repo>: prints the latest release tag without its
+# leading "v", as-is (callers check is_version); fails when the lookup fails.
+latest_release() {
     local tag
     tag=$("$GH" api "repos/$1/releases/latest" --jq .tag_name </dev/null 2>/dev/null) || return 1
     tag=${tag#v}
-    is_version "$tag" || return 1
+    case "$tag" in ''|*[[:space:]]*) return 1 ;; esac
     echo "$tag"
 }
 
@@ -469,15 +544,15 @@ cmd_status() {
     done
     [ -f "$MARKETPLACE" ] || die "找不到 $MARKETPLACE_REL"
     classify_checkout
-    local tsv rows name src mk_v mk_b mk_sha pj_v pj_b pj_sha latest assets installed inst_state
+    local tsv rows name src mk_v mk_b mk_sha pj_v pj_b pj_sha dups latest assets installed inst_state
     tsv=$(mktemp "${TMPDIR:-/tmp}/marketplace-pins.XXXXXX") || die "mktemp 失敗"
     rows=$(py plugins "$ROOT" "$MARKETPLACE") || { rm -f "$tsv"; die "讀不到 $MARKETPLACE_REL"; }
-    while IFS=$'\t' read -r name src mk_v mk_b mk_sha pj_v pj_b pj_sha; do
+    while IFS=$'\t' read -r name src mk_v mk_b mk_sha pj_v pj_b pj_sha dups; do
         [ -n "$name" ] || continue
         plugin_meta "$name" "$src"
         latest=-; assets=-; installed=-
         if [ "$PM_REPO" != - ] && latest=$(latest_release "$PM_REPO"); then
-            if release_lookup "$PM_REPO" "v$latest"; then
+            if is_version "$latest" && release_lookup "$PM_REPO" "v$latest"; then
                 if [ -n "$(asset_id "$PM_BINARY")" ] && [ -n "$(asset_id "$PM_BINARY.sha256")" ]; then
                     assets=yes
                 else
@@ -496,9 +571,9 @@ cmd_status() {
             installed=$(tr -d '[:space:]' < "$PM_RECORD" 2>/dev/null)
             if [ -n "$installed" ]; then inst_state=known; else installed=-; fi
         fi
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$name" "$PM_KIND" "$PM_REPO" "$PM_BINARY" "$mk_v" "$mk_b" "$mk_sha" \
-            "$pj_v" "$pj_b" "$pj_sha" "$latest" "$assets" "$installed" "$inst_state" >> "$tsv"
+            "$pj_v" "$pj_b" "$pj_sha" "$dups" "$latest" "$assets" "$installed" "$inst_state" >> "$tsv"
     done <<< "$rows"
     py render "$fmt" "$tsv" "$CO_STATE" "$CO_BEHIND" "$CO_AHEAD" "$CO_EQUIV" \
         "$CO_UPSTREAM" "$CO_DETAIL" "$CO_LOCK_MTIME" "$CO_GIT_RUNNING"
@@ -513,14 +588,17 @@ cmd_status() {
 is_sha1() { [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }
 
 # submodule_for_repo <owner/repo>: prints "<path>\t<url>" of the .gitmodules
-# entry whose URL names that repo.
+# entry whose URL ends in that owner/repo (ssh, https or path form; compared
+# case-insensitively, as GitHub does).
 submodule_for_repo() {
-    local want=${1##*/} key url name
+    local want key url name u repo owner
+    want=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
     [ -f "$ROOT/.gitmodules" ] || return 1
     while read -r key url; do
         name=${key#submodule.}; name=${name%.url}
-        local base=${url%/}; base=${base##*/}; base=${base##*:}; base=${base%.git}
-        if [ "$base" = "$want" ]; then
+        u=${url%/}; u=${u%.git}
+        repo=${u##*/}; owner=${u%/*}; owner=${owner##*/}; owner=${owner##*:}
+        if [ "$(printf '%s/%s' "$owner" "$repo" | tr '[:upper:]' '[:lower:]')" = "$want" ]; then
             printf '%s\t%s\n' "$(g config -f .gitmodules --get "submodule.$name.path")" "$url"
             return 0
         fi
@@ -566,12 +644,15 @@ cmd_update() {
         4) die "$plugin 沒有 binary_version，不是由本腳本管理的 binary pin" ;;
         *) die "讀不到 $MARKETPLACE_REL" ;;
     esac
-    local name src mk_v mk_b mk_sha pj_v pj_b pj_sha
-    IFS=$'\t' read -r name src mk_v mk_b mk_sha pj_v pj_b pj_sha \
+    local name src mk_v mk_b mk_sha pj_v pj_b pj_sha dups
+    IFS=$'\t' read -r name src mk_v mk_b mk_sha pj_v pj_b pj_sha dups \
         < <(py plugins "$ROOT" "$MARKETPLACE" | awk -F'\t' -v n="$plugin" '$1 == n')
     [ "$name" = "$plugin" ] || die "讀不到 $plugin 的 plugin.json"
     is_version "$pj_b" || die "$plugin 的 plugin.json binary_version 不是 X.Y.Z（${pj_b}）"
     is_version "$pj_v" || die "$plugin 的 plugin.json version 不是 X.Y.Z（${pj_v}）"
+    # The wrappers and hooks read the first textual occurrence of a key, JSON
+    # parsing the last; with a duplicate, the edit could change the wrong one.
+    [ "$dups" = - ] || die "$plugin 的 plugin.json 裡這些 key 重複出現：${dups}。先手動整理成一個再更新"
     plugin_meta "$plugin" "$src"
     [ "$PM_REPO" != - ] && [ "$PM_BINARY" != - ] || die "無法從 $plugin 的 wrapper 或 hook 讀出上游 REPO 與 BINARY_NAME"
 
@@ -589,8 +670,8 @@ cmd_update() {
     dirty=$(g status --porcelain=v1 --untracked-files=all -- "${files[@]}") || die "git status 失敗"
     [ -z "$dirty" ] || die "要修改的檔案有未提交的變更：
 $dirty"
-    g diff --cached --quiet || die "index 有已暫存的變更，先 commit 或取消暫存再更新 pin：
-$(g diff --cached --name-status)"
+    g diff --cached --quiet --ignore-submodules=none || die "index 有已暫存的變更，先 commit 或取消暫存再更新 pin：
+$(g diff --cached --name-status --ignore-submodules=none)"
 
     local sub_path="" sub_url="" old_link=""
     if [ "$PM_KIND" = mcp ]; then
@@ -604,6 +685,7 @@ $(g diff --cached --name-status)"
     # 3. Target release: exists, ships both assets, strictly newer than the pin.
     if [ -z "$to" ]; then
         to=$(latest_release "$PM_REPO") || die "查不到 $PM_REPO 的最新 release（gh 失敗或沒有 release），不更新"
+        is_version "$to" || die "$PM_REPO 最新 release 的 tag v$to 不是 X.Y.Z，不更新；需要時用 --to 指定版本"
     fi
     version_gt "$to" "$pj_b" || die "目標 $to 不比目前的 pin $pj_b 新"
 
@@ -627,6 +709,8 @@ $(g diff --cached --name-status)"
         new_sha=$("$GH" api "repos/$PM_REPO/releases/assets/$(asset_id "$PM_BINARY.sha256")" \
             -H 'Accept: application/octet-stream' </dev/null 2>/dev/null | awk 'NR == 1 { print $1 }')
         [[ "$new_sha" =~ ^[0-9a-fA-F]{64}$ ]] || die "讀不到 $PM_BINARY.sha256 的內容，或內容不是 64 位 hex"
+        # The session-start hook compares sha256 strings; shasum prints lowercase.
+        new_sha=$(printf '%s' "$new_sha" | tr 'A-F' 'a-f')
     fi
 
     # 4. The tag's commit (gitlink target for MCP plugins, history row for all).
@@ -652,15 +736,17 @@ $(g diff --cached --name-status)"
         return 0
     fi
 
-    # 5. Edit, with a backup to restore from on any failure.
-    local backup f
+    # 5. Edit, with a backup to restore from on any failure or interruption.
+    local backup f base_head
+    base_head=$(g rev-parse HEAD) || die "讀不到 HEAD"
     backup=$(mktemp -d "${TMPDIR:-/tmp}/marketplace-pins-backup.XXXXXX") || die "mktemp 失敗"
     for f in "${files[@]}"; do
         mkdir -p "$backup/$(dirname "$f")"
         if [ -f "$ROOT/$f" ]; then cp -p "$ROOT/$f" "$backup/$f"; fi
     done
-    restore() {
+    restore() {   # idempotent: a second call finds no backup and does nothing
         local f
+        [ -d "$backup" ] || return 0
         for f in "${files[@]}"; do
             if [ -f "$backup/$f" ]; then cp -p "$backup/$f" "$ROOT/$f"; else rm -f "$ROOT/$f"; fi
         done
@@ -668,7 +754,24 @@ $(g diff --cached --name-status)"
         g reset -q -- "${files[@]}" ${sub_path:+"$sub_path"} 2>/dev/null
         rm -rf "$backup"
     }
-    fail() { restore; die "$1（已還原所有改動）"; }
+    fail() { trap - INT TERM HUP; restore; die "$1（已還原所有改動）"; }
+    # Bash runs a trap only after the foreground command (e.g. git commit and
+    # its hooks) returns, so on a signal the commit has either happened or not:
+    # decide by HEAD, then re-raise so the caller sees the real termination.
+    on_signal() {
+        trap - INT TERM HUP
+        if [ "$(g rev-parse HEAD 2>/dev/null)" != "$base_head" ]; then
+            rm -rf "$backup"
+            echo "收到 $1：commit 已完成（$(g log -1 --format='%h %s')），沒有還原；已清除備份。尚未推送" >&2
+        else
+            restore
+            echo "收到 $1：已還原所有改動（檔案、index 與 gitlink），沒有建立 commit" >&2
+        fi
+        kill -s "$1" $$
+    }
+    trap 'on_signal INT' INT
+    trap 'on_signal TERM' TERM
+    trap 'on_signal HUP' HUP
 
     py edit-marketplace "$MARKETPLACE" "$plugin" "$new_pv" "$to" "$new_sha" || fail "改寫 $MARKETPLACE_REL 失敗"
     local triples=(version "$pj_v" "$new_pv" binary_version "$pj_b" "$to")
@@ -694,11 +797,12 @@ $mismatch"
     g add -- "${files[@]}" || fail "git add 失敗"
     local expected staged
     expected=$(printf '%s\n' "${files[@]}" ${sub_path:+"$sub_path"} | sort)
-    staged=$(g diff --cached --name-only | sort)
+    staged=$(g diff --cached --name-only --ignore-submodules=none | sort)
     [ "$staged" = "$expected" ] || fail "暫存區的內容與預期不符：
 $staged"
     g commit -q -m "$msg" || fail "git commit 失敗"
     rm -rf "$backup"
+    trap - INT TERM HUP
     local changed
     changed=$(g diff-tree --no-commit-id --name-only -r HEAD | sort)
     [ "$changed" = "$expected" ] || echo "警告：commit 的檔案與預期不符，請檢查：$changed" >&2
@@ -706,6 +810,7 @@ $staged"
     local branch=${CO_UPSTREAM#"$CO_REMOTE"/}
     echo
     echo "已建立 commit：$(g log -1 --format='%h %s')"
+    [ -z "$sub_path" ] || echo "（之後 git status 會顯示 $sub_path 已修改：gitlink 已前進，submodule 的工作目錄刻意沒有動）"
     echo "沒有推送。確認後在 repo 根目錄推送："
     echo "  git push $CO_REMOTE HEAD:$branch"
 }
@@ -723,12 +828,14 @@ cmd_sync_local() {
         shift
     done
     classify_checkout
+    local ffwd=false
     case "$CO_STATE" in
         behind)
             echo "本機落後 $CO_UPSTREAM ${CO_BEHIND} 個 commit，快轉中…"
             # Never recurse into submodules: their working dirs are left as they are.
             g merge --ff-only --quiet '@{u}' \
                 || die "git merge --ff-only 失敗，HEAD 沒有改變"
+            ffwd=true
             echo "已快轉到 $(g log -1 --format='%h %s')" ;;
         in-sync) echo "本機已與 $CO_UPSTREAM 同步，沒有需要快轉的 commit" ;;
         ahead) die "本機有 ${CO_AHEAD} 個未推送的 commit，不能快轉；先推送或自行處理" ;;
@@ -736,6 +843,7 @@ cmd_sync_local() {
         locked) die "有 index.lock（修改時間 ${CO_LOCK_MTIME}；目前 git 程序在跑：${CO_GIT_RUNNING}），不能 merge。本腳本不會移除它" ;;
         in-progress) die "有進行中的 git 操作（${CO_DETAIL}），請先完成或中止" ;;
         no-upstream) die "目前分支沒有設定 upstream（${CO_DETAIL}），不知道要快轉到哪裡" ;;
+        upstream-gone) die "已設定 upstream ${CO_UPSTREAM}，但遠端沒有這個分支（${CO_DETAIL}），不能快轉" ;;
         *) die "無法判定本機與 upstream 的關係：${CO_DETAIL}" ;;
     esac
 
@@ -754,7 +862,13 @@ cmd_sync_local() {
         "$CLAUDE" plugin update "$name@$MARKETPLACE_NAME" </dev/null \
             || { echo "錯誤：claude plugin update $name@$MARKETPLACE_NAME 失敗" >&2; rc=1; }
     done < <(py plugins "$ROOT" "$MARKETPLACE")
-    [ "$rc" = 0 ] || echo "plugin 更新有失敗的項目；checkout 的快轉已完成，不會還原" >&2
+    if [ "$rc" != 0 ]; then
+        if $ffwd; then
+            echo "plugin 更新有失敗的項目；checkout 的快轉已完成，不會還原" >&2
+        else
+            echo "plugin 更新有失敗的項目（checkout 原本就已同步，沒有變動）" >&2
+        fi
+    fi
     return "$rc"
 }
 

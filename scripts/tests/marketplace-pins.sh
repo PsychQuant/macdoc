@@ -707,7 +707,7 @@ sync_refuses "fetch fails" "$F" "fetch"
 # ==========================================================================
 # Review findings (second round)
 # ==========================================================================
-backups_left() { ls -d "$1"/marketplace-pins-backup.* 2>/dev/null | wc -l | tr -d ' '; }
+backups_left() { find "$1" -maxdepth 1 -name 'marketplace-pins-backup.*' | wc -l | tr -d ' '; }
 
 # interrupt_update <fixture> <hook exit code> <tmpdir>: runs update with a
 # pre-commit hook that signals readiness and sleeps, sends TERM to the script
