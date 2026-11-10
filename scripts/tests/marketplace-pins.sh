@@ -114,6 +114,9 @@ cat > "$STUB_BIN/claude" <<'EOF'
 #!/bin/bash
 echo "$*" >> "$CLAUDE_STUB_LOG"
 [ "${CLAUDE_STUB_FAIL:-0}" = 1 ] && { echo "claude: stub failure" >&2; exit 1; }
+if [ -n "${CLAUDE_STUB_FAIL_MATCH:-}" ]; then
+    case "$*" in *"$CLAUDE_STUB_FAIL_MATCH"*) echo "claude: stub failure" >&2; exit 1 ;; esac
+fi
 exit 0
 EOF
 chmod +x "$STUB_BIN/gh" "$STUB_BIN/claude"
@@ -267,16 +270,34 @@ seed_push() {   # seed_push <fixture> <n>
     done
     git -C "$1/seed" push -q origin main
 }
-# populate_submodule <fixture>: check out the che-word-mcp submodule at v4.9.0
-# with an untracked file in it, and turn on submodule.recurse in the clone, so
-# that any command that recursed into it would visibly change it.
+# populate_submodule <fixture>: initialise che-word-mcp as a real registered
+# submodule (git dir under .git/modules), then give it a local commit (so its
+# HEAD differs from every gitlink the tests use), an uncommitted change to a
+# tracked file and an untracked file. submodule.recurse and file-protocol
+# fetches are turned on in the clone, so any git command that recursed into
+# the submodule, or an explicit `submodule update`, would visibly change it.
 populate_submodule() {
-    local s="$1/clone/mcp/che-word-mcp"
-    rmdir "$s" 2>/dev/null || true
-    git clone -q "$UP/PsychQuant/che-word-mcp.git" "$s" 2>/dev/null
-    git -C "$s" checkout -q v4.9.0 2>/dev/null
+    local c="$1/clone" s="$1/clone/mcp/che-word-mcp"
+    git -C "$c" config protocol.file.allow always
+    git -C "$c" -c protocol.file.allow=always submodule update --init -q mcp/che-word-mcp
+    echo "local work" >> "$s/version"; git -C "$s" commit -qam "local work in the submodule"
+    echo "uncommitted" >> "$s/version"
     echo wip > "$s/wip.txt"
-    git -C "$1/clone" config submodule.recurse true
+    git -C "$c" config submodule.recurse true
+    # Assert the fixture is what the tests rely on.
+    check "fixture: submodule git dir registered under .git/modules" \
+        test -d "$(git -C "$c" rev-parse --absolute-git-dir)/modules/mcp/che-word-mcp"
+    check "fixture: submodule .git is a gitfile" test -f "$s/.git"
+    check "fixture: submodule HEAD differs from the gitlink" \
+        test "$(git -C "$s" rev-parse HEAD)" != "$(git -C "$c" ls-files -s mcp/che-word-mcp | awk '{print $2}')"
+    check "fixture: submodule has uncommitted work" test -n "$(git -C "$s" status --porcelain)"
+    check_contains "fixture: superproject sees the submodule as modified" "$(git -C "$c" submodule status)" "+"
+}
+sub_snapshot() {   # HEAD, status and every working-tree file hash of the submodule
+    local s="$1/clone/mcp/che-word-mcp"
+    git -C "$s" rev-parse HEAD
+    git -C "$s" status --porcelain=v1 --untracked-files=all
+    (cd "$s" && find . -path ./.git -prune -o -type f -print0 | sort -z | xargs -0 shasum)
 }
 local_commit() {   # local_commit <fixture> <file>
     echo "local" >> "$1/clone/$2"; git -C "$1/clone" add "$2"; git -C "$1/clone" commit -qm "local $2"
@@ -320,6 +341,7 @@ check_eq "behind 2" "behind 2 0 None" "$(checkout_state "$F")"
 run_case "classifier: ahead-only"
 F="$T/c-ahead"; build_fixture "$F"; local_commit "$F" a.txt
 check_eq "ahead 1" "ahead 0 1 None" "$(checkout_state "$F")"
+pins "$F" status >/dev/null 2>&1; check_eq "ahead: status exit 10" 10 $?
 
 run_case "classifier: diverged with a rewritten (patch-equivalent) commit"
 F="$T/c-div"; build_fixture "$F"
@@ -332,12 +354,14 @@ echo y > "$F/seed/y.txt"; git -C "$F/seed" add y.txt; git -C "$F/seed" commit -q
 echo w > "$F/seed/w.txt"; git -C "$F/seed" add w.txt; git -C "$F/seed" commit -qm "w"
 git -C "$F/seed" push -q origin main
 check_eq "diverged behind 3 ahead 2, 1 equivalent" "diverged 3 2 1" "$(checkout_state "$F")"
+pins "$F" status >/dev/null 2>&1; check_eq "diverged: status exit 10" 10 $?
 
 run_case "classifier: in-progress operation outranks everything"
 F="$T/c-prog"; build_fixture "$F"; seed_push "$F" 1
 mkdir "$(git -C "$F/clone" rev-parse --absolute-git-dir)/rebase-merge"
 touch "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
 check_eq "in-progress" "in-progress None None None" "$(checkout_state "$F")"
+pins "$F" status >/dev/null 2>&1; check_eq "in-progress: status exit 10" 10 $?
 
 run_case "classifier: index.lock"
 F="$T/c-lock"; build_fixture "$F"
@@ -347,10 +371,17 @@ check_eq "locked" "locked" "$(json_get "$OUT" 'd["checkout"]["state"]' 2>/dev/nu
 check_eq "lock reports git not running" "False" "$(json_get "$OUT" 'd["checkout"]["lock"]["git_running"]' 2>/dev/null)"
 check "lock reports mtime" test -n "$(json_get "$OUT" 'd["checkout"]["lock"]["mtime"]' 2>/dev/null)"
 check "classifier leaves the lock in place" test -f "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
+pins "$F" status >/dev/null 2>&1; check_eq "locked: status exit 10" 10 $?
+OUT=$(MARKETPLACE_PINS_GIT_RUNNING=yes pins "$F" status --json 2>/dev/null)
+check_eq "lock reports a running git process" "True" "$(json_get "$OUT" 'd["checkout"]["lock"]["git_running"]' 2>/dev/null)"
+check_contains "text says a git process is running" "$(MARKETPLACE_PINS_GIT_RUNNING=yes pins "$F" status 2>&1)" "目前有 git 程序在跑"
+OUT=$(MARKETPLACE_PINS_GIT_RUNNING='' pins "$F" status --json 2>/dev/null)
+check "pgrep probe yields a boolean" test -n "$(json_get "$OUT" '{True: "b", False: "b"}[d["checkout"]["lock"]["git_running"]]' 2>/dev/null)"
 
 run_case "classifier: no upstream"
 F="$T/c-noup"; build_fixture "$F"; git -C "$F/clone" checkout -q -b local-only
 check_eq "no-upstream" "no-upstream None None None" "$(checkout_state "$F")"
+pins "$F" status >/dev/null 2>&1; check_eq "no-upstream: status exit 10" 10 $?
 
 run_case "classifier: fetch fails"
 F="$T/c-fetch"; build_fixture "$F"; git -C "$F/clone" remote set-url origin "$T/does-not-exist.git"
@@ -365,10 +396,11 @@ run_case "status: everything consistent and current"
 F="$T/s-ok"; build_fixture "$F"
 OUT=$(pins "$F" status 2>&1); RC=$?
 check_eq "exit 0" 0 "$RC"
-check_contains "lists che-word-mcp" "$OUT" "che-word-mcp"
-check_contains "lists macdoc" "$OUT" "macdoc"
+check "lists che-word-mcp as a row" grep -qE '^che-word-mcp  ' <<< "$OUT"
+check "lists macdoc as a row" grep -qE '^macdoc  ' <<< "$OUT"
 check_not_contains "skips docflow" "$OUT" "docflow"
-check_contains "says checkout in sync" "$OUT" "同步"
+check_contains "says checkout in sync" "$OUT" "本機 checkout：同步（與 origin/main 一致）"
+check_contains "summary says all consistent" "$OUT" "結果：全部一致且是最新（exit 0）"
 
 run_case "status: pin behind release, inconsistent entry, missing install record"
 F="$T/s-bad"; build_fixture "$F"
@@ -386,13 +418,14 @@ rm "$F/home-bin/.macdoc.installed_version"
 OUT=$(pins "$F" status 2>&1); RC=$?
 check_eq "exit 10" 10 "$RC"
 check_contains "shows latest 4.10.0" "$OUT" "4.10.0"
-check_contains "shows unknown install" "$OUT" "未知"
+check_contains "shows unknown install" "$OUT" "已安裝版本未知"
 JOUT=$(pins "$F" status --json 2>/dev/null)
 check_eq "json exit_code 10" 10 "$(json_get "$JOUT" 'd["exit_code"]' 2>/dev/null)"
 check_eq "json word latest" "4.10.0" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["latest_release"]' 2>/dev/null)"
 check_contains "json word flagged behind" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["problems"]' 2>/dev/null)" "pin-behind-release"
 check_contains "json pdf flagged inconsistent" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["problems"]' 2>/dev/null)" "marketplace-mismatch"
 check_eq "json macdoc installed unknown" "None" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="macdoc"][0]["installed"]' 2>/dev/null)"
+check_eq "json macdoc installed_state unknown" "unknown" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="macdoc"][0]["installed_state"]' 2>/dev/null)"
 
 run_case "status: installed differs from pin"
 F="$T/s-inst"; build_fixture "$F"
@@ -535,20 +568,23 @@ check_eq "history row records the tag commit" "| 2026-01-02 | macdoc | 0.17.0 | 
 
 run_case "update: checked-out submodule is left alone"
 F="$T/u-sub"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; populate_submodule "$F"
+SUB_BEFORE=$(sub_snapshot "$F")
 pins "$F" update che-word-mcp >/dev/null 2>&1; RC=$?
 check_eq "exit 0" 0 "$RC"
 check_eq "gitlink in HEAD points at the new tag" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
-check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
+check_eq "submodule HEAD, status and files byte-for-byte unchanged" "$SUB_BEFORE" "$(sub_snapshot "$F")"
 check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
 
 run_case "update: refusal with a checked-out submodule leaves it alone"
-F="$T/u-subr"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; populate_submodule "$F"
+F="$T/u-subr"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
 sed -i '' 's/"version": "0.1.3"/"version": "0.1.2"/' "$F/clone/plugins/che-pdf-mcp/.claude-plugin/plugin.json"
 git -C "$F/clone" commit -qam "pdf plugin.json drifted"; git -C "$F/clone" push -q origin main
+populate_submodule "$F"
+SUB_BEFORE=$(sub_snapshot "$F")
 pins "$F" update che-word-mcp >/dev/null 2>&1
 check "refused" test $? -ne 0
 check_eq "gitlink restored in the index" "$WORD_V4_9" "$(git -C "$F/clone" ls-files -s mcp/che-word-mcp | awk '{print $2}')"
-check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
+check_eq "submodule HEAD, status and files byte-for-byte unchanged" "$SUB_BEFORE" "$(sub_snapshot "$F")"
 check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
 
 run_case "update: --dry-run changes nothing"
@@ -573,21 +609,25 @@ refuses() {   # refuses <name> <fixture> <expected reason substring> <update arg
 }
 
 run_case "update refusals"
-F="$T/r"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
-refuses "unknown plugin" "$F" "nope" nope
-refuses "plugin without binary_version" "$F" "binary_version" docflow
-refuses "release does not exist" "$F" "v9.9.9" che-word-mcp --to 9.9.9
-refuses "target equal to the pin" "$F" "不比目前的 pin" che-word-mcp --to 4.9.0
-refuses "target older than the pin" "$F" "不比目前的 pin" che-word-mcp --to 4.8.0
-refuses "malformed version" "$F" "X.Y.Z" che-word-mcp --to 4.10
-refuses "plugin version differs from target" "$F" "--plugin-version" che-word-mcp --plugin-version 4.11.0
-refuses "separate plugin version required" "$F" "--plugin-version" che-pdf-mcp --to 0.3.0
-refuses "plugin version not newer" "$F" "--plugin-version" che-pdf-mcp --to 0.3.0 --plugin-version 0.1.3
-GH_STUB_FAIL=1 refuses "gh failure" "$F" "查不到" che-word-mcp
-rm "$GH_STUB_DB/PsychQuant/che-word-mcp/releases/v4.10.0/assets/CheWordMCP.sha256"
-refuses "release missing the .sha256 asset" "$F" "CheWordMCP.sha256" che-word-mcp
-gh_release PsychQuant/che-word-mcp v4.11.0 CheWordMCP CheWordMCP.sha256
-refuses "tag missing upstream" "$F" "v4.11.0" che-word-mcp --to 4.11.0
+# Each refusal gets its own fixture (build_fixture also resets the gh data), so
+# a refusal that wrongly commits cannot mask the cases after it.
+fresh_r() { F="$T/r-$1"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; }
+fresh_r unknown; refuses "unknown plugin" "$F" "沒有名為 nope 的 plugin" nope
+fresh_r nobin; refuses "plugin without binary_version" "$F" "docflow 沒有 binary_version" docflow
+fresh_r norel; refuses "release does not exist" "$F" "查不到 PsychQuant/che-word-mcp 的 release v9.9.9" che-word-mcp --to 9.9.9
+fresh_r equal; refuses "target equal to the pin" "$F" "目標 4.9.0 不比目前的 pin 4.9.0 新" che-word-mcp --to 4.9.0
+fresh_r older; refuses "target older than the pin" "$F" "目標 4.8.0 不比目前的 pin 4.9.0 新" che-word-mcp --to 4.8.0
+fresh_r malformed; refuses "malformed version" "$F" "--to 必須是 X.Y.Z" che-word-mcp --to 4.10
+fresh_r pvdiff; refuses "plugin version differs from target" "$F" "--plugin-version 必須等於 4.10.0" che-word-mcp --plugin-version 4.11.0
+fresh_r pvreq; refuses "separate plugin version required" "$F" "必須用 --plugin-version 指定" che-pdf-mcp --to 0.3.0
+fresh_r pvold; refuses "plugin version not newer" "$F" "--plugin-version 0.1.3 必須比目前的 0.1.3 新" che-pdf-mcp --to 0.3.0 --plugin-version 0.1.3
+fresh_r ghfail; GH_STUB_FAIL=1 refuses "gh failure" "$F" "查不到 PsychQuant/che-word-mcp 的最新 release" che-word-mcp
+fresh_r noasset; rm "$GH_STUB_DB/PsychQuant/che-word-mcp/releases/v4.10.0/assets/CheWordMCP.sha256"
+refuses "release missing the .sha256 asset" "$F" "缺少 asset：CheWordMCP.sha256" che-word-mcp
+fresh_r notag; gh_release PsychQuant/che-word-mcp v4.11.0 CheWordMCP CheWordMCP.sha256
+# A real 40-hex target makes a "fall back to the release target" path reachable.
+echo "$WORD_V4_10" > "$GH_STUB_DB/PsychQuant/che-word-mcp/releases/v4.11.0/target"
+refuses "tag missing upstream (release target is a real commit)" "$F" "沒有 tag v4.11.0" che-word-mcp --to 4.11.0
 
 F="$T/r-behind"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; seed_push "$F" 1
 refuses "checkout behind" "$F" "同步" che-word-mcp
@@ -599,6 +639,15 @@ refuses "checkout state unknown" "$F" "fetch" che-word-mcp
 F="$T/r-dirty"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
 echo " " >> "$F/clone/plugins/che-word-mcp/CHANGELOG.md"
 refuses "uncommitted change in a file to edit" "$F" "未提交" che-word-mcp
+for rel in .claude-plugin/marketplace.json plugins/che-word-mcp/.claude-plugin/plugin.json docs/marketplace-pin-history.md; do
+    F="$T/r-dirty-$(echo "$rel" | tr '/.' '__')"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+    echo " " >> "$F/clone/$rel"
+    refuses "uncommitted change in $rel" "$F" "要修改的檔案有未提交的變更" che-word-mcp
+done
+F="$T/r-untracked"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+git -C "$F/clone" rm -q docs/marketplace-pin-history.md; git -C "$F/clone" commit -qm "no history yet"; git -C "$F/clone" push -q origin main
+mkdir -p "$F/clone/docs"; echo "stray" > "$F/clone/docs/marketplace-pin-history.md"
+refuses "untracked history file" "$F" "要修改的檔案有未提交的變更" che-word-mcp
 F="$T/r-staged"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
 echo new > "$F/clone/other.txt"; git -C "$F/clone" add other.txt
 refuses "unrelated staged change" "$F" "已暫存" che-word-mcp
@@ -615,10 +664,12 @@ check_eq "gitlink restored in the index" "$WORD_V4_9" "$(git -C "$F/clone" ls-fi
 # ==========================================================================
 run_case "sync-local: behind-only fast-forwards, then refreshes plugins"
 F="$T/l-behind"; build_fixture "$F"; seed_push "$F" 2
+git -C "$F/clone" config merge.ff false   # a plain `git merge` would now create a merge commit
 mkdir -p "$F/clone/mcp/che-word-mcp/marker"   # stand-in for submodule content
 OUT=$(pins "$F" sync-local 2>&1); RC=$?
 check_eq "exit 0" 0 "$RC"
 check_eq "HEAD now equals upstream" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
+check_eq "no merge commit" 0 "$(git -C "$F/clone" rev-list --merges --count HEAD)"
 check_eq "submodule dir untouched" "marker" "$(ls -A "$F/clone/mcp/che-word-mcp")"
 check_contains "marketplace refreshed" "$(cat "$CLAUDE_STUB_LOG")" "plugin marketplace update macdoc"
 check_contains "installed MCP plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugin update che-word-mcp@macdoc"
@@ -636,11 +687,12 @@ run_case "sync-local: fast-forward that moves a gitlink leaves the submodule alo
 F="$T/l-sub"; build_fixture "$F"; populate_submodule "$F"
 git -C "$F/seed" update-index --cacheinfo "160000,$WORD_V4_10,mcp/che-word-mcp"
 git -C "$F/seed" commit -qm "move gitlink"; git -C "$F/seed" push -q origin main
+SUB_BEFORE=$(sub_snapshot "$F")
 pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
 check_eq "exit 0" 0 "$RC"
 check_eq "fast-forwarded" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
 check_eq "HEAD gitlink moved" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
-check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
+check_eq "submodule HEAD, status and files byte-for-byte unchanged" "$SUB_BEFORE" "$(sub_snapshot "$F")"
 check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
 
 run_case "sync-local: in-sync skips the git step and refreshes plugins"
@@ -678,13 +730,15 @@ check_contains "reports the failure" "$OUT" "失敗"
 
 
 sync_refuses() {   # sync_refuses <name> <fixture> <reason substring>
-    local before out rc
+    local before snap out rc
     before=$(git -C "$2/clone" rev-parse HEAD)
+    snap=$(snapshot "$2/clone" 2>/dev/null)
     : > "$CLAUDE_STUB_LOG"
     out=$(pins "$2" sync-local 2>&1); rc=$?
     if [ "$rc" -ne 0 ]; then ok "$1: refused"; else not_ok "$1: refused" "$out"; fi
     check_contains "$1: says why" "$out" "$3"
     check_eq "$1: HEAD unchanged" "$before" "$(git -C "$2/clone" rev-parse HEAD)"
+    check_eq "$1: files and index unchanged" "$snap" "$(snapshot "$2/clone" 2>/dev/null)"
     check_eq "$1: claude not called" "" "$(cat "$CLAUDE_STUB_LOG")"
 }
 run_case "sync-local refusals"
@@ -858,6 +912,130 @@ check_eq "gitlink on the right path" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree 
 run_case "MCP update explains the submodule shows as modified"
 F="$T/x-note"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
 check_contains "explains git status" "$(pins "$F" update che-word-mcp 2>&1)" "git status"
+
+# ==========================================================================
+# Mutation-testing gaps
+# ==========================================================================
+run_case "classifier: detached HEAD"
+F="$T/m-detached"; build_fixture "$F"; git -C "$F/clone" checkout -q --detach
+JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "state no-upstream" no-upstream "$(json_get "$JOUT" 'd["checkout"]["state"]' 2>/dev/null)"
+check_eq "detail detached HEAD" "detached HEAD" "$(json_get "$JOUT" 'd["checkout"]["detail"]' 2>/dev/null)"
+check_eq "status exit 10" 10 "$RC"
+gh_latest PsychQuant/che-word-mcp v4.10.0
+refuses "update on detached HEAD" "$F" "no-upstream" che-word-mcp
+sync_refuses "sync-local on detached HEAD" "$F" "upstream"
+
+run_case "classifier: upstream is a local branch"
+F="$T/m-localup"; build_fixture "$F"
+git -C "$F/clone" checkout -q -b topic; git -C "$F/clone" branch -q -u main
+check_eq "remote is ." . "$(git -C "$F/clone" config branch.topic.remote)"
+JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "state unknown" unknown "$(json_get "$JOUT" 'd["checkout"]["state"]' 2>/dev/null)"
+check_eq "status exit 2" 2 "$RC"
+gh_latest PsychQuant/che-word-mcp v4.10.0
+refuses "update with a local upstream" "$F" "本機分支" che-word-mcp
+sync_refuses "sync-local with a local upstream" "$F" "本機分支"
+
+run_case "classifier: every kind of in-progress operation"
+for op in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-apply; do
+    F="$T/m-op-$op"; build_fixture "$F"
+    gd=$(git -C "$F/clone" rev-parse --absolute-git-dir)
+    case "$op" in rebase-*) mkdir "$gd/$op" ;; *) git -C "$F/clone" rev-parse HEAD > "$gd/$op" ;; esac
+    JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+    check_eq "$op: in-progress" "in-progress $op" "$(json_get "$JOUT" 'd["checkout"]["state"] + " " + d["checkout"]["detail"]' 2>/dev/null)"
+    check_eq "$op: status exit 10" 10 "$RC"
+    gh_latest PsychQuant/che-word-mcp v4.10.0
+    refuses "$op: update refused" "$F" "in-progress" che-word-mcp
+    sync_refuses "$op: sync-local refused" "$F" "進行中"
+done
+
+run_case "sync-local: marketplace update failing alone still fails the command"
+F="$T/m-mkfail"; build_fixture "$F"; seed_push "$F" 1
+OUT=$(CLAUDE_STUB_FAIL_MATCH="marketplace update" pins "$F" sync-local 2>&1); RC=$?
+check "non-zero exit" test "$RC" -ne 0
+check_contains "per-plugin updates still ran" "$(cat "$CLAUDE_STUB_LOG")" "plugin update che-word-mcp@macdoc"
+check_contains "names the failed command" "$OUT" "claude plugin marketplace update macdoc 失敗"
+F="$T/m-plfail"; build_fixture "$F"; seed_push "$F" 1
+OUT=$(CLAUDE_STUB_FAIL_MATCH="che-word-mcp@macdoc" pins "$F" sync-local 2>&1); RC=$?
+check "one plugin failing: non-zero exit" test "$RC" -ne 0
+check_contains "one plugin failing: named" "$OUT" "claude plugin update che-word-mcp@macdoc 失敗"
+
+run_case "status: install record that exists but is empty -> unknown"
+F="$T/m-empty"; build_fixture "$F"; : > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
+JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "installed_state unknown" unknown "$(installed_state "$JOUT" che-word-mcp)"
+check_eq "exit 2" 2 "$RC"
+
+# A failed release lookup must show 未知 and exit 2, never "latest == pin".
+latest_unknown_case() {   # latest_unknown_case <label> <fixture> [env assignment]
+    local label=$1 F=$2 JOUT RC OUT
+    JOUT=$(env ${3:+"$3"} "$F/clone/scripts/marketplace-pins.sh" status --json 2>/dev/null); RC=$?
+    check_eq "$label: exit 2" 2 "$RC"
+    check_eq "$label: word latest_release null" None "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["latest_release"]' 2>/dev/null)"
+    check_contains "$label: listed as unknown" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["unknown"]' 2>/dev/null)" "latest-release"
+    check_eq "$label: no assets claimed" None "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["latest_assets_complete"]' 2>/dev/null)"
+    OUT=$(env ${3:+"$3"} "$F/clone/scripts/marketplace-pins.sh" status 2>&1)
+    check "$label: text row shows 未知 as latest" grep -qE '^che-word-mcp  +4\.9\.0 / 4\.9\.0  +4\.9\.0 / 4\.9\.0  +未知' <<< "$OUT"
+    check_not_contains "$label: summary not up to date" "$OUT" "全部一致"
+}
+run_case "status: release lookup fails"
+F="$T/m-ghfail"; build_fixture "$F"
+latest_unknown_case "gh exits non-zero" "$F" GH_STUB_FAIL=1
+F="$T/m-ghempty"; build_fixture "$F"; : > "$GH_STUB_DB/PsychQuant/che-word-mcp/latest"
+latest_unknown_case "gh prints nothing" "$F"
+F="$T/m-ghjunk"; build_fixture "$F"; printf 'v4.9.0\nv4.10.0\n' > "$GH_STUB_DB/PsychQuant/che-word-mcp/latest"
+latest_unknown_case "gh prints malformed output" "$F"
+
+run_case "status: binary_sha256 is part of the marketplace comparison"
+F="$T/m-sha"; build_fixture "$F"
+sed -i '' "s/$SHA_OLD/$SHA_NEW/" "$F/clone/.claude-plugin/marketplace.json"
+git -C "$F/clone" commit -qam "marketplace sha drifted"; git -C "$F/clone" push -q origin main
+JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "exit 10" 10 "$RC"
+check_contains "macdoc marketplace-mismatch" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="macdoc"][0]["problems"]' 2>/dev/null)" "marketplace-mismatch"
+
+run_case "update: .sha256 asset content must be 64 hex characters"
+for junk in garbage "$(printf '%s' "$SHA_NEW" | cut -c1-63)"; do
+    F="$T/m-shajunk-${#junk}"; build_fixture "$F"; gh_latest PsychQuant/macdoc v0.18.0
+    printf '%s  macdoc\n' "$junk" > "$GH_STUB_DB/PsychQuant/macdoc/releases/v0.18.0/assets/macdoc.sha256"
+    refuses "sha256 asset '$junk'" "$F" "64 位 hex" macdoc --plugin-version 1.15.0
+done
+
+run_case "update: marketplace.json that does not round-trip is refused"
+F="$T/m-indent"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p,encoding="utf-8")); open(p,"w",encoding="utf-8").write(json.dumps(d,indent=4,ensure_ascii=False)+"\n")' "$F/clone/.claude-plugin/marketplace.json"
+git -C "$F/clone" commit -qam "4-space indent"; git -C "$F/clone" push -q origin main
+refuses "4-space marketplace.json" "$F" "重新序列化後與原檔不同" che-word-mcp
+
+run_case "update: pin value appearing twice in plugin.json is refused"
+F="$T/m-twice"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+sed -i '' 's/"keywords": \[/"nested": {"version": "4.9.0"},\
+  "keywords": [/' "$F/clone/plugins/che-word-mcp/.claude-plugin/plugin.json"
+git -C "$F/clone" commit -qam "nested version"; git -C "$F/clone" push -q origin main
+refuses "nested version with the same value" "$F" "重複" che-word-mcp
+
+run_case "update: history file missing -> created with its header"
+F="$T/m-nohist"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+git -C "$F/clone" rm -q docs/marketplace-pin-history.md; git -C "$F/clone" commit -qm "no history"; git -C "$F/clone" push -q origin main
+pins "$F" update che-word-mcp >/dev/null 2>&1; check_eq "exit 0" 0 $?
+check_eq "header" "# Marketplace pin 更新紀錄" "$(head -1 "$F/clone/docs/marketplace-pin-history.md")"
+check_eq "row appended after the table header" "| 2026-01-02 | che-word-mcp | 4.9.0 | 4.10.0 | $WORD_V4_10 |" "$(tail -1 "$F/clone/docs/marketplace-pin-history.md")"
+check_eq "history file committed" "" "$(git -C "$F/clone" status --porcelain -- docs)"
+
+run_case "update: CHANGELOG without any version heading -> appended"
+F="$T/m-nohead"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+printf '# Changelog\n\nIntro only.' > "$F/clone/plugins/che-word-mcp/CHANGELOG.md"
+git -C "$F/clone" commit -qam "bare changelog"; git -C "$F/clone" push -q origin main
+pins "$F" update che-word-mcp >/dev/null 2>&1; check_eq "exit 0" 0 $?
+check_eq "appended at the end" "$(printf '# Changelog\n\nIntro only.\n\n## [4.10.0] - 2026-01-02\n\n### Changed\n\n- binary 4.9.0 → 4.10.0。細節見上游的 CHANGELOG。')" "$(cat "$F/clone/plugins/che-word-mcp/CHANGELOG.md")"
+
+run_case "update: release target differing from the tag -> warning, tag wins"
+F="$T/m-target"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+echo "$WORD_V4_9" > "$GH_STUB_DB/PsychQuant/che-word-mcp/releases/v4.10.0/target"
+OUT=$(pins "$F" update che-word-mcp 2>&1); check_eq "exit 0" 0 $?
+check_contains "warns" "$OUT" "記錄的 target $WORD_V4_9 與 tag 指向的 $WORD_V4_10 不同"
+check_eq "gitlink follows the tag" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
 
 # ==========================================================================
 # Lint: in a UTF-8 locale bash may read the bytes of a following CJK
