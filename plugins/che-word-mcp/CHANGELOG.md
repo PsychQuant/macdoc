@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 看起來完整、實際上是我推測的內容。要查那段請直接看
 > `git log -- plugins/che-word-mcp/`。
 
+## [4.10.0] - 2026-11-11
+
+### Changed
+
+- binary 4.8.0 → 4.10.0，一併帶入先前沒同步的 4.9.0。
+- 細節見 che-word-mcp 的 CHANGELOG。
+
 ## [4.8.0] - 2026-09-28
 
 ### Security
