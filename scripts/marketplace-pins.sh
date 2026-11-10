@@ -691,6 +691,54 @@ $staged"
 }
 
 # --------------------------------------------------------------------------
+# sync-local
+# --------------------------------------------------------------------------
+cmd_sync_local() {
+    local plugins=true
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --no-plugins) plugins=false ;;
+            *) usage_error "sync-local 不認得的參數：$1" ;;
+        esac
+        shift
+    done
+    classify_checkout
+    case "$CO_STATE" in
+        behind)
+            echo "本機落後 $CO_UPSTREAM ${CO_BEHIND} 個 commit，快轉中…"
+            # Never recurse into submodules: their working dirs are left as they are.
+            g -c submodule.recurse=false merge --ff-only --quiet '@{u}' \
+                || die "git merge --ff-only 失敗，HEAD 沒有改變"
+            echo "已快轉到 $(g log -1 --format='%h %s')" ;;
+        in-sync) echo "本機已與 $CO_UPSTREAM 同步，不需要快轉" ;;
+        ahead) die "本機有 ${CO_AHEAD} 個未推送的 commit，不能快轉；先推送或自行處理" ;;
+        diverged) die "本機與 $CO_UPSTREAM 分岔（落後 ${CO_BEHIND}、領先 ${CO_AHEAD}，本機多出的 commit 中有 ${CO_EQUIV} 個在上游有相同內容，上游歷史可能被改寫）。不自動處理，以免丟掉本機的工作" ;;
+        locked) die "有 index.lock（修改時間 ${CO_LOCK_MTIME}；目前 git 程序在跑：${CO_GIT_RUNNING}），不能 merge。本腳本不會移除它" ;;
+        in-progress) die "有進行中的 git 操作（${CO_DETAIL}），請先完成或中止" ;;
+        no-upstream) die "目前分支沒有設定 upstream（${CO_DETAIL}），不知道要快轉到哪裡" ;;
+        *) die "無法判定本機與 upstream 的關係：${CO_DETAIL}" ;;
+    esac
+
+    $plugins || return 0
+    local rc=0 name src rest
+    echo "更新本機的 marketplace 與已安裝的 plugin…"
+    "$CLAUDE" plugin marketplace update "$MARKETPLACE_NAME" </dev/null \
+        || { echo "錯誤：claude plugin marketplace update $MARKETPLACE_NAME 失敗" >&2; rc=1; }
+    while IFS=$'\t' read -r name src rest; do
+        [ -n "$name" ] || continue
+        # Installed plugins have a directory in this marketplace's plugin cache.
+        if [ ! -d "$CACHE_ROOT/$name" ]; then
+            echo "  略過 $name（本機沒有安裝）"
+            continue
+        fi
+        "$CLAUDE" plugin update "$name@$MARKETPLACE_NAME" </dev/null \
+            || { echo "錯誤：claude plugin update $name@$MARKETPLACE_NAME 失敗" >&2; rc=1; }
+    done < <(py plugins "$ROOT" "$MARKETPLACE")
+    [ "$rc" = 0 ] || echo "plugin 更新有失敗的項目；checkout 的快轉已完成，不會還原" >&2
+    return "$rc"
+}
+
+# --------------------------------------------------------------------------
 # main
 # --------------------------------------------------------------------------
 MARKETPLACE_NAME=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["name"])' "$MARKETPLACE" 2>/dev/null || echo macdoc)
@@ -702,6 +750,7 @@ sub=$1; shift
 case "$sub" in
     status) cmd_status "$@" ;;
     update) cmd_update "$@" ;;
+    sync-local) cmd_sync_local "$@" ;;
     -h|--help|help) sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
     *) usage_error "不認得的子指令：$sub" ;;
 esac
