@@ -19,8 +19,10 @@
 #       change locally and appends a row to docs/marketplace-pin-history.md.
 #       Never pushes.
 #   sync-local [--no-plugins]
-#       Fast-forwards this checkout when it is strictly behind its upstream,
-#       then refreshes the locally installed marketplace and plugins.
+#       Fast-forwards this checkout when it is strictly behind its upstream
+#       (any other state, in-sync included, is refused), then refreshes the
+#       locally installed marketplace and the binary-backed plugins that have
+#       a directory in the plugin cache.
 #
 # status exit codes
 #    0  everything consistent and up to date
@@ -59,7 +61,9 @@ MARKETPLACE_REL=".claude-plugin/marketplace.json"
 
 die() { echo "錯誤：$*" >&2; exit 1; }
 usage_error() { echo "用法錯誤：$*" >&2; echo "用法：$(basename "$0") status [--json] | update <plugin> [--to X.Y.Z] [--plugin-version X.Y.Z] [--dry-run] | sync-local [--no-plugins]" >&2; exit 64; }
-g() { git -C "$ROOT" "$@"; }
+# Every git call in this script runs with submodule recursion off, so a user's
+# submodule.recurse=true never makes it touch a submodule working directory.
+g() { git -c submodule.recurse=false -C "$ROOT" "$@"; }
 
 # --------------------------------------------------------------------------
 # Embedded python: all JSON reading/writing. Paths and values are passed as
@@ -707,10 +711,10 @@ cmd_sync_local() {
         behind)
             echo "本機落後 $CO_UPSTREAM ${CO_BEHIND} 個 commit，快轉中…"
             # Never recurse into submodules: their working dirs are left as they are.
-            g -c submodule.recurse=false merge --ff-only --quiet '@{u}' \
+            g merge --ff-only --quiet '@{u}' \
                 || die "git merge --ff-only 失敗，HEAD 沒有改變"
             echo "已快轉到 $(g log -1 --format='%h %s')" ;;
-        in-sync) echo "本機已與 $CO_UPSTREAM 同步，不需要快轉" ;;
+        in-sync) die "本機已與 $CO_UPSTREAM 同步，沒有可快轉的 commit；只有單純落後時才會動手（要更新本機 plugin 請直接用 claude plugin update）" ;;
         ahead) die "本機有 ${CO_AHEAD} 個未推送的 commit，不能快轉；先推送或自行處理" ;;
         diverged) die "本機與 $CO_UPSTREAM 分岔（落後 ${CO_BEHIND}、領先 ${CO_AHEAD}，本機多出的 commit 中有 ${CO_EQUIV} 個在上游有相同內容，上游歷史可能被改寫）。不自動處理，以免丟掉本機的工作" ;;
         locked) die "有 index.lock（修改時間 ${CO_LOCK_MTIME}；目前 git 程序在跑：${CO_GIT_RUNNING}），不能 merge。本腳本不會移除它" ;;
@@ -751,6 +755,6 @@ case "$sub" in
     status) cmd_status "$@" ;;
     update) cmd_update "$@" ;;
     sync-local) cmd_sync_local "$@" ;;
-    -h|--help|help) sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+    -h|--help|help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}" ;;
     *) usage_error "不認得的子指令：$sub" ;;
 esac
