@@ -728,7 +728,7 @@ cmd_sync_local() {
         [ -n "$name" ] || continue
         # Installed plugins have a directory in this marketplace's plugin cache.
         if [ ! -d "$CACHE_ROOT/$name" ]; then
-            echo "  略過 $name（本機沒有安裝）"
+            echo "  略過 ${name}（本機沒有安裝）"
             continue
         fi
         "$CLAUDE" plugin update "$name@$MARKETPLACE_NAME" </dev/null \
