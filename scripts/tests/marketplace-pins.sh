@@ -137,7 +137,7 @@ gh_latest() { mkdir -p "$GH_STUB_DB/$1"; echo "$2" > "$GH_STUB_DB/$1/latest"; }
 UP="$T/upstream"
 make_upstream() {   # make_upstream <name> <tag...>; last tag is annotated
     local name=$1; shift
-    local w="$UP/$name.work"
+    local w="$UP/PsychQuant/$name.work"
     git init -q -b main "$w"
     local tag i=0 n=$#
     for tag in "$@"; do
@@ -145,11 +145,11 @@ make_upstream() {   # make_upstream <name> <tag...>; last tag is annotated
         echo "$tag" > "$w/version"; git -C "$w" add version; git -C "$w" commit -qm "release $tag"
         if [ "$i" = "$n" ]; then git -C "$w" tag -a -m "$tag" "$tag"; else git -C "$w" tag "$tag"; fi
     done
-    git clone -q --bare "$w" "$UP/$name.git"
+    git clone -q --bare "$w" "$UP/PsychQuant/$name.git"
 }
 make_upstream che-word-mcp v4.9.0 v4.10.0
 make_upstream che-pdf-mcp v0.2.0 v0.3.0
-peeled() { git -C "$UP/$1.git" rev-parse "$2^{commit}"; }
+peeled() { git -C "$UP/PsychQuant/$1.git" rev-parse "$2^{commit}"; }
 WORD_V4_9=$(peeled che-word-mcp v4.9.0)
 WORD_V4_10=$(peeled che-word-mcp v4.10.0)
 PDF_V0_2=$(peeled che-pdf-mcp v0.2.0)
@@ -219,7 +219,7 @@ J
     printf '# Marketplace pin history\n\n| 日期 | plugin | 舊 binary | 新 binary | release commit |\n|---|---|---|---|---|\n' > "$S/docs/marketplace-pin-history.md"
     cp "$SCRIPT_UNDER_TEST" "$S/scripts/marketplace-pins.sh" 2>/dev/null || echo 'exit 99' > "$S/scripts/marketplace-pins.sh"
     printf '[submodule "mcp/che-word-mcp"]\n\tpath = mcp/che-word-mcp\n\turl = %s\n[submodule "mcp/che-pdf-mcp"]\n\tpath = mcp/che-pdf-mcp\n\turl = %s\n' \
-        "$UP/che-word-mcp.git" "$UP/che-pdf-mcp.git" > "$S/.gitmodules"
+        "$UP/PsychQuant/che-word-mcp.git" "$UP/PsychQuant/che-pdf-mcp.git" > "$S/.gitmodules"
     git -C "$S" add -A
     git -C "$S" update-index --add --cacheinfo "160000,$WORD_V4_9,mcp/che-word-mcp"
     git -C "$S" update-index --add --cacheinfo "160000,$PDF_V0_2,mcp/che-pdf-mcp"
@@ -273,7 +273,7 @@ seed_push() {   # seed_push <fixture> <n>
 populate_submodule() {
     local s="$1/clone/mcp/che-word-mcp"
     rmdir "$s" 2>/dev/null || true
-    git clone -q "$UP/che-word-mcp.git" "$s" 2>/dev/null
+    git clone -q "$UP/PsychQuant/che-word-mcp.git" "$s" 2>/dev/null
     git -C "$s" checkout -q v4.9.0 2>/dev/null
     echo wip > "$s/wip.txt"
     git -C "$1/clone" config submodule.recurse true
@@ -703,6 +703,161 @@ mkdir "$(git -C "$F/clone" rev-parse --absolute-git-dir)/rebase-merge"
 sync_refuses "operation in progress" "$F" "進行中"
 F="$T/l-fetch"; build_fixture "$F"; git -C "$F/clone" remote set-url origin "$T/does-not-exist.git"
 sync_refuses "fetch fails" "$F" "fetch"
+
+# ==========================================================================
+# Review findings (second round)
+# ==========================================================================
+backups_left() { ls -d "$1"/marketplace-pins-backup.* 2>/dev/null | wc -l | tr -d ' '; }
+
+# interrupt_update <fixture> <hook exit code> <tmpdir>: runs update with a
+# pre-commit hook that signals readiness and sleeps, sends TERM to the script
+# while git commit is running, prints the script's exit status.
+interrupt_update() {
+    local F=$1 hook_rc=$2 tmp=$3 pid i
+    local marker="$T/hook-marker.$$.$RANDOM"
+    mkdir -p "$tmp"
+    printf '#!/bin/sh\ntouch "%s"\nsleep 2\nexit %s\n' "$marker" "$hook_rc" > "$F/clone/.git/hooks/pre-commit"
+    chmod +x "$F/clone/.git/hooks/pre-commit"
+    (cd "$F/clone" && TMPDIR="$tmp" exec ./scripts/marketplace-pins.sh update che-word-mcp > "$tmp/out" 2>&1) &
+    pid=$!
+    for i in $(seq 1 100); do [ -e "$marker" ] && break; sleep 0.1; done
+    kill -TERM "$pid" 2>/dev/null
+    wait "$pid"; echo $?
+}
+
+run_case "update interrupted while git commit runs (commit fails) -> restored"
+F="$T/x-int"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+BEFORE=$(snapshot "$F/clone")
+RC=$(interrupt_update "$F" 1 "$T/x-int-tmp")
+check_eq "terminated by TERM (143)" 143 "$RC"
+check_eq "files, index (gitlink) and HEAD restored" "$BEFORE" "$(snapshot "$F/clone")"
+check_eq "backup dir removed" 0 "$(backups_left "$T/x-int-tmp")"
+check_contains "says it restored" "$(cat "$T/x-int-tmp/out")" "已還原"
+
+run_case "update interrupted while git commit runs (commit succeeds) -> kept"
+F="$T/x-int2"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+BASE=$(git -C "$F/clone" rev-parse HEAD)
+RC=$(interrupt_update "$F" 0 "$T/x-int2-tmp")
+check_eq "terminated by TERM (143)" 143 "$RC"
+check_eq "commit kept" "$BASE" "$(git -C "$F/clone" rev-parse HEAD~1)"
+check_eq "gitlink committed" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+check_eq "worktree clean (not rolled back)" "" "$(git -C "$F/clone" status --porcelain=v1 --untracked-files=all)"
+check_eq "backup dir removed" 0 "$(backups_left "$T/x-int2-tmp")"
+check_contains "says the commit is done" "$(cat "$T/x-int2-tmp/out")" "commit 已完成"
+
+run_case "update with submodules configured as ignored"
+F="$T/x-ign1"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+git -C "$F/clone" config diff.ignoreSubmodules all
+pins "$F" update che-word-mcp >/dev/null 2>&1; check_eq "diff.ignoreSubmodules=all: exit 0" 0 $?
+check_eq "diff.ignoreSubmodules=all: gitlink committed" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+F="$T/x-ign2"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+git -C "$F/clone" config submodule.mcp/che-word-mcp.ignore all
+pins "$F" update che-word-mcp >/dev/null 2>&1; check_eq "submodule.<name>.ignore=all: exit 0" 0 $?
+check_eq "submodule.<name>.ignore=all: gitlink committed" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+F="$T/x-ign3"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+git -C "$F/clone" config submodule.mcp/che-word-mcp.ignore all
+git -C "$F/clone" config diff.ignoreSubmodules all
+git -C "$F/clone" update-index --cacheinfo "160000,$WORD_V4_10,mcp/che-word-mcp"
+refuses "pre-staged gitlink under ignore=all" "$F" "已暫存" che-word-mcp
+
+run_case "status with a pin that is not X.Y.Z"
+F="$T/x-rc"; build_fixture "$F"
+sed -i '' 's/"binary_version": "4.9.0"/"binary_version": "4.9.0-rc1"/' "$F/clone/plugins/che-word-mcp/.claude-plugin/plugin.json" "$F/clone/.claude-plugin/marketplace.json"
+git -C "$F/clone" commit -qam "rc pin"; git -C "$F/clone" push -q origin main
+echo 4.9.0-rc1 > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 2" 2 "$RC"
+check_not_contains "no traceback" "$OUT" "Traceback"
+check_contains "shows the value as-is" "$OUT" "4.9.0-rc1"
+JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "json exit 2" 2 "$RC"
+check_contains "json marks it undeterminable" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["unknown"]' 2>/dev/null)" "pin-unparseable"
+
+run_case "status with a latest-release tag that is not X.Y.Z"
+F="$T/x-rc2"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0-beta
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 2" 2 "$RC"
+check_not_contains "no traceback" "$OUT" "Traceback"
+check_contains "shows the tag as-is" "$OUT" "4.10.0-beta"
+JOUT=$(pins "$F" status --json 2>/dev/null)
+check_eq "json latest as-is" "4.10.0-beta" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["latest_release"]' 2>/dev/null)"
+check_contains "json marks it undeterminable" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["unknown"]' 2>/dev/null)" "latest-unparseable"
+refuses "update to a non-X.Y.Z latest" "$F" "4.10.0-beta" che-word-mcp
+
+run_case "upstream branch deleted on the remote"
+F="$T/x-gone"; build_fixture "$F"
+git -C "$F/clone" checkout -q -b feat; git -C "$F/clone" push -q -u origin feat 2>/dev/null
+git -C "$F/seed" push -q origin --delete feat 2>/dev/null
+JOUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "state upstream-gone" upstream-gone "$(json_get "$JOUT" 'd["checkout"]["state"]' 2>/dev/null)"
+check_eq "status exit 10" 10 "$RC"
+check "remote-tracking ref not pruned" git -C "$F/clone" rev-parse -q --verify refs/remotes/origin/feat
+gh_latest PsychQuant/che-word-mcp v4.10.0
+OUT=$(pins "$F" update che-word-mcp --dry-run 2>&1); RC=$?
+check "dry-run refused" test "$RC" -ne 0
+check_not_contains "dry-run prints no push command" "$OUT" "git push"
+refuses "update with upstream gone" "$F" "upstream" che-word-mcp
+sync_refuses "sync-local with upstream gone" "$F" "upstream"
+
+run_case "upstream configured but never fetched / absent on the remote"
+F="$T/x-nof"; build_fixture "$F"
+git -C "$F/clone" checkout -q -b newb
+git -C "$F/clone" config branch.newb.remote origin
+git -C "$F/clone" config branch.newb.merge refs/heads/newb
+OUT=$(pins "$F" status 2>&1)
+check_eq "state upstream-gone" upstream-gone "$(json_get "$(pins "$F" status --json 2>/dev/null)" 'd["checkout"]["state"]' 2>/dev/null)"
+check_not_contains "does not claim no upstream is configured" "$OUT" "沒有設定 upstream"
+check_contains "names the configured upstream" "$OUT" "origin/newb"
+
+run_case "pinned release missing an asset -> problem, exit 10"
+F="$T/x-pinasset"; build_fixture "$F"
+rm "$GH_STUB_DB/PsychQuant/che-pdf-mcp/releases/v0.2.0/assets/ChePDFMCP.sha256"
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 10" 10 "$RC"
+check_not_contains "summary does not say all consistent" "$OUT" "全部一致"
+check_contains "listed as problem" "$(json_get "$(pins "$F" status --json 2>/dev/null)" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["problems"]' 2>/dev/null)" "pinned-release-assets-incomplete"
+
+run_case "pin newer than the latest release -> note"
+F="$T/x-ahead-rel"; build_fixture "$F"
+gh_release PsychQuant/che-pdf-mcp v0.1.0 ChePDFMCP ChePDFMCP.sha256; gh_latest PsychQuant/che-pdf-mcp v0.1.0
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit unchanged (0)" 0 "$RC"
+check_contains "note listed" "$(json_get "$(pins "$F" status --json 2>/dev/null)" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["notes"]' 2>/dev/null)" "pin-ahead-of-release"
+check_contains "note shown" "$OUT" "pin 比最新 release 新"
+
+run_case "duplicate key in plugin.json"
+F="$T/x-dup"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+sed -i '' 's/"name": "che-word-mcp",/"name": "che-word-mcp",\
+  "binary_version": "4.8.0",/' "$F/clone/plugins/che-word-mcp/.claude-plugin/plugin.json"
+git -C "$F/clone" commit -qam "duplicate key"; git -C "$F/clone" push -q origin main
+refuses "update with duplicate binary_version" "$F" "重複" che-word-mcp
+check_contains "status note" "$(pins "$F" status 2>&1)" "重複"
+
+run_case "sync-local in-sync: failure message does not claim a fast-forward"
+F="$T/x-syncfail"; build_fixture "$F"
+OUT=$(CLAUDE_STUB_FAIL=1 pins "$F" sync-local 2>&1)
+check_not_contains "no fast-forward claim" "$OUT" "快轉已完成"
+check_contains "reports the failure" "$OUT" "失敗"
+
+run_case "sha256 written in lowercase"
+F="$T/x-upper"; build_fixture "$F"; gh_latest PsychQuant/macdoc v0.18.0
+printf '%s  macdoc\n' "$(printf '%s' "$SHA_NEW" | sed 's/2/A/g')" > "$GH_STUB_DB/PsychQuant/macdoc/releases/v0.18.0/assets/macdoc.sha256"
+pins "$F" update macdoc --plugin-version 1.15.0 >/dev/null 2>&1
+check_eq "plugin.json sha lowercase" "$(printf '%s' "$SHA_NEW" | sed 's/2/a/g')" "$(pj_field "$F" macdoc binary_sha256)"
+check_eq "marketplace sha lowercase" "$(printf '%s' "$SHA_NEW" | sed 's/2/a/g')" "$(mk_field "$F" macdoc binary_sha256)"
+
+run_case "submodule matched by owner/repo, not just repo name"
+F="$T/x-owner"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+{ printf '[submodule "vendor/che-word-mcp"]\n\tpath = vendor/che-word-mcp\n\turl = %s\n' "$UP/OtherOwner/che-word-mcp.git"; cat "$F/clone/.gitmodules"; } > "$F/clone/.gitmodules.new"
+mv "$F/clone/.gitmodules.new" "$F/clone/.gitmodules"
+git -C "$F/clone" commit -qam "decoy submodule"; git -C "$F/clone" push -q origin main
+OUT=$(pins "$F" update che-word-mcp 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "gitlink on the right path" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+
+run_case "MCP update explains the submodule shows as modified"
+F="$T/x-note"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+check_contains "explains git status" "$(pins "$F" update che-word-mcp 2>&1)" "git status"
 
 # ==========================================================================
 # Lint: in a UTF-8 locale bash may read the bytes of a following CJK
