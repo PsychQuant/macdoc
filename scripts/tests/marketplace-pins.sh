@@ -23,6 +23,11 @@ export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.invalid
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.invalid
+# All remotes in the fixtures are local paths. Allowing the file transport
+# everywhere means that a stray `git submodule update` (or recursion) in the
+# script under test would really clone and check out, instead of failing on
+# "transport 'file' not allowed" and leaving the submodule looking untouched.
+export GIT_ALLOW_PROTOCOL=file
 export MARKETPLACE_PINS_TODAY=2026-01-02
 export MARKETPLACE_PINS_GIT_RUNNING=no
 
@@ -276,12 +281,15 @@ seed_push() {   # seed_push <fixture> <n>
 # tracked file and an untracked file. submodule.recurse and file-protocol
 # fetches are turned on in the clone, so any git command that recursed into
 # the submodule, or an explicit `submodule update`, would visibly change it.
+# With a second argument "clean" the tracked files stay unmodified (only the
+# local commit and the untracked file): git refuses to check out over a
+# modified tracked file, which would hide an unwanted `submodule update`.
 populate_submodule() {
     local c="$1/clone" s="$1/clone/mcp/che-word-mcp"
     git -C "$c" config protocol.file.allow always
     git -C "$c" -c protocol.file.allow=always submodule update --init -q mcp/che-word-mcp
     echo "local work" >> "$s/version"; git -C "$s" commit -qam "local work in the submodule"
-    echo "uncommitted" >> "$s/version"
+    [ "${2:-}" = clean ] || echo "uncommitted" >> "$s/version"
     echo wip > "$s/wip.txt"
     git -C "$c" config submodule.recurse true
     # Assert the fixture is what the tests rely on.
@@ -694,6 +702,23 @@ check_eq "fast-forwarded" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "
 check_eq "HEAD gitlink moved" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
 check_eq "submodule HEAD, status and files byte-for-byte unchanged" "$SUB_BEFORE" "$(sub_snapshot "$F")"
 check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
+
+run_case "sync-local: gitlink-moving fast-forward with a clean, checked-out submodule"
+F="$T/l-subc"; build_fixture "$F"; populate_submodule "$F" clean
+check_eq "fixture: no modified tracked file" "?? wip.txt" "$(git -C "$F/clone/mcp/che-word-mcp" status --porcelain=v1 --untracked-files=all)"
+git -C "$F/seed" update-index --cacheinfo "160000,$WORD_V4_10,mcp/che-word-mcp"
+git -C "$F/seed" commit -qm "move gitlink"; git -C "$F/seed" push -q origin main
+SUB_BEFORE=$(sub_snapshot "$F")
+pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "fast-forwarded" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
+check_eq "submodule HEAD, status and files byte-for-byte unchanged" "$SUB_BEFORE" "$(sub_snapshot "$F")"
+
+run_case "update with a clean, checked-out submodule"
+F="$T/u-subc"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; populate_submodule "$F" clean
+SUB_BEFORE=$(sub_snapshot "$F")
+pins "$F" update che-word-mcp >/dev/null 2>&1; check_eq "exit 0" 0 $?
+check_eq "submodule HEAD, status and files byte-for-byte unchanged" "$SUB_BEFORE" "$(sub_snapshot "$F")"
 
 run_case "sync-local: in-sync skips the git step and refreshes plugins"
 F="$T/l-sync"; build_fixture "$F"
