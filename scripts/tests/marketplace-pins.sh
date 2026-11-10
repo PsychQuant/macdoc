@@ -408,6 +408,141 @@ JOUT=$(pins "$F" status --json 2>/dev/null)
 check_eq "assets incomplete" "False" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["latest_assets_complete"]' 2>/dev/null)"
 
 # ==========================================================================
+# update: success paths
+# ==========================================================================
+mk_field() {   # mk_field <fixture> <plugin> <key>: marketplace entry field
+    python3 -I -c 'import json,sys; print([e for e in json.load(open(sys.argv[1],encoding="utf-8"))["plugins"] if e["name"]==sys.argv[2]][0].get(sys.argv[3]))' \
+        "$1/clone/.claude-plugin/marketplace.json" "$2" "$3"
+}
+pj_field() {   # pj_field <fixture> <plugin> <key>
+    python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get(sys.argv[2]))' \
+        "$1/clone/plugins/$2/.claude-plugin/plugin.json" "$3"
+}
+first_heading() { grep -m1 '^## \[' "$1"; }
+first_version_heading() { grep -m1 -E '^## \[[0-9]' "$1"; }
+
+run_case "update: MCP plugin whose version equals binary_version (che-word-mcp)"
+F="$T/u-word"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+ORIGIN_BEFORE=$(git -C "$F/origin.git" rev-parse main)
+BASE=$(git -C "$F/clone" rev-parse HEAD)
+OUT=$(pins "$F" update che-word-mcp 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "plugin.json version" 4.10.0 "$(pj_field "$F" che-word-mcp version)"
+check_eq "plugin.json binary_version" 4.10.0 "$(pj_field "$F" che-word-mcp binary_version)"
+check_eq "marketplace version" 4.10.0 "$(mk_field "$F" che-word-mcp version)"
+check_eq "marketplace binary_version" 4.10.0 "$(mk_field "$F" che-word-mcp binary_version)"
+check_eq "marketplace keeps non-ASCII text" "Word ── 測試" "$(mk_field "$F" che-word-mcp description)"
+check_eq "plugin.json keeps its hand formatting" "$(sed 's/4\.9\.0/4.10.0/' "$F/seed/plugins/che-word-mcp/.claude-plugin/plugin.json")" "$(cat "$F/clone/plugins/che-word-mcp/.claude-plugin/plugin.json")"
+check_eq "gitlink in HEAD points at the tag's commit" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+check_eq "exactly one new commit" "$BASE" "$(git -C "$F/clone" rev-parse HEAD~1)"
+check_eq "commit touches exactly the pin files" \
+    ".claude-plugin/marketplace.json docs/marketplace-pin-history.md mcp/che-word-mcp plugins/che-word-mcp/.claude-plugin/plugin.json plugins/che-word-mcp/CHANGELOG.md" \
+    "$(git -C "$F/clone" diff-tree --no-commit-id --name-only -r HEAD | sort | tr '\n' ' ' | sed 's/ $//')"
+check_eq "commit message" "chore: che-word-mcp plugin 4.10.0，binary 4.9.0 → 4.10.0，gitlink 指向 v4.10.0" "$(git -C "$F/clone" log -1 --format=%s)"
+check_eq "CHANGELOG new top section" "## [4.10.0] - 2026-01-02" "$(first_heading "$F/clone/plugins/che-word-mcp/CHANGELOG.md")"
+check_contains "CHANGELOG bullet" "$(cat "$F/clone/plugins/che-word-mcp/CHANGELOG.md")" "### Changed
+
+- binary 4.9.0 → 4.10.0。細節見上游的 CHANGELOG。
+
+## [0.0.1]"
+check_eq "history row" "| 2026-01-02 | che-word-mcp | 4.9.0 | 4.10.0 | $WORD_V4_10 |" "$(tail -1 "$F/clone/docs/marketplace-pin-history.md")"
+check_eq "nothing pushed" "$ORIGIN_BEFORE" "$(git -C "$F/origin.git" rev-parse main)"
+check_contains "prints the push command" "$OUT" "git push origin HEAD:main"
+check_eq "submodule working dir untouched (still empty)" "" "$(ls -A "$F/clone/mcp/che-word-mcp")"
+check_eq "worktree clean afterwards" "" "$(git -C "$F/clone" status --porcelain=v1 --untracked-files=all)"
+JOUT=$(pins "$F" status --json 2>/dev/null)
+# The installed record still says 4.9.0, so only that remains for che-word-mcp.
+check_eq "status afterwards: pin current, entries consistent" "['installed-differs']" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["problems"]' 2>/dev/null)"
+check_eq "status afterwards: checkout ahead by the new commit" "ahead" "$(json_get "$JOUT" 'd["checkout"]["state"]' 2>/dev/null)"
+
+run_case "update: MCP plugin with separate plugin version (che-pdf-mcp, annotated tag)"
+F="$T/u-pdf"; build_fixture "$F"
+OUT=$(pins "$F" update che-pdf-mcp --to 0.3.0 --plugin-version 0.1.4 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "plugin.json version" 0.1.4 "$(pj_field "$F" che-pdf-mcp version)"
+check_eq "plugin.json binary_version" 0.3.0 "$(pj_field "$F" che-pdf-mcp binary_version)"
+check_eq "marketplace version" 0.1.4 "$(mk_field "$F" che-pdf-mcp version)"
+check_eq "marketplace binary_version" 0.3.0 "$(mk_field "$F" che-pdf-mcp binary_version)"
+check_eq "gitlink peeled from annotated tag" "$(peeled che-pdf-mcp v0.3.0)" "$(git -C "$F/clone" ls-tree HEAD mcp/che-pdf-mcp | awk '{print $3}')"
+check_eq "commit message" "chore: che-pdf-mcp plugin 0.1.4，binary 0.2.0 → 0.3.0，gitlink 指向 v0.3.0" "$(git -C "$F/clone" log -1 --format=%s)"
+
+run_case "update: CLI plugin with sha256 pin (macdoc)"
+F="$T/u-cli"; build_fixture "$F"; gh_latest PsychQuant/macdoc v0.18.0
+OUT=$(pins "$F" update macdoc --plugin-version 1.15.0 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "plugin.json version" 1.15.0 "$(pj_field "$F" macdoc version)"
+check_eq "plugin.json binary_version" 0.18.0 "$(pj_field "$F" macdoc binary_version)"
+check_eq "plugin.json binary_sha256" "$SHA_NEW" "$(pj_field "$F" macdoc binary_sha256)"
+check_eq "marketplace binary_sha256" "$SHA_NEW" "$(mk_field "$F" macdoc binary_sha256)"
+check_eq "marketplace binary_version" 0.18.0 "$(mk_field "$F" macdoc binary_version)"
+check_eq "commit message has no gitlink clause" "chore: macdoc plugin 1.15.0，binary 0.17.0 → 0.18.0" "$(git -C "$F/clone" log -1 --format=%s)"
+check_eq "commit touches exactly the pin files" \
+    ".claude-plugin/marketplace.json docs/marketplace-pin-history.md plugins/macdoc/.claude-plugin/plugin.json plugins/macdoc/CHANGELOG.md" \
+    "$(git -C "$F/clone" diff-tree --no-commit-id --name-only -r HEAD | sort | tr '\n' ' ' | sed 's/ $//')"
+check_eq "[Unreleased] stays on top" "## [Unreleased]" "$(first_heading "$F/clone/plugins/macdoc/CHANGELOG.md")"
+check_eq "new section is the first versioned one" "## [1.15.0] - 2026-01-02" "$(first_version_heading "$F/clone/plugins/macdoc/CHANGELOG.md")"
+check_eq "history row records the tag commit" "| 2026-01-02 | macdoc | 0.17.0 | 0.18.0 | $(git -C "$F/seed" rev-parse 'v0.18.0^{commit}') |" "$(tail -1 "$F/clone/docs/marketplace-pin-history.md")"
+
+run_case "update: --dry-run changes nothing"
+F="$T/u-dry"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+BEFORE=$(snapshot "$F/clone")
+OUT=$(pins "$F" update che-word-mcp --dry-run 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_contains "describes the change" "$OUT" "4.9.0 → 4.10.0"
+check_contains "names the gitlink" "$OUT" "$WORD_V4_10"
+check_eq "files, index and HEAD unchanged" "$BEFORE" "$(snapshot "$F/clone")"
+
+# ==========================================================================
+# update: refusals — each must leave every file, the index and HEAD as-is
+# ==========================================================================
+refuses() {   # refuses <name> <fixture> <expected reason substring> <update args...>
+    local name=$1 F=$2 reason=$3 before out rc; shift 3
+    before=$(snapshot "$F/clone")
+    out=$(pins "$F" update "$@" 2>&1); rc=$?
+    if [ "$rc" -ne 0 ]; then ok "$name: refused"; else not_ok "$name: refused" "$out"; fi
+    check_contains "$name: says why" "$out" "$reason"
+    check_eq "$name: nothing changed" "$before" "$(snapshot "$F/clone")"
+}
+
+run_case "update refusals"
+F="$T/r"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+refuses "unknown plugin" "$F" "nope" nope
+refuses "plugin without binary_version" "$F" "binary_version" docflow
+refuses "release does not exist" "$F" "v9.9.9" che-word-mcp --to 9.9.9
+refuses "target equal to the pin" "$F" "不比目前的 pin" che-word-mcp --to 4.9.0
+refuses "target older than the pin" "$F" "不比目前的 pin" che-word-mcp --to 4.8.0
+refuses "malformed version" "$F" "X.Y.Z" che-word-mcp --to 4.10
+refuses "plugin version differs from target" "$F" "--plugin-version" che-word-mcp --plugin-version 4.11.0
+refuses "separate plugin version required" "$F" "--plugin-version" che-pdf-mcp --to 0.3.0
+refuses "plugin version not newer" "$F" "--plugin-version" che-pdf-mcp --to 0.3.0 --plugin-version 0.1.3
+GH_STUB_FAIL=1 refuses "gh failure" "$F" "查不到" che-word-mcp
+rm "$GH_STUB_DB/PsychQuant/che-word-mcp/releases/v4.10.0/assets/CheWordMCP.sha256"
+refuses "release missing the .sha256 asset" "$F" "CheWordMCP.sha256" che-word-mcp
+gh_release PsychQuant/che-word-mcp v4.11.0 CheWordMCP CheWordMCP.sha256
+refuses "tag missing upstream" "$F" "v4.11.0" che-word-mcp --to 4.11.0
+
+F="$T/r-behind"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; seed_push "$F" 1
+refuses "checkout behind" "$F" "同步" che-word-mcp
+F="$T/r-ahead"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; local_commit "$F" a.txt
+refuses "checkout ahead" "$F" "同步" che-word-mcp
+F="$T/r-fetch"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+git -C "$F/clone" remote set-url origin "$T/does-not-exist.git"
+refuses "checkout state unknown" "$F" "fetch" che-word-mcp
+F="$T/r-dirty"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+echo " " >> "$F/clone/plugins/che-word-mcp/CHANGELOG.md"
+refuses "uncommitted change in a file to edit" "$F" "未提交" che-word-mcp
+F="$T/r-staged"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+echo new > "$F/clone/other.txt"; git -C "$F/clone" add other.txt
+refuses "unrelated staged change" "$F" "已暫存" che-word-mcp
+
+run_case "update: full-table check fails -> everything restored"
+F="$T/r-table"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
+sed -i '' 's/"version": "0.1.3"/"version": "0.1.2"/' "$F/clone/plugins/che-pdf-mcp/.claude-plugin/plugin.json"
+git -C "$F/clone" commit -qam "pdf plugin.json drifted"; git -C "$F/clone" push -q origin main
+refuses "another plugin inconsistent" "$F" "che-pdf-mcp" che-word-mcp
+check_eq "gitlink restored in the index" "$WORD_V4_9" "$(git -C "$F/clone" ls-files -s mcp/che-word-mcp | awk '{print $2}')"
+
+# ==========================================================================
 # Summary
 # ==========================================================================
 check_eq "real checkout HEAD untouched" "$GUARD_HEAD" "$(git -C "$ROOT" rev-parse HEAD)"
