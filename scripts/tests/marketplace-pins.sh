@@ -266,6 +266,17 @@ seed_push() {   # seed_push <fixture> <n>
     done
     git -C "$1/seed" push -q origin main
 }
+# populate_submodule <fixture>: check out the che-word-mcp submodule at v4.9.0
+# with an untracked file in it, and turn on submodule.recurse in the clone, so
+# that any command that recursed into it would visibly change it.
+populate_submodule() {
+    local s="$1/clone/mcp/che-word-mcp"
+    rmdir "$s" 2>/dev/null || true
+    git clone -q "$UP/che-word-mcp.git" "$s" 2>/dev/null
+    git -C "$s" checkout -q v4.9.0 2>/dev/null
+    echo wip > "$s/wip.txt"
+    git -C "$1/clone" config submodule.recurse true
+}
 local_commit() {   # local_commit <fixture> <file>
     echo "local" >> "$1/clone/$2"; git -C "$1/clone" add "$2"; git -C "$1/clone" commit -qm "local $2"
 }
@@ -483,6 +494,24 @@ check_eq "[Unreleased] stays on top" "## [Unreleased]" "$(first_heading "$F/clon
 check_eq "new section is the first versioned one" "## [1.15.0] - 2026-01-02" "$(first_version_heading "$F/clone/plugins/macdoc/CHANGELOG.md")"
 check_eq "history row records the tag commit" "| 2026-01-02 | macdoc | 0.17.0 | 0.18.0 | $(git -C "$F/seed" rev-parse 'v0.18.0^{commit}') |" "$(tail -1 "$F/clone/docs/marketplace-pin-history.md")"
 
+run_case "update: checked-out submodule is left alone"
+F="$T/u-sub"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; populate_submodule "$F"
+pins "$F" update che-word-mcp >/dev/null 2>&1; RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "gitlink in HEAD points at the new tag" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
+check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
+
+run_case "update: refusal with a checked-out submodule leaves it alone"
+F="$T/u-subr"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0; populate_submodule "$F"
+sed -i '' 's/"version": "0.1.3"/"version": "0.1.2"/' "$F/clone/plugins/che-pdf-mcp/.claude-plugin/plugin.json"
+git -C "$F/clone" commit -qam "pdf plugin.json drifted"; git -C "$F/clone" push -q origin main
+pins "$F" update che-word-mcp >/dev/null 2>&1
+check "refused" test $? -ne 0
+check_eq "gitlink restored in the index" "$WORD_V4_9" "$(git -C "$F/clone" ls-files -s mcp/che-word-mcp | awk '{print $2}')"
+check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
+check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
+
 run_case "update: --dry-run changes nothing"
 F="$T/u-dry"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
 BEFORE=$(snapshot "$F/clone")
@@ -557,6 +586,24 @@ check_contains "installed MCP plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugi
 check_contains "installed CLI plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugin update macdoc@macdoc"
 check_not_contains "plugin without binary pin skipped" "$(cat "$CLAUDE_STUB_LOG")" "docflow"
 
+run_case "sync-local: plugins without a cache dir are skipped"
+F="$T/l-skip"; build_fixture "$F"; seed_push "$F" 1; rm -rf "$F/cache/che-pdf-mcp"
+OUT=$(pins "$F" sync-local 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_not_contains "not-installed plugin not updated" "$(cat "$CLAUDE_STUB_LOG")" "che-pdf-mcp"
+check_contains "says it skipped it" "$OUT" "略過 che-pdf-mcp"
+
+run_case "sync-local: fast-forward that moves a gitlink leaves the submodule alone"
+F="$T/l-sub"; build_fixture "$F"; populate_submodule "$F"
+git -C "$F/seed" update-index --cacheinfo "160000,$WORD_V4_10,mcp/che-word-mcp"
+git -C "$F/seed" commit -qm "move gitlink"; git -C "$F/seed" push -q origin main
+pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "fast-forwarded" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
+check_eq "HEAD gitlink moved" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mcp/che-word-mcp | awk '{print $3}')"
+check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
+check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
+
 run_case "sync-local: --no-plugins"
 F="$T/l-nop"; build_fixture "$F"; seed_push "$F" 1
 pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
@@ -571,12 +618,6 @@ check "non-zero exit" test "$RC" -ne 0
 check_eq "fast-forward kept" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
 check_contains "reports the failure" "$OUT" "失敗"
 
-run_case "sync-local: in-sync does not merge"
-F="$T/l-sync"; build_fixture "$F"
-HEAD_BEFORE=$(git -C "$F/clone" rev-parse HEAD)
-pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
-check_eq "exit 0" 0 "$RC"
-check_eq "HEAD unchanged" "$HEAD_BEFORE" "$(git -C "$F/clone" rev-parse HEAD)"
 
 sync_refuses() {   # sync_refuses <name> <fixture> <reason substring>
     local before out rc
@@ -589,6 +630,8 @@ sync_refuses() {   # sync_refuses <name> <fixture> <reason substring>
     check_eq "$1: claude not called" "" "$(cat "$CLAUDE_STUB_LOG")"
 }
 run_case "sync-local refusals"
+F="$T/l-sync"; build_fixture "$F"
+sync_refuses "in-sync (only behind-only proceeds)" "$F" "同步"
 F="$T/l-ahead"; build_fixture "$F"; local_commit "$F" a.txt
 sync_refuses "ahead" "$F" "未推送"
 F="$T/l-div"; build_fixture "$F"; local_commit "$F" a.txt; seed_push "$F" 1
@@ -604,6 +647,15 @@ mkdir "$(git -C "$F/clone" rev-parse --absolute-git-dir)/rebase-merge"
 sync_refuses "operation in progress" "$F" "進行中"
 F="$T/l-fetch"; build_fixture "$F"; git -C "$F/clone" remote set-url origin "$T/does-not-exist.git"
 sync_refuses "fetch fails" "$F" "fetch"
+
+# ==========================================================================
+# Lint: in a UTF-8 locale bash may read the bytes of a following CJK
+# character as part of a bare $name, so every expansion that is directly
+# followed by a non-ASCII character must be written ${name}.
+# ==========================================================================
+run_case "lint"
+BARE=$(LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~]' "$SCRIPT_UNDER_TEST" || true)
+check_eq "no bare \$name directly followed by non-ASCII" "" "$BARE"
 
 # ==========================================================================
 # Summary
