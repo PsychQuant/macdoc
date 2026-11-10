@@ -19,10 +19,12 @@
 #       change locally and appends a row to docs/marketplace-pin-history.md.
 #       Never pushes.
 #   sync-local [--no-plugins]
-#       Fast-forwards this checkout when it is strictly behind its upstream
-#       (any other state, in-sync included, is refused), then refreshes the
-#       locally installed marketplace and the binary-backed plugins that have
-#       a directory in the plugin cache.
+#       Fast-forwards this checkout when it is strictly behind its upstream;
+#       when already in sync it skips the git step. Any other state (ahead,
+#       diverged, locked, operation in progress, no upstream, undeterminable)
+#       is refused with HEAD unchanged. Then refreshes the locally installed
+#       marketplace and the binary-backed plugins that have a directory in the
+#       plugin cache.
 #
 # status exit codes
 #    0  everything consistent and up to date
@@ -31,9 +33,12 @@
 #       an installed version that differs from the pin, or a checkout that is
 #       not in sync with its upstream
 #    2  nothing is known to be behind, but something could not be determined
-#       (release lookup failed, no installed-version record, fetch failed)
+#       (release lookup failed, plugin installed but its installed-version
+#       record missing or unreadable, fetch failed)
 #   10 takes precedence over 2: a known problem is reported even when other
-#   facts are unknown.
+#   facts are unknown. A plugin that is not installed at all (MCP: no
+#   directory in the plugin cache; CLI: no binary in the install dir) affects
+#   neither: it is shown as 未安裝 and as installed_state "not-installed".
 # Other subcommands: 0 success, 1 refused or failed, 64 usage error.
 #
 # Environment overrides (used by scripts/tests/marketplace-pins.sh)
@@ -116,7 +121,7 @@ def render(fmt, plugin_tsv, *checkout):
     with open(plugin_tsv, encoding="utf-8") as f:
         for line in f:
             (name, kind, repo, binary, mk_v, mk_b, mk_sha, pj_v, pj_b, pj_sha,
-             latest, assets, installed) = (none_if_dash(x) for x in line.rstrip("\n").split("\t"))
+             latest, assets, installed, inst_state) = (none_if_dash(x) for x in line.rstrip("\n").split("\t"))
             problems, unknown, notes = [], [], []
             if (mk_v, mk_b, mk_sha) != (pj_v, pj_b, pj_sha):
                 problems.append("marketplace-mismatch")
@@ -128,9 +133,9 @@ def render(fmt, plugin_tsv, *checkout):
                 unknown.append("latest-assets")
             elif assets == "no":
                 notes.append("latest-assets-incomplete")
-            if installed is None:
+            if inst_state == "unknown":
                 unknown.append("installed")
-            elif installed != pj_b:
+            elif inst_state == "known" and installed != pj_b:
                 problems.append("installed-differs")
             rows.append({
                 "name": name, "kind": kind, "upstream_repo": repo, "binary": binary,
@@ -139,6 +144,7 @@ def render(fmt, plugin_tsv, *checkout):
                 "latest_release": latest,
                 "latest_assets_complete": None if assets is None else assets == "yes",
                 "installed": installed,
+                "installed_state": inst_state,
                 "problems": problems, "unknown": unknown, "notes": notes,
             })
     any_problem = any(r["problems"] for r in rows) or state not in ("in-sync", "unknown")
@@ -165,7 +171,9 @@ def render(fmt, plugin_tsv, *checkout):
         issues = "；".join(labels[k] for k in r["problems"] + r["unknown"] + r["notes"]) or "—"
         table.append([r["name"], f"{pj['version'] or U} / {pj['binary_version'] or U}",
                       f"{mk['version'] or U} / {mk['binary_version'] or U}",
-                      r["latest_release"] or U, assets, r["installed"] or U, issues])
+                      r["latest_release"] or U, assets,
+                      "未安裝" if r["installed_state"] == "not-installed" else (r["installed"] or U),
+                      issues])
     widths = [max(display_width(row[i]) for row in table) for i in range(len(header) - 1)]
     for row in table:
         cells = [row[i] + " " * (widths[i] - display_width(row[i])) for i in range(len(widths))]
@@ -385,9 +393,10 @@ read_var() {   # read_var <file> <NAME>: value of NAME="..." in a shell script
 }
 
 # plugin_meta <name> <source>: sets PM_KIND (mcp|cli|-) PM_REPO PM_BINARY PM_RECORD
+# and PM_PRESENCE (the path whose absence means "not installed").
 plugin_meta() {
     local name=$1 dir="$ROOT/${2#./}" f
-    PM_KIND=-; PM_REPO=-; PM_BINARY=-; PM_RECORD=-
+    PM_KIND=-; PM_REPO=-; PM_BINARY=-; PM_RECORD=-; PM_PRESENCE=-
     if [ -f "$dir/bin/$name-wrapper.sh" ]; then
         f="$dir/bin/$name-wrapper.sh"; PM_KIND=mcp
     elif [ -f "$dir/hooks/session-start.sh" ]; then
@@ -401,8 +410,10 @@ plugin_meta() {
     # Same locations the wrapper / session-start hook write to.
     if [ "$PM_KIND" = mcp ]; then
         PM_RECORD="$CACHE_ROOT/$name/.bin-cache/.$PM_BINARY.version"
+        PM_PRESENCE="$CACHE_ROOT/$name"
     else
         PM_RECORD="$BIN_DIR/.$PM_BINARY.installed_version"
+        PM_PRESENCE="$BIN_DIR/$PM_BINARY"
     fi
 }
 
@@ -458,7 +469,7 @@ cmd_status() {
     done
     [ -f "$MARKETPLACE" ] || die "找不到 $MARKETPLACE_REL"
     classify_checkout
-    local tsv rows name src mk_v mk_b mk_sha pj_v pj_b pj_sha latest assets installed
+    local tsv rows name src mk_v mk_b mk_sha pj_v pj_b pj_sha latest assets installed inst_state
     tsv=$(mktemp "${TMPDIR:-/tmp}/marketplace-pins.XXXXXX") || die "mktemp 失敗"
     rows=$(py plugins "$ROOT" "$MARKETPLACE") || { rm -f "$tsv"; die "讀不到 $MARKETPLACE_REL"; }
     while IFS=$'\t' read -r name src mk_v mk_b mk_sha pj_v pj_b pj_sha; do
@@ -476,13 +487,18 @@ cmd_status() {
         else
             latest=-
         fi
-        if [ "$PM_RECORD" != - ] && [ -f "$PM_RECORD" ]; then
+        # not-installed: MCP has no plugin-cache dir / CLI has no binary.
+        # unknown: installed, but the version record is missing or unreadable.
+        inst_state=unknown
+        if [ "$PM_PRESENCE" != - ] && [ ! -e "$PM_PRESENCE" ]; then
+            inst_state=not-installed
+        elif [ "$PM_RECORD" != - ] && [ -f "$PM_RECORD" ]; then
             installed=$(tr -d '[:space:]' < "$PM_RECORD" 2>/dev/null)
-            [ -n "$installed" ] || installed=-
+            if [ -n "$installed" ]; then inst_state=known; else installed=-; fi
         fi
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$name" "$PM_KIND" "$PM_REPO" "$PM_BINARY" "$mk_v" "$mk_b" "$mk_sha" \
-            "$pj_v" "$pj_b" "$pj_sha" "$latest" "$assets" "$installed" >> "$tsv"
+            "$pj_v" "$pj_b" "$pj_sha" "$latest" "$assets" "$installed" "$inst_state" >> "$tsv"
     done <<< "$rows"
     py render "$fmt" "$tsv" "$CO_STATE" "$CO_BEHIND" "$CO_AHEAD" "$CO_EQUIV" \
         "$CO_UPSTREAM" "$CO_DETAIL" "$CO_LOCK_MTIME" "$CO_GIT_RUNNING"
@@ -714,7 +730,7 @@ cmd_sync_local() {
             g merge --ff-only --quiet '@{u}' \
                 || die "git merge --ff-only 失敗，HEAD 沒有改變"
             echo "已快轉到 $(g log -1 --format='%h %s')" ;;
-        in-sync) die "本機已與 $CO_UPSTREAM 同步，沒有可快轉的 commit；只有單純落後時才會動手（要更新本機 plugin 請直接用 claude plugin update）" ;;
+        in-sync) echo "本機已與 $CO_UPSTREAM 同步，沒有需要快轉的 commit" ;;
         ahead) die "本機有 ${CO_AHEAD} 個未推送的 commit，不能快轉；先推送或自行處理" ;;
         diverged) die "本機與 $CO_UPSTREAM 分岔（落後 ${CO_BEHIND}、領先 ${CO_AHEAD}，本機多出的 commit 中有 ${CO_EQUIV} 個在上游有相同內容，上游歷史可能被改寫）。不自動處理，以免丟掉本機的工作" ;;
         locked) die "有 index.lock（修改時間 ${CO_LOCK_MTIME}；目前 git 程序在跑：${CO_GIT_RUNNING}），不能 merge。本腳本不會移除它" ;;
