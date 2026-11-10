@@ -1,4 +1,5 @@
-.PHONY: release debug install clean metallib check-bib-fixtures test-release cli-spec
+.PHONY: release debug install clean metallib check-bib-fixtures test-release cli-spec \
+	pins-status pins-update pins-sync test-pins
 
 # Build release binary + Metal shaders
 release:
@@ -55,3 +56,25 @@ check-bib-fixtures:
 cli-spec:
 	swift build
 	MACDOC_RECORD_CLI_SPEC=1 swift test --filter CLISpecDriftTests
+
+# Marketplace binary pins (#279) — see scripts/marketplace-pins.sh.
+# pins-status: pin / latest release / installed, plus checkout state (exit 0/10/2).
+# pins-update: PLUGIN=<name> [TO=X.Y.Z] [PLUGIN_VERSION=X.Y.Z] [DRY_RUN=1];
+#              commits locally, never pushes.
+# pins-sync:   fast-forward this checkout when strictly behind, then refresh
+#              the locally installed marketplace and plugins.
+pins-status:
+	./scripts/marketplace-pins.sh status
+
+pins-update:
+	@test -n "$(PLUGIN)" || { echo "用法：make pins-update PLUGIN=<name> [TO=X.Y.Z] [PLUGIN_VERSION=X.Y.Z] [DRY_RUN=1]" >&2; exit 64; }
+	./scripts/marketplace-pins.sh update "$(PLUGIN)" \
+	  $(if $(TO),--to "$(TO)") \
+	  $(if $(PLUGIN_VERSION),--plugin-version "$(PLUGIN_VERSION)") \
+	  $(if $(DRY_RUN),--dry-run)
+
+pins-sync:
+	./scripts/marketplace-pins.sh sync-local
+
+test-pins:
+	bash scripts/tests/marketplace-pins.sh
