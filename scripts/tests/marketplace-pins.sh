@@ -539,7 +539,7 @@ run_case "update: full-table check fails -> everything restored"
 F="$T/r-table"; build_fixture "$F"; gh_latest PsychQuant/che-word-mcp v4.10.0
 sed -i '' 's/"version": "0.1.3"/"version": "0.1.2"/' "$F/clone/plugins/che-pdf-mcp/.claude-plugin/plugin.json"
 git -C "$F/clone" commit -qam "pdf plugin.json drifted"; git -C "$F/clone" push -q origin main
-refuses "another plugin inconsistent" "$F" "che-pdf-mcp" che-word-mcp
+refuses "another plugin inconsistent" "$F" "全表比對不一致" che-word-mcp
 check_eq "gitlink restored in the index" "$WORD_V4_9" "$(git -C "$F/clone" ls-files -s mcp/che-word-mcp | awk '{print $2}')"
 
 # ==========================================================================
