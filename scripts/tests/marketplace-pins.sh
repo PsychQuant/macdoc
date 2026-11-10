@@ -543,6 +543,69 @@ refuses "another plugin inconsistent" "$F" "全表比對不一致" che-word-mcp
 check_eq "gitlink restored in the index" "$WORD_V4_9" "$(git -C "$F/clone" ls-files -s mcp/che-word-mcp | awk '{print $2}')"
 
 # ==========================================================================
+# sync-local
+# ==========================================================================
+run_case "sync-local: behind-only fast-forwards, then refreshes plugins"
+F="$T/l-behind"; build_fixture "$F"; seed_push "$F" 2
+mkdir -p "$F/clone/mcp/che-word-mcp/marker"   # stand-in for submodule content
+OUT=$(pins "$F" sync-local 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "HEAD now equals upstream" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
+check_eq "submodule dir untouched" "marker" "$(ls -A "$F/clone/mcp/che-word-mcp")"
+check_contains "marketplace refreshed" "$(cat "$CLAUDE_STUB_LOG")" "plugin marketplace update macdoc"
+check_contains "installed MCP plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugin update che-word-mcp@macdoc"
+check_contains "installed CLI plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugin update macdoc@macdoc"
+check_not_contains "plugin without binary pin skipped" "$(cat "$CLAUDE_STUB_LOG")" "docflow"
+
+run_case "sync-local: --no-plugins"
+F="$T/l-nop"; build_fixture "$F"; seed_push "$F" 1
+pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "fast-forwarded" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
+check_eq "claude not called" "" "$(cat "$CLAUDE_STUB_LOG")"
+
+run_case "sync-local: plugin refresh failure keeps the fast-forward"
+F="$T/l-cfail"; build_fixture "$F"; seed_push "$F" 1
+OUT=$(CLAUDE_STUB_FAIL=1 pins "$F" sync-local 2>&1); RC=$?
+check "non-zero exit" test "$RC" -ne 0
+check_eq "fast-forward kept" "$(git -C "$F/origin.git" rev-parse main)" "$(git -C "$F/clone" rev-parse HEAD)"
+check_contains "reports the failure" "$OUT" "失敗"
+
+run_case "sync-local: in-sync does not merge"
+F="$T/l-sync"; build_fixture "$F"
+HEAD_BEFORE=$(git -C "$F/clone" rev-parse HEAD)
+pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "HEAD unchanged" "$HEAD_BEFORE" "$(git -C "$F/clone" rev-parse HEAD)"
+
+sync_refuses() {   # sync_refuses <name> <fixture> <reason substring>
+    local before out rc
+    before=$(git -C "$2/clone" rev-parse HEAD)
+    : > "$CLAUDE_STUB_LOG"
+    out=$(pins "$2" sync-local 2>&1); rc=$?
+    if [ "$rc" -ne 0 ]; then ok "$1: refused"; else not_ok "$1: refused" "$out"; fi
+    check_contains "$1: says why" "$out" "$3"
+    check_eq "$1: HEAD unchanged" "$before" "$(git -C "$2/clone" rev-parse HEAD)"
+    check_eq "$1: claude not called" "" "$(cat "$CLAUDE_STUB_LOG")"
+}
+run_case "sync-local refusals"
+F="$T/l-ahead"; build_fixture "$F"; local_commit "$F" a.txt
+sync_refuses "ahead" "$F" "未推送"
+F="$T/l-div"; build_fixture "$F"; local_commit "$F" a.txt; seed_push "$F" 1
+sync_refuses "diverged" "$F" "分岔"
+F="$T/l-lock"; build_fixture "$F"; seed_push "$F" 1
+touch "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
+sync_refuses "locked" "$F" "index.lock"
+check "lock left in place" test -f "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
+F="$T/l-noup"; build_fixture "$F"; git -C "$F/clone" checkout -q -b local-only
+sync_refuses "no upstream" "$F" "upstream"
+F="$T/l-prog"; build_fixture "$F"; seed_push "$F" 1
+mkdir "$(git -C "$F/clone" rev-parse --absolute-git-dir)/rebase-merge"
+sync_refuses "operation in progress" "$F" "進行中"
+F="$T/l-fetch"; build_fixture "$F"; git -C "$F/clone" remote set-url origin "$T/does-not-exist.git"
+sync_refuses "fetch fails" "$F" "fetch"
+
+# ==========================================================================
 # Summary
 # ==========================================================================
 check_eq "real checkout HEAD untouched" "$GUARD_HEAD" "$(git -C "$ROOT" rev-parse HEAD)"
