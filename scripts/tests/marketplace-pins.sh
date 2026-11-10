@@ -254,6 +254,7 @@ J
     echo 4.9.0 > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
     echo 0.2.0 > "$F/cache/che-pdf-mcp/.bin-cache/.ChePDFMCP.version"
     echo 0.17.0 > "$F/home-bin/.macdoc.installed_version"
+    printf '#!/bin/sh\n' > "$F/home-bin/macdoc"; chmod +x "$F/home-bin/macdoc"
     : > "$GH_STUB_LOG"; : > "$CLAUDE_STUB_LOG"
 }
 
@@ -397,6 +398,42 @@ run_case "status: installed differs from pin"
 F="$T/s-inst"; build_fixture "$F"
 echo 4.8.0 > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
 pins "$F" status >/dev/null 2>&1; check_eq "exit 10" 10 $?
+
+installed_state() {   # installed_state <json> <plugin>
+    json_get "$1" '[p for p in d["plugins"] if p["name"]=="'"$2"'"][0]["installed_state"]' 2>/dev/null
+}
+
+run_case "status: installed_state is known when the record matches"
+F="$T/s-known"; build_fixture "$F"
+JOUT=$(pins "$F" status --json 2>/dev/null)
+check_eq "MCP known" known "$(installed_state "$JOUT" che-word-mcp)"
+check_eq "CLI known" known "$(installed_state "$JOUT" macdoc)"
+
+run_case "status: MCP plugin not installed (no cache dir) is neither a problem nor unknown"
+F="$T/s-mcp-ni"; build_fixture "$F"; rm -rf "$F/cache/che-pdf-mcp"
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_contains "shows 未安裝" "$OUT" "未安裝"
+JOUT=$(pins "$F" status --json 2>/dev/null)
+check_eq "installed_state not-installed" not-installed "$(installed_state "$JOUT" che-pdf-mcp)"
+check_eq "installed null" None "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["installed"]' 2>/dev/null)"
+check_eq "no problems, no unknowns" "[] []" "$(json_get "$JOUT" '" ".join(str(x) for x in [[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0][k] for k in ("problems","unknown")])' 2>/dev/null)"
+
+run_case "status: MCP cache dir present but version record missing -> unknown"
+F="$T/s-mcp-unk"; build_fixture "$F"; rm "$F/cache/che-pdf-mcp/.bin-cache/.ChePDFMCP.version"
+pins "$F" status >/dev/null 2>&1; check_eq "exit 2" 2 $?
+check_eq "installed_state unknown" unknown "$(installed_state "$(pins "$F" status --json 2>/dev/null)" che-pdf-mcp)"
+
+run_case "status: CLI not installed (no binary) is neither a problem nor unknown"
+F="$T/s-cli-ni"; build_fixture "$F"; rm "$F/home-bin/macdoc" "$F/home-bin/.macdoc.installed_version"
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_contains "shows 未安裝" "$OUT" "未安裝"
+check_eq "installed_state not-installed" not-installed "$(installed_state "$(pins "$F" status --json 2>/dev/null)" macdoc)"
+
+run_case "status: CLI binary present but record missing -> unknown"
+F="$T/s-cli-unk"; build_fixture "$F"; rm "$F/home-bin/.macdoc.installed_version"
+check_eq "installed_state unknown" unknown "$(installed_state "$(pins "$F" status --json 2>/dev/null)" macdoc)"
 
 run_case "status: only unknowns -> 2"
 F="$T/s-unk"; build_fixture "$F"
@@ -606,6 +643,25 @@ check_eq "HEAD gitlink moved" "$WORD_V4_10" "$(git -C "$F/clone" ls-tree HEAD mc
 check_eq "submodule HEAD unchanged" "$WORD_V4_9" "$(git -C "$F/clone/mcp/che-word-mcp" rev-parse HEAD)"
 check_eq "submodule untracked work kept" "wip" "$(cat "$F/clone/mcp/che-word-mcp/wip.txt" 2>/dev/null)"
 
+run_case "sync-local: in-sync skips the git step and refreshes plugins"
+F="$T/l-sync"; build_fixture "$F"
+HEAD_BEFORE=$(git -C "$F/clone" rev-parse HEAD)
+OUT=$(pins "$F" sync-local 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "HEAD unchanged" "$HEAD_BEFORE" "$(git -C "$F/clone" rev-parse HEAD)"
+check_contains "says already in sync" "$OUT" "已與"
+check_contains "marketplace refreshed" "$(cat "$CLAUDE_STUB_LOG")" "plugin marketplace update macdoc"
+check_contains "installed MCP plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugin update che-word-mcp@macdoc"
+check_contains "installed CLI plugin updated" "$(cat "$CLAUDE_STUB_LOG")" "plugin update macdoc@macdoc"
+
+run_case "sync-local: in-sync with --no-plugins"
+F="$T/l-sync-np"; build_fixture "$F"
+HEAD_BEFORE=$(git -C "$F/clone" rev-parse HEAD)
+pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
+check_eq "exit 0" 0 "$RC"
+check_eq "HEAD unchanged" "$HEAD_BEFORE" "$(git -C "$F/clone" rev-parse HEAD)"
+check_eq "claude not called" "" "$(cat "$CLAUDE_STUB_LOG")"
+
 run_case "sync-local: --no-plugins"
 F="$T/l-nop"; build_fixture "$F"; seed_push "$F" 1
 pins "$F" sync-local --no-plugins >/dev/null 2>&1; RC=$?
@@ -632,8 +688,6 @@ sync_refuses() {   # sync_refuses <name> <fixture> <reason substring>
     check_eq "$1: claude not called" "" "$(cat "$CLAUDE_STUB_LOG")"
 }
 run_case "sync-local refusals"
-F="$T/l-sync"; build_fixture "$F"
-sync_refuses "in-sync (only behind-only proceeds)" "$F" "同步"
 F="$T/l-ahead"; build_fixture "$F"; local_commit "$F" a.txt
 sync_refuses "ahead" "$F" "未推送"
 F="$T/l-div"; build_fixture "$F"; local_commit "$F" a.txt; seed_push "$F" 1
