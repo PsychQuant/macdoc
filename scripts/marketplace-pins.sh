@@ -353,6 +353,8 @@ def history(path, date, plugin, old, new, commit):
     if text and not text.endswith("\n"):
         text += "\n"
     text += f"| {date} | {plugin} | {old} | {new} | {commit} |\n"
+    import os
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     return 0
