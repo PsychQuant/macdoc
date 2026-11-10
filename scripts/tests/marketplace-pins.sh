@@ -283,7 +283,9 @@ local_commit() {   # local_commit <fixture> <file>
 
 pins() {   # pins <fixture> <args...>: run the copy inside the fixture clone
     local F=$1; shift
-    (cd "$F/clone" && bash scripts/marketplace-pins.sh "$@")
+    # Executed directly so the shebang's interpreter (/bin/bash, 3.2 on macOS)
+    # is the one under test, as with the Makefile targets.
+    (cd "$F/clone" && ./scripts/marketplace-pins.sh "$@")
 }
 
 # Snapshot of everything `update` could touch: HEAD, index, every file.
