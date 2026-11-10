@@ -1,0 +1,421 @@
+#!/bin/bash
+# Tests for scripts/marketplace-pins.sh (macdoc#279).
+#
+# Every case builds throw-away git repositories under a temp dir: a bare
+# "origin" for the marketplace repo, bare upstream repos standing in for the
+# MCP binary repos, and clones of them. The script under test is copied into
+# the fixture repo and run from there, so nothing here can touch the real
+# checkout. `gh` and `claude` are stub scripts selected through
+# MARKETPLACE_PINS_GH / MARKETPLACE_PINS_CLAUDE; installed-version records are
+# read from temp dirs selected through MARKETPLACE_PINS_CACHE_ROOT /
+# MARKETPLACE_PINS_BIN_DIR. No network access.
+
+set -uo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+SCRIPT_UNDER_TEST="$ROOT/scripts/marketplace-pins.sh"
+T=$(mktemp -d "${TMPDIR:-/tmp}/marketplace-pins-test.XXXXXX")
+trap 'rm -rf "$T"' EXIT
+
+# Isolate git from the developer's global/system config (signing, hooks,
+# default branch) and give it a neutral identity.
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.invalid
+export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.invalid
+export MARKETPLACE_PINS_TODAY=2026-01-02
+export MARKETPLACE_PINS_GIT_RUNNING=no
+
+# Guard: the real checkout must look exactly the same after the run.
+GUARD_HEAD=$(git -C "$ROOT" rev-parse HEAD)
+GUARD_STATUS=$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)
+
+PASS=0
+FAIL=0
+FAILED_NAMES=()
+
+ok() { PASS=$((PASS + 1)); echo "  ok   $1"; }
+not_ok() {
+    FAIL=$((FAIL + 1)); FAILED_NAMES+=("$1"); echo "  FAIL $1"
+    if [ -n "${2:-}" ]; then printf '%s\n' "$2" | sed 's/^/       /'; fi
+}
+check() {   # check <name> <command...>: passes when the command succeeds
+    local name=$1; shift
+    if "$@" >/dev/null 2>&1; then ok "$name"; else not_ok "$name" "command failed: $*"; fi
+}
+check_eq() {   # check_eq <name> <expected> <actual>
+    if [ "$2" = "$3" ]; then ok "$1"; else not_ok "$1" "expected: $2
+actual:   $3"; fi
+}
+check_contains() {   # check_contains <name> <haystack> <needle>
+    case "$2" in
+        *"$3"*) ok "$1" ;;
+        *) not_ok "$1" "missing: $3
+in output:
+$2" ;;
+    esac
+}
+check_not_contains() {
+    case "$2" in
+        *"$3"*) not_ok "$1" "unexpected: $3" ;;
+        *) ok "$1" ;;
+    esac
+}
+
+# The expression is always a literal written in this file, never input data.
+json_get() {   # json_get <json> <python expression over `d`>
+    python3 -I -c 'import json,sys; d=json.loads(sys.argv[1]); print(eval(sys.argv[2]))' "$1" "$2"
+}
+
+# --------------------------------------------------------------------------
+# Stubs
+# --------------------------------------------------------------------------
+STUB_BIN="$T/stub-bin"
+mkdir -p "$STUB_BIN"
+export GH_STUB_DB="$T/gh-db"
+export GH_STUB_LOG="$T/gh.log"
+export CLAUDE_STUB_LOG="$T/claude.log"
+: > "$GH_STUB_LOG"; : > "$CLAUDE_STUB_LOG"
+
+# gh stub. Release data lives in $GH_STUB_DB/<owner>/<repo>/:
+#   latest                         tag name of the latest release
+#   releases/<tag>/target          target_commitish
+#   releases/<tag>/assets/<name>   asset content
+# Release ids are the tag names; asset ids are "<tag>:<name>".
+cat > "$STUB_BIN/gh" <<'EOF'
+#!/bin/bash
+echo "$*" >> "$GH_STUB_LOG"
+[ "${GH_STUB_FAIL:-0}" = 1 ] && { echo "gh: stub failure" >&2; exit 1; }
+[ "${1:-}" = api ] || { echo "gh stub: unsupported: $*" >&2; exit 64; }
+path=${2:-}
+case "$path" in
+    repos/*/*/releases/latest)
+        r=${path#repos/}; r=${r%/releases/latest}
+        f="$GH_STUB_DB/$r/latest"; [ -f "$f" ] || { echo 'HTTP 404' >&2; exit 1; }
+        cat "$f" ;;
+    repos/*/*/releases/tags/*)
+        r=${path#repos/}; tag=${r##*/releases/tags/}; r=${r%/releases/tags/*}
+        d="$GH_STUB_DB/$r/releases/$tag"; [ -d "$d" ] || { echo 'HTTP 404' >&2; exit 1; }
+        printf '%s\t%s\n' "$tag" "$(cat "$d/target" 2>/dev/null)" ;;
+    repos/*/*/releases/assets/*)
+        r=${path#repos/}; aid=${r##*/releases/assets/}; r=${r%/releases/assets/*}
+        tag=${aid%%:*}; name=${aid#*:}
+        f="$GH_STUB_DB/$r/releases/$tag/assets/$name"; [ -f "$f" ] || { echo 'HTTP 404' >&2; exit 1; }
+        cat "$f" ;;
+    repos/*/*/releases/*/assets)
+        r=${path#repos/}; r=${r%/assets}; id=${r##*/releases/}; r=${r%/releases/*}
+        d="$GH_STUB_DB/$r/releases/$id"; [ -d "$d" ] || { echo 'HTTP 404' >&2; exit 1; }
+        for a in "$d"/assets/*; do [ -e "$a" ] && printf '%s:%s\t%s\n' "$id" "${a##*/}" "${a##*/}"; done
+        exit 0 ;;
+    *) echo "gh stub: unsupported path $path" >&2; exit 64 ;;
+esac
+EOF
+cat > "$STUB_BIN/claude" <<'EOF'
+#!/bin/bash
+echo "$*" >> "$CLAUDE_STUB_LOG"
+[ "${CLAUDE_STUB_FAIL:-0}" = 1 ] && { echo "claude: stub failure" >&2; exit 1; }
+exit 0
+EOF
+chmod +x "$STUB_BIN/gh" "$STUB_BIN/claude"
+export MARKETPLACE_PINS_GH="$STUB_BIN/gh"
+export MARKETPLACE_PINS_CLAUDE="$STUB_BIN/claude"
+
+SHA_OLD=1111111111111111111111111111111111111111111111111111111111111111
+SHA_NEW=2222222222222222222222222222222222222222222222222222222222222222
+
+gh_release() {   # gh_release <owner/repo> <tag> <asset names...>
+    local d="$GH_STUB_DB/$1/releases/$2"; shift 2
+    mkdir -p "$d/assets"; echo main > "$d/target"
+    local a; for a in "$@"; do echo "content of $a" > "$d/assets/$a"; done
+}
+gh_latest() { mkdir -p "$GH_STUB_DB/$1"; echo "$2" > "$GH_STUB_DB/$1/latest"; }
+
+# --------------------------------------------------------------------------
+# Fixture
+# --------------------------------------------------------------------------
+# Upstream binary repos (shared by all cases; read-only after creation).
+UP="$T/upstream"
+make_upstream() {   # make_upstream <name> <tag...>; last tag is annotated
+    local name=$1; shift
+    local w="$UP/$name.work"
+    git init -q -b main "$w"
+    local tag i=0 n=$#
+    for tag in "$@"; do
+        i=$((i + 1))
+        echo "$tag" > "$w/version"; git -C "$w" add version; git -C "$w" commit -qm "release $tag"
+        if [ "$i" = "$n" ]; then git -C "$w" tag -a -m "$tag" "$tag"; else git -C "$w" tag "$tag"; fi
+    done
+    git clone -q --bare "$w" "$UP/$name.git"
+}
+make_upstream che-word-mcp v4.9.0 v4.10.0
+make_upstream che-pdf-mcp v0.2.0 v0.3.0
+peeled() { git -C "$UP/$1.git" rev-parse "$2^{commit}"; }
+WORD_V4_9=$(peeled che-word-mcp v4.9.0)
+WORD_V4_10=$(peeled che-word-mcp v4.10.0)
+PDF_V0_2=$(peeled che-pdf-mcp v0.2.0)
+
+write_json() {   # write_json <path> <python literal>; same serialisation as the repo
+    mkdir -p "$(dirname "$1")"
+    python3 -I -c 'import ast,json,sys; open(sys.argv[1],"w",encoding="utf-8").write(json.dumps(ast.literal_eval(sys.argv[2]),indent=2,ensure_ascii=False)+"\n")' "$1" "$2"
+}
+
+# build_fixture <dir>: creates <dir>/origin.git, <dir>/seed (pushes to
+# origin) and <dir>/clone (the checkout under test). Resets gh data and the
+# installed-version records so that everything is consistent and up to date.
+build_fixture() {
+    local F=$1 S
+    mkdir -p "$F"; S="$F/seed"
+    git init -q -b main "$S"
+    write_json "$S/.claude-plugin/marketplace.json" "{
+      'name': 'macdoc',
+      'plugins': [
+        {'name': 'che-word-mcp', 'version': '4.9.0', 'description': 'Word ── 測試', 'source': './plugins/che-word-mcp', 'binary_version': '4.9.0'},
+        {'name': 'macdoc', 'version': '1.14.0', 'source': './plugins/macdoc', 'binary_version': '0.17.0', 'binary_sha256': '$SHA_OLD'},
+        {'name': 'che-pdf-mcp', 'version': '0.1.3', 'source': './plugins/che-pdf-mcp', 'binary_version': '0.2.0'},
+        {'name': 'docflow', 'version': '1.0.1', 'source': './plugins/docflow'}
+      ]}"
+    local p
+    for p in che-word-mcp che-pdf-mcp; do
+        local bin=CheWordMCP; [ "$p" = che-pdf-mcp ] && bin=ChePDFMCP
+        mkdir -p "$S/plugins/$p/bin"
+        printf '#!/bin/bash\nREPO="PsychQuant/%s"\nBINARY_NAME="%s"\n' "$p" "$bin" > "$S/plugins/$p/bin/$p-wrapper.sh"
+    done
+    mkdir -p "$S/plugins/macdoc/hooks" "$S/plugins/docflow/.claude-plugin"
+    printf '#!/bin/bash\nREPO="PsychQuant/macdoc"\nBINARY_NAME="macdoc"\n' > "$S/plugins/macdoc/hooks/session-start.sh"
+    # plugin.json files are hand-formatted like the real ones (not re-serialised).
+    mkdir -p "$S/plugins/che-word-mcp/.claude-plugin" "$S/plugins/che-pdf-mcp/.claude-plugin" "$S/plugins/macdoc/.claude-plugin"
+    cat > "$S/plugins/che-word-mcp/.claude-plugin/plugin.json" <<'J'
+{
+  "name": "che-word-mcp",
+  "description": "Word",
+  "version": "4.9.0",
+  "binary_version": "4.9.0",
+  "keywords": [
+    "mcp"
+  ]
+}
+J
+    cat > "$S/plugins/che-pdf-mcp/.claude-plugin/plugin.json" <<'J'
+{
+  "name": "che-pdf-mcp",
+  "version": "0.1.3",
+  "binary_version": "0.2.0"
+}
+J
+    cat > "$S/plugins/macdoc/.claude-plugin/plugin.json" <<J
+{
+  "name": "macdoc",
+  "version": "1.14.0",
+  "binary_version": "0.17.0",
+  "binary_sha256": "$SHA_OLD"
+}
+J
+    echo '{"name": "docflow", "version": "1.0.1"}' > "$S/plugins/docflow/.claude-plugin/plugin.json"
+    for p in che-word-mcp che-pdf-mcp; do
+        printf '# Changelog\n\nIntro.\n\n## [0.0.1] - 2025-01-01\n\n### Changed\n\n- old entry\n' > "$S/plugins/$p/CHANGELOG.md"
+    done
+    printf '# Changelog\n\n## [Unreleased]\n\n### Added\n\n- pending\n\n## [1.14.0] - 2025-01-01\n\n- old entry\n' > "$S/plugins/macdoc/CHANGELOG.md"
+    mkdir -p "$S/docs" "$S/scripts"
+    printf '# Marketplace pin history\n\n| 日期 | plugin | 舊 binary | 新 binary | release commit |\n|---|---|---|---|---|\n' > "$S/docs/marketplace-pin-history.md"
+    cp "$SCRIPT_UNDER_TEST" "$S/scripts/marketplace-pins.sh" 2>/dev/null || echo 'exit 99' > "$S/scripts/marketplace-pins.sh"
+    printf '[submodule "mcp/che-word-mcp"]\n\tpath = mcp/che-word-mcp\n\turl = %s\n[submodule "mcp/che-pdf-mcp"]\n\tpath = mcp/che-pdf-mcp\n\turl = %s\n' \
+        "$UP/che-word-mcp.git" "$UP/che-pdf-mcp.git" > "$S/.gitmodules"
+    git -C "$S" add -A
+    git -C "$S" update-index --add --cacheinfo "160000,$WORD_V4_9,mcp/che-word-mcp"
+    git -C "$S" update-index --add --cacheinfo "160000,$PDF_V0_2,mcp/che-pdf-mcp"
+    git -C "$S" commit -qm baseline
+    git -C "$S" tag v0.17.0
+    echo cli > "$S/cli.txt"; git -C "$S" add cli.txt; git -C "$S" commit -qm "cli 0.18.0"
+    git -C "$S" tag -a -m v0.18.0 v0.18.0
+    git -C "$S" reset -q --hard HEAD~1   # main stays at baseline; the tag keeps the cli commit
+    git init -q --bare -b main "$F/origin.git"
+    git -C "$S" remote add origin "$F/origin.git"
+    git -C "$S" push -q origin main --tags
+    git -C "$S" branch -q -u origin/main
+    git clone -q "$F/origin.git" "$F/clone" 2>/dev/null
+
+    # gh data: every pin equals the latest release, all assets present.
+    rm -rf "$GH_STUB_DB"
+    gh_release PsychQuant/che-word-mcp v4.9.0 CheWordMCP CheWordMCP.sha256
+    gh_release PsychQuant/che-word-mcp v4.10.0 CheWordMCP CheWordMCP.sha256
+    gh_release PsychQuant/che-pdf-mcp v0.2.0 ChePDFMCP ChePDFMCP.sha256
+    gh_release PsychQuant/che-pdf-mcp v0.3.0 ChePDFMCP ChePDFMCP.sha256
+    gh_release PsychQuant/macdoc v0.17.0 macdoc macdoc.sha256
+    gh_release PsychQuant/macdoc v0.18.0 macdoc macdoc.sha256
+    printf '%s  macdoc\n' "$SHA_NEW" > "$GH_STUB_DB/PsychQuant/macdoc/releases/v0.18.0/assets/macdoc.sha256"
+    gh_latest PsychQuant/che-word-mcp v4.9.0
+    gh_latest PsychQuant/che-pdf-mcp v0.2.0
+    gh_latest PsychQuant/macdoc v0.17.0
+
+    # Installed-version records matching the pins.
+    export MARKETPLACE_PINS_CACHE_ROOT="$F/cache"
+    export MARKETPLACE_PINS_BIN_DIR="$F/home-bin"
+    mkdir -p "$F/cache/che-word-mcp/.bin-cache" "$F/cache/che-pdf-mcp/.bin-cache" "$F/cache/macdoc" "$F/home-bin"
+    echo 4.9.0 > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
+    echo 0.2.0 > "$F/cache/che-pdf-mcp/.bin-cache/.ChePDFMCP.version"
+    echo 0.17.0 > "$F/home-bin/.macdoc.installed_version"
+    : > "$GH_STUB_LOG"; : > "$CLAUDE_STUB_LOG"
+}
+
+# Push <n> new commits to origin from the seed (the clone falls behind).
+seed_push() {   # seed_push <fixture> <n>
+    local i
+    for i in $(seq 1 "$2"); do
+        echo "upstream $i" >> "$1/seed/upstream.txt"
+        git -C "$1/seed" add upstream.txt; git -C "$1/seed" commit -qm "upstream $i"
+    done
+    git -C "$1/seed" push -q origin main
+}
+local_commit() {   # local_commit <fixture> <file>
+    echo "local" >> "$1/clone/$2"; git -C "$1/clone" add "$2"; git -C "$1/clone" commit -qm "local $2"
+}
+
+pins() {   # pins <fixture> <args...>: run the copy inside the fixture clone
+    local F=$1; shift
+    (cd "$F/clone" && bash scripts/marketplace-pins.sh "$@")
+}
+
+# Snapshot of everything `update` could touch: HEAD, index, every file.
+snapshot() {
+    local c=$1
+    git -C "$c" rev-parse HEAD
+    git -C "$c" ls-files -s | shasum
+    git -C "$c" status --porcelain=v1 --untracked-files=all
+    (cd "$c" && find . -path ./.git -prune -o -type f -print0 | sort -z | xargs -0 shasum)
+}
+
+run_case() { echo "== $1"; }
+
+# ==========================================================================
+# Checkout state classifier (via status --json)
+# ==========================================================================
+checkout_state() {   # checkout_state <fixture>: prints "state behind ahead equiv"
+    local out
+    out=$(pins "$1" status --json 2>/dev/null)
+    json_get "$out" '" ".join(str(d["checkout"].get(k)) for k in ("state","behind","ahead","patch_equivalent"))' 2>/dev/null || echo "no-json"
+}
+
+run_case "classifier: in-sync"
+F="$T/c-sync"; build_fixture "$F"
+check_eq "in-sync" "in-sync 0 0 None" "$(checkout_state "$F")"
+
+run_case "classifier: behind-only"
+F="$T/c-behind"; build_fixture "$F"; seed_push "$F" 2
+check_eq "behind 2" "behind 2 0 None" "$(checkout_state "$F")"
+
+run_case "classifier: ahead-only"
+F="$T/c-ahead"; build_fixture "$F"; local_commit "$F" a.txt
+check_eq "ahead 1" "ahead 0 1 None" "$(checkout_state "$F")"
+
+run_case "classifier: diverged with a rewritten (patch-equivalent) commit"
+F="$T/c-div"; build_fixture "$F"
+echo x > "$F/seed/x.txt"; git -C "$F/seed" add x.txt; git -C "$F/seed" commit -qm "x"
+X=$(git -C "$F/seed" rev-parse HEAD)
+git -C "$F/clone" fetch -q "$F/seed" main
+GIT_COMMITTER_DATE="2001-01-01T00:00:00" git -C "$F/clone" cherry-pick -x "$X" >/dev/null
+local_commit "$F" z.txt
+echo y > "$F/seed/y.txt"; git -C "$F/seed" add y.txt; git -C "$F/seed" commit -qm "y"
+echo w > "$F/seed/w.txt"; git -C "$F/seed" add w.txt; git -C "$F/seed" commit -qm "w"
+git -C "$F/seed" push -q origin main
+check_eq "diverged behind 3 ahead 2, 1 equivalent" "diverged 3 2 1" "$(checkout_state "$F")"
+
+run_case "classifier: in-progress operation outranks everything"
+F="$T/c-prog"; build_fixture "$F"; seed_push "$F" 1
+mkdir "$(git -C "$F/clone" rev-parse --absolute-git-dir)/rebase-merge"
+touch "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
+check_eq "in-progress" "in-progress None None None" "$(checkout_state "$F")"
+
+run_case "classifier: index.lock"
+F="$T/c-lock"; build_fixture "$F"
+touch "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
+OUT=$(pins "$F" status --json 2>/dev/null)
+check_eq "locked" "locked" "$(json_get "$OUT" 'd["checkout"]["state"]' 2>/dev/null)"
+check_eq "lock reports git not running" "False" "$(json_get "$OUT" 'd["checkout"]["lock"]["git_running"]' 2>/dev/null)"
+check "lock reports mtime" test -n "$(json_get "$OUT" 'd["checkout"]["lock"]["mtime"]' 2>/dev/null)"
+check "classifier leaves the lock in place" test -f "$(git -C "$F/clone" rev-parse --absolute-git-dir)/index.lock"
+
+run_case "classifier: no upstream"
+F="$T/c-noup"; build_fixture "$F"; git -C "$F/clone" checkout -q -b local-only
+check_eq "no-upstream" "no-upstream None None None" "$(checkout_state "$F")"
+
+run_case "classifier: fetch fails"
+F="$T/c-fetch"; build_fixture "$F"; git -C "$F/clone" remote set-url origin "$T/does-not-exist.git"
+OUT=$(pins "$F" status --json 2>/dev/null); RC=$?
+check_eq "fetch failure -> unknown" "unknown" "$(json_get "$OUT" 'd["checkout"]["state"]' 2>/dev/null)"
+check_eq "status exit 2 when checkout state unknown" 2 "$RC"
+
+# ==========================================================================
+# status
+# ==========================================================================
+run_case "status: everything consistent and current"
+F="$T/s-ok"; build_fixture "$F"
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 0" 0 "$RC"
+check_contains "lists che-word-mcp" "$OUT" "che-word-mcp"
+check_contains "lists macdoc" "$OUT" "macdoc"
+check_not_contains "skips docflow" "$OUT" "docflow"
+check_contains "says checkout in sync" "$OUT" "同步"
+
+run_case "status: pin behind release, inconsistent entry, missing install record"
+F="$T/s-bad"; build_fixture "$F"
+gh_latest PsychQuant/che-word-mcp v4.10.0
+python3 -I - "$F/clone/.claude-plugin/marketplace.json" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p, encoding="utf-8"))
+for e in d["plugins"]:
+    if e["name"] == "che-pdf-mcp":
+        e["version"] = "0.1.2"
+open(p, "w", encoding="utf-8").write(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+PY
+git -C "$F/clone" commit -qam "inconsistent"; git -C "$F/clone" push -q origin main
+rm "$F/home-bin/.macdoc.installed_version"
+OUT=$(pins "$F" status 2>&1); RC=$?
+check_eq "exit 10" 10 "$RC"
+check_contains "shows latest 4.10.0" "$OUT" "4.10.0"
+check_contains "shows unknown install" "$OUT" "未知"
+JOUT=$(pins "$F" status --json 2>/dev/null)
+check_eq "json exit_code 10" 10 "$(json_get "$JOUT" 'd["exit_code"]' 2>/dev/null)"
+check_eq "json word latest" "4.10.0" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["latest_release"]' 2>/dev/null)"
+check_contains "json word flagged behind" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-word-mcp"][0]["problems"]' 2>/dev/null)" "pin-behind-release"
+check_contains "json pdf flagged inconsistent" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["problems"]' 2>/dev/null)" "marketplace-mismatch"
+check_eq "json macdoc installed unknown" "None" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="macdoc"][0]["installed"]' 2>/dev/null)"
+
+run_case "status: installed differs from pin"
+F="$T/s-inst"; build_fixture "$F"
+echo 4.8.0 > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
+pins "$F" status >/dev/null 2>&1; check_eq "exit 10" 10 $?
+
+run_case "status: only unknowns -> 2"
+F="$T/s-unk"; build_fixture "$F"
+rm "$F/home-bin/.macdoc.installed_version"
+pins "$F" status >/dev/null 2>&1; check_eq "missing install record alone -> 2" 2 $?
+GH_STUB_FAIL=1 pins "$F" status >/dev/null 2>&1; check_eq "gh failure alone -> 2" 2 $?
+
+run_case "status: behind wins over unknown"
+F="$T/s-prec"; build_fixture "$F"
+rm "$F/home-bin/.macdoc.installed_version"
+echo 4.8.0 > "$F/cache/che-word-mcp/.bin-cache/.CheWordMCP.version"
+pins "$F" status >/dev/null 2>&1; check_eq "10 beats 2" 10 $?
+
+run_case "status: checkout behind -> 10"
+F="$T/s-cb"; build_fixture "$F"; seed_push "$F" 1
+pins "$F" status >/dev/null 2>&1; check_eq "exit 10" 10 $?
+
+run_case "status: release missing an asset is reported"
+F="$T/s-asset"; build_fixture "$F"
+rm "$GH_STUB_DB/PsychQuant/che-pdf-mcp/releases/v0.2.0/assets/ChePDFMCP.sha256"
+JOUT=$(pins "$F" status --json 2>/dev/null)
+check_eq "assets incomplete" "False" "$(json_get "$JOUT" '[p for p in d["plugins"] if p["name"]=="che-pdf-mcp"][0]["latest_assets_complete"]' 2>/dev/null)"
+
+# ==========================================================================
+# Summary
+# ==========================================================================
+check_eq "real checkout HEAD untouched" "$GUARD_HEAD" "$(git -C "$ROOT" rev-parse HEAD)"
+check_eq "real checkout status untouched" "$GUARD_STATUS" "$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)"
+
+echo
+echo "marketplace-pins tests: $PASS passed, $FAIL failed"
+if [ "$FAIL" -gt 0 ]; then
+    printf '  - %s\n' "${FAILED_NAMES[@]}"
+    exit 1
+fi
