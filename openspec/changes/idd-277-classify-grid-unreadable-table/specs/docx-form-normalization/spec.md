@@ -6,7 +6,7 @@ Form normalization makes a filled Word form uniform after its values are in plac
 
 ### Requirement: Unreadable tables are reported whatever their paragraph ids
 
-When `macdoc word form classify --grid` finds a table whose grid cannot be read, the stderr note naming that table SHALL be written whether or not any paragraph of the table carries a well-formed `w14:paraId`. The command SHALL record the table as unreadable before it decides whether to skip a paragraph for a malformed id, because a table's grid does not depend on its paragraph ids and the table number is an integer computed from the document structure. Paragraphs with a malformed `w14:paraId` SHALL still be left off stdout and counted on stderr. Without `--grid` the command SHALL write no unreadable-table note.
+When `macdoc word form classify --grid` finds a table whose grid cannot be read, the stderr note naming that table SHALL be written whether or not the `w14:paraId` values of the table's paragraphs are well-formed, for every table with at least one paragraph that carries a `w14:paraId` (paragraphs without one are not classified, so a table made only of them is not reported). The command SHALL record the table as unreadable before it decides whether to skip a paragraph for a malformed id, because a table's grid does not depend on its paragraph ids and the table number is an integer computed from the document structure. Paragraphs with a malformed `w14:paraId` SHALL still be left off stdout and counted on stderr. Without `--grid` the command SHALL write no unreadable-table note.
 
 #### Scenario: Unreadable table whose only paragraph has a malformed id
 

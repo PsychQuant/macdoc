@@ -612,5 +612,9 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
         XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
+        // Without --grid there are no cell positions, so no table note.
+        let plain = try CLITestHelper.run(["word", "form", "classify", form.path])
+        XCTAssertEqual(plain.exitCode, 0, plain.stderr)
+        XCTAssertFalse(plain.stderr.contains("無法判讀"), plain.stderr)
     }
 }
