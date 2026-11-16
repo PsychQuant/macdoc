@@ -285,6 +285,7 @@ swift package clean && swift build
 - **依賴**：ooxml-swift + word-to-md-swift
 - **架構**：Server.swift（~16,000 行）+ satellite tool 檔（MarkdownExportTools / ReadbackTools / ScriptPipelineTools）
 - **Binary**：`.build/release/CheWordMCP`
+- **規格**：工具的行為規格在 che-word-mcp repo 的 `docs/spectra/specs/`（2026-11-17 從本 repo 的 `openspec/specs/` 搬過去 14 份）。CLI 與 MCP 共用腳本管線的約定 `che-word-mcp-script-pipeline-tools` 是跨 repo 的，留在本 repo。改 che-word-mcp 工具的行為時，在 che-word-mcp 開 change，不在這裡新增 `che-word-mcp-*` 規格。
 
 ### che-pdf-mcp（25 工具）
 - **用途**：PDF 文件處理 MCP，讓 Claude 能讀取和分析 PDF 文件
