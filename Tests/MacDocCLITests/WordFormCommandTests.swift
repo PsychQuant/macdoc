@@ -604,7 +604,10 @@ final class WordFormCommandTests: XCTestCase {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")
         let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/></w:tblGrid><w:tr>"
-            + cell(paragraph("&#x1B;[31mXX", run("偽造")), tcPr: "<w:hMerge w:val=\"restart\"/>") + "</w:tr></w:tbl><w:p/>"
+            // A raw ESC, as the Example states: a character reference such as
+            // `&#x1B;` is kept as written by the decoder and would put no ESC
+            // in the input, so the ESC assertions below could not fail.
+            + cell(paragraph("\u{1B}[31mXX", run("偽造")), tcPr: "<w:hMerge w:val=\"restart\"/>") + "</w:tr></w:tbl><w:p/>"
         try makeForm(at: form, extraBody: table)
         let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
         XCTAssertEqual(result.exitCode, 0, result.stderr)
@@ -612,6 +615,7 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
         XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
+        XCTAssertFalse(result.stderr.unicodeScalars.contains("\u{1B}"))
         // Without --grid there are no cell positions, so no table note.
         let plain = try CLITestHelper.run(["word", "form", "classify", form.path])
         XCTAssertEqual(plain.exitCode, 0, plain.stderr)
