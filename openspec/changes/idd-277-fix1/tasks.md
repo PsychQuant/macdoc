@@ -1,0 +1,3 @@
+## 1. Spec
+
+- [x] 1.1 Requirement "Unreadable tables are reported whatever their paragraph ids": the modified text names the paragraphs that place a table (nearest container a `w:tc` of that table, through `w:sdt`, `w:sdtContent` and `w:customXml`) and lists the two cases it does not cover; the Example's expected result adds that stderr carries no U+001B. Verification: `spectra validate idd-277-fix1` passes, and `swift test --filter WordFormCommandTests/testClassifyGridNotesAnUnreadableTableWhoseIdsAreAllSkipped` (marker `spec-example: docx-form-normalization / hMerge table with an escape-sequence paraId`, which already asserts no U+001B on stderr) passes.
