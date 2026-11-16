@@ -90,12 +90,16 @@ extension MacDoc.Word.Form {
                 var skipped = 0
                 var unreadableTables: Set<Int> = []
                 for paragraph in paragraphs {
+                    // Whether a table's grid can be read does not depend on its
+                    // paragraph ids, and the table number is an integer, so it is
+                    // recorded before the id check: a table whose ids are all
+                    // skipped is still named in the note (#277).
+                    if grid, case .unreadableTable(let table)? = paragraph.cell { unreadableTables.insert(table) }
                     guard Self.isParaId(paragraph.paraId) else { skipped += 1; continue }
                     guard grid else {
                         print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(Self.preview(paragraph.text))")
                         continue
                     }
-                    if case .unreadableTable(let table)? = paragraph.cell { unreadableTables.insert(table) }
                     let position = paragraph.cell?.description ?? "-"
                     print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(position)\t\(Self.preview(paragraph.text))")
                 }
