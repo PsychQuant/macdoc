@@ -596,4 +596,21 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertTrue(result.stdout.contains("0000E101\ttable-field\tt2:?\t舊式合併"), result.stdout)
         XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀"), result.stderr)
     }
+
+    /// An unreadable table is reported even when every paragraph id in it is
+    /// skipped: the table number does not come from the ids (macdoc#277).
+    /// spec-example: docx-form-normalization / hMerge table with an escape-sequence paraId
+    func testClassifyGridNotesAnUnreadableTableWhoseIdsAreAllSkipped() throws {
+        let dir = try tempDir()
+        let form = dir.appendingPathComponent("form.docx")
+        let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/></w:tblGrid><w:tr>"
+            + cell(paragraph("&#x1B;[31mXX", run("偽造")), tcPr: "<w:hMerge w:val=\"restart\"/>") + "</w:tr></w:tbl><w:p/>"
+        try makeForm(at: form, extraBody: table)
+        let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
+        XCTAssertEqual(result.exitCode, 0, result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀"), result.stderr)
+        XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
+        XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
+        XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
+    }
 }
