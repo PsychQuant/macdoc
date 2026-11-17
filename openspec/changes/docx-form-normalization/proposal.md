@@ -28,7 +28,7 @@ Filling a table-dense official form with swiftify puts every value in the right 
 
 - Affected specs: `docx-form-normalization` (modified; the main spec was created by PsychQuant/macdoc#277), `swiftify-workflow` (modified)
 - Affected code:
-  - New: Sources/DocxForm/XMLTagIndex.swift, Sources/DocxForm/FormClassifier.swift, Sources/DocxForm/FormEditing.swift, Sources/DocxForm/FormOperations.swift, Sources/DocxForm/FormPlan.swift, Sources/DocxForm/DocxPackage.swift, Sources/DocxForm/TableGrid.swift, Sources/DocxForm/TableDefaults.swift, Sources/MacDocCLI/MacDoc+Word+Form.swift, Tests/DocxFormTests/TestXML.swift, Tests/DocxFormTests/XMLTagIndexTests.swift, Tests/DocxFormTests/FormClassifierTests.swift, Tests/DocxFormTests/FormOperationsTests.swift, Tests/DocxFormTests/FormPlanTests.swift, Tests/DocxFormTests/DocxPackageTests.swift, Tests/DocxFormTests/Issue250TableDefaultsTests.swift, Tests/MacDocCLITests/WordFormCommandTests.swift
+  - New: Sources/MacDocCLI/MacDoc+Word+Form.swift, Sources/MacDocCLI/WordFormApplyOption.swift, Tests/MacDocCLITests/WordFormCommandTests.swift. The DocxForm library and its tests were first added to this repo; since PsychQuant/macdoc#274 they live in ooxml-swift's DocxForm product, so they are not files of this repo.
   - Modified: Package.swift, Sources/MacDocCLI/MacDoc+Word.swift, cli-spec.yaml, plugins/macdoc/skills/swiftify/SKILL.md, plugins/macdoc/skills/macdoc/SKILL.md, plugins/macdoc/CHANGELOG.md
   - Removed: (none)
 - Dependencies: ZIPFoundation (already a direct dependency of the package).
