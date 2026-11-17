@@ -623,6 +623,7 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertFalse(result.stderr.contains("座標印 t2:?"), result.stderr)
         XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
         XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
+        XCTAssertFalse(result.stderr.contains("偽造"), result.stderr)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
         XCTAssertFalse(result.stderr.unicodeScalars.contains("\u{1B}"))
         // Without --grid there are no cell positions, so no table note.
