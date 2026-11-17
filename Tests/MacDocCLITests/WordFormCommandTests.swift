@@ -164,15 +164,18 @@ final class WordFormCommandTests: XCTestCase {
         }
     }
 
-    /// A paraId is eight hex digits; a crafted one (here an ESC sequence from
-    /// a character reference) is not printed, only counted.
+    /// A paraId is eight hex digits; a crafted one (here starting with a raw
+    /// ESC) is not printed, only counted. The ESC is written raw: a character
+    /// reference such as `&#x1B;` is kept as written by the decoder, so the
+    /// input would hold no ESC and the ESC assertions could not fail (macdoc#283).
     func testClassifySkipsParaIdsThatAreNotEightHexDigits() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")
-        try makeForm(at: form, extraBody: paragraph("&#x1B;[31mXX", run("偽造")))
+        try makeForm(at: form, extraBody: paragraph("\u{1B}[31mXX", run("偽造")))
         let result = try CLITestHelper.run(["word", "form", "classify", form.path])
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
+        XCTAssertFalse(result.stderr.unicodeScalars.contains("\u{1B}"))
         XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
         XCTAssertEqual(result.stdout.split(separator: "\n").count, 4, result.stdout)
         XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
@@ -585,6 +588,7 @@ final class WordFormCommandTests: XCTestCase {
         ])
     }
 
+    /// spec-example: docx-form-normalization / hMerge table with a well-formed paraId
     func testClassifyGridMarksATableItCannotRead() throws {
         let dir = try tempDir()
         let form = dir.appendingPathComponent("form.docx")
@@ -594,7 +598,9 @@ final class WordFormCommandTests: XCTestCase {
         let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
         XCTAssertEqual(result.exitCode, 0, result.stderr)
         XCTAssertTrue(result.stdout.contains("0000E101\ttable-field\tt2:?\t舊式合併"), result.stdout)
-        XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀"), result.stderr)
+        // A line with t2:? was printed, so the note points to it (macdoc#283).
+        XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀，座標印 t2:?；apply --table-defaults 會說明原因"),
+                      result.stderr)
     }
 
     /// An unreadable table is reported even when every paragraph id in it is
@@ -611,7 +617,10 @@ final class WordFormCommandTests: XCTestCase {
         try makeForm(at: form, extraBody: table)
         let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
         XCTAssertEqual(result.exitCode, 0, result.stderr)
-        XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀"), result.stderr)
+        XCTAssertTrue(result.stderr.contains("note: 第 2 張表格的欄列位置無法判讀；這張表格帶 w14:paraId 的段落全部被略過"),
+                      result.stderr)
+        // Nothing on stdout carries t2:?, so the note must not point there (macdoc#283).
+        XCTAssertFalse(result.stderr.contains("座標印 t2:?"), result.stderr)
         XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
         XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))

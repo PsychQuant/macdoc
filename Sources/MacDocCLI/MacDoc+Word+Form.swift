@@ -89,6 +89,9 @@ extension MacDoc.Word.Form {
                 // terminal sequences or fake columns, so such rows are counted.
                 var skipped = 0
                 var unreadableTables: Set<Int> = []
+                // Unreadable tables that got at least one stdout line with tN:?;
+                // only those can be pointed to in the note (macdoc#283).
+                var printedUnreadableTables: Set<Int> = []
                 for paragraph in paragraphs {
                     // Whether a table's grid can be read does not depend on its
                     // paragraph ids, and the table number is an integer, so it is
@@ -102,10 +105,16 @@ extension MacDoc.Word.Form {
                     }
                     let position = paragraph.cell?.description ?? "-"
                     print("\(paragraph.paraId)\t\(paragraph.kind.rawValue)\t\(position)\t\(Self.preview(paragraph.text))")
+                    if case .unreadableTable(let table)? = paragraph.cell { printedUnreadableTables.insert(table) }
                 }
                 for table in unreadableTables.sorted() {
-                    FileHandle.standardError.write(Data(
-                        "note: 第 \(table) 張表格的欄列位置無法判讀，座標印 t\(table):?；apply --table-defaults 會說明原因\n".utf8))
+                    // When every paragraph of the table that carries a w14:paraId was
+                    // skipped, stdout has no tN:? line and no id can be given to
+                    // apply --table-defaults, so the note says so instead.
+                    let rest = printedUnreadableTables.contains(table)
+                        ? "，座標印 t\(table):?；apply --table-defaults 會說明原因"
+                        : "；這張表格帶 w14:paraId 的段落全部被略過，沒有 paraId 可以交給 apply --table-defaults"
+                    FileHandle.standardError.write(Data("note: 第 \(table) 張表格的欄列位置無法判讀\(rest)\n".utf8))
                 }
                 if skipped > 0 {
                     FileHandle.standardError.write(Data(
