@@ -1,0 +1,8 @@
+## 1. Test
+
+- [x] 1.1 Example "hMerge table with an escape-sequence paraId": in `testClassifyGridNotesAnUnreadableTableWhoseIdsAreAllSkipped` (`Tests/MacDocCLITests/WordFormCommandTests.swift`, which already carries this Example's `spec-example: docx-form-normalization / hMerge table with an escape-sequence paraId` marker), add an assertion that stderr does not contain `偽造`. Verification: the test passes; and with the CLI temporarily changed to write each skipped paragraph's text into the skipped-id count line on stderr, the new assertion fails (the change is reverted before commit).
+
+## 2. Documentation
+
+- [x] 2.1 Requirement "Unreadable tables are reported whatever their paragraph ids": the main spec gets the MODIFIED block through the archive of this change (when-and-only-when condition, wrappers named as the only ones, examples instead of a closed list, Scenario THEN about control characters taken from the paragraph's `w14:paraId` or text). Verification: `spectra validate idd-284-unreadable-table-wording` passes, and the Example titles are unchanged so `grep -n "spec-example: docx-form-normalization" Tests/MacDocCLITests/WordFormCommandTests.swift` still finds both markers.
+- [x] 2.2 In `openspec/changes/docx-form-normalization/proposal.md`, list `docx-form-normalization` under Modified Capabilities instead of New Capabilities, and change its Affected specs entry from `(new)` to `(modified)`, saying the main spec was created by #277. Verification: `spectra validate docx-form-normalization` still passes and the proposal no longer contains `docx-form-normalization` (new).
