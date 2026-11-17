@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Microsoft Word (.docx) MCP plugin. Wraps the [CheWordMCP](https://github.com/PsychQuant/che-word-mcp) Swift binary via auto-download wrapper. **Swift-native OOXML manipulation** — reads and writes .docx without requiring Microsoft Word installation. 245 tools（binary v4.0.0 `tools/list` 實測）cover the full Office.js OOXML Roadmap P0 set ([#43](https://github.com/PsychQuant/che-word-mcp/issues/43) closed 100%).
+Microsoft Word (.docx) MCP plugin. Wraps the [CheWordMCP](https://github.com/PsychQuant/che-word-mcp) Swift binary via auto-download wrapper. **Swift-native OOXML manipulation** — reads and writes .docx without requiring Microsoft Word installation. 248 tools（binary 4.10.0 `tools/list` 實測）cover the full Office.js OOXML Roadmap P0 set ([#43](https://github.com/PsychQuant/che-word-mcp/issues/43) closed 100%).
 
 Built on [`ooxml-swift`](https://github.com/PsychQuant/ooxml-swift). **版本以 binary repo 的 `Package.swift` 為準** —— 這裡不寫死版號，因為它在每次上游發布後就過期，本檔已為此改過三次。
 
 ## Components
 
-### MCP Tools (245)
+### MCP Tools (248)
 
 | Category | Representative tools |
 |----------|---------------------|
@@ -46,7 +46,7 @@ MCP namespace: `mcp__che-word-mcp__<tool>`.
 | Mode | Param | Tools | Use when |
 |------|-------|-------|----------|
 | Direct | `source_path` | 18 | 快速 read-only 檢查（list/search/info），不需 open/close lifecycle |
-| Session | `doc_id` | All 245 | 任何寫入或多步驟編輯都要走這個 |
+| Session | `doc_id` | All 248 | 任何寫入或多步驟編輯都要走這個 |
 
 ## Track Changes Contract（v3.12.0+ 重要）
 
