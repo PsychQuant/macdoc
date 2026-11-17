@@ -15,7 +15,7 @@
 
 | Plugin | 內容 |
 |--------|------|
-| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，242 工具） |
+| `che-word-mcp` | Word (.docx) MCP server（OOXML 讀寫，248 工具） |
 | `che-pdf-mcp` | PDF MCP server（PDFKit 解析、Vision OCR） |
 | `che-pptx-mcp` | PowerPoint (.pptx) MCP server（PresentationML 解析與生成） |
 | `docflow` | 文件多版本的語意整合（`doc-synth` skill：.tex / .md / .ipynb / .docx 依段落維度取捨，並記錄每段來源） |
