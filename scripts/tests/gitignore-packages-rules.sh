@@ -51,12 +51,22 @@ is_ignored() {
 # intended to be trackable. Derived from git ls-files, not hardcoded, so
 # adding a package's files to git without also opening it in .gitignore is
 # exactly the failure this test exists to catch.
-mapfile -t INTENDED_PACKAGES < <(
+#
+# A while-read loop, not `mapfile`: the shebang is /bin/bash, which on macOS is
+# bash 3.2, and `mapfile` only exists from bash 4.0 (#287).
+INTENDED_PACKAGES=()
+while IFS= read -r pkg; do
+    INTENDED_PACKAGES+=("$pkg")
+done < <(
     git ls-files packages/ | sed -E 's#^packages/([^/]+)/.*#\1#' | sort -u
 )
 
+# Stop here when the list is empty. Before bash 4.4, expanding an empty array
+# under `set -u` aborts with "unbound variable", so the loops below would
+# replace this message with a misleading one (#287).
 if [ "${#INTENDED_PACKAGES[@]}" -eq 0 ]; then
     fail "no tracked packages found under packages/ — git ls-files packages/ came back empty; refusing to run a vacuous test"
+    exit 1
 fi
 
 # Known local-only packages (separate git repos, cloned on demand per
