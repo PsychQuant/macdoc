@@ -17,17 +17,18 @@ Filling a table-dense official form with swiftify puts every value in the right 
 
 ### New Capabilities
 
-- `docx-form-normalization`: classification of form paragraphs by structural kind and the string-level operations that make a filled form uniform (field normalization, box font, list tick, inheriting insert, removal, truncation) with all-or-nothing output.
+(none)
 
 ### Modified Capabilities
 
+- `docx-form-normalization`: classification of form paragraphs by structural kind and the string-level operations that make a filled form uniform (field normalization, box font, list tick, inheriting insert, removal, truncation) with all-or-nothing output. This change was first proposed as creating the capability; the main spec was created by PsychQuant/macdoc#277 with one requirement, so this change's delta adds its requirements to an existing capability.
 - `swiftify-workflow`: the documented round trip gains an optional form-normalization step after render, routed by paragraph kind.
 
 ## Impact
 
-- Affected specs: `docx-form-normalization` (new), `swiftify-workflow` (modified)
+- Affected specs: `docx-form-normalization` (modified; the main spec was created by PsychQuant/macdoc#277), `swiftify-workflow` (modified)
 - Affected code:
-  - New: Sources/DocxForm/XMLTagIndex.swift, Sources/DocxForm/FormClassifier.swift, Sources/DocxForm/FormEditing.swift, Sources/DocxForm/FormOperations.swift, Sources/DocxForm/FormPlan.swift, Sources/DocxForm/DocxPackage.swift, Sources/DocxForm/TableGrid.swift, Sources/DocxForm/TableDefaults.swift, Sources/MacDocCLI/MacDoc+Word+Form.swift, Tests/DocxFormTests/TestXML.swift, Tests/DocxFormTests/XMLTagIndexTests.swift, Tests/DocxFormTests/FormClassifierTests.swift, Tests/DocxFormTests/FormOperationsTests.swift, Tests/DocxFormTests/FormPlanTests.swift, Tests/DocxFormTests/DocxPackageTests.swift, Tests/DocxFormTests/Issue250TableDefaultsTests.swift, Tests/MacDocCLITests/WordFormCommandTests.swift
+  - New: Sources/MacDocCLI/MacDoc+Word+Form.swift, Sources/MacDocCLI/WordFormApplyOption.swift, Tests/MacDocCLITests/WordFormCommandTests.swift. The DocxForm library and its tests were first added to this repo; since PsychQuant/macdoc#274 they live in ooxml-swift's DocxForm product, so they are not files of this repo.
   - Modified: Package.swift, Sources/MacDocCLI/MacDoc+Word.swift, cli-spec.yaml, plugins/macdoc/skills/swiftify/SKILL.md, plugins/macdoc/skills/macdoc/SKILL.md, plugins/macdoc/CHANGELOG.md
   - Removed: (none)
 - Dependencies: ZIPFoundation (already a direct dependency of the package).

@@ -623,11 +623,47 @@ final class WordFormCommandTests: XCTestCase {
         XCTAssertFalse(result.stderr.contains("座標印 t2:?"), result.stderr)
         XCTAssertTrue(result.stderr.contains("略過 1 個 w14:paraId"), result.stderr)
         XCTAssertFalse(result.stdout.contains("偽造"), result.stdout)
+        XCTAssertFalse(result.stderr.contains("偽造"), result.stderr)
         XCTAssertFalse(result.stdout.unicodeScalars.contains("\u{1B}"))
         XCTAssertFalse(result.stderr.unicodeScalars.contains("\u{1B}"))
         // Without --grid there are no cell positions, so no table note.
         let plain = try CLITestHelper.run(["word", "form", "classify", form.path])
         XCTAssertEqual(plain.exitCode, 0, plain.stderr)
         XCTAssertFalse(plain.stderr.contains("無法判讀"), plain.stderr)
+    }
+
+    /// The "only when" side of "Unreadable tables are reported whatever their
+    /// paragraph ids" (macdoc#284): a paragraph whose nearest container,
+    /// looking through w:sdt / w:sdtContent / w:customXml only, is not a w:tc
+    /// of the unreadable table does not make the CLI name that table. One
+    /// document per case, so the hMerge table holds nothing else carrying a
+    /// paraId.
+    func testClassifyGridWritesNoNoteForParagraphsOutsideTheUnreadableTablesCells() throws {
+        let cases: [(name: String, content: String, line: String)] = [
+            ("text box",
+             "<w:p><w:r><w:pict><v:shape><v:textbox><w:txbxContent>" + paragraph("0000E301", run("方塊"))
+                + "</w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>",
+             "0000E301\tbody\t-\t方塊"),
+            ("block-level mc:AlternateContent",
+             "<mc:AlternateContent><mc:Choice Requires=\"w14\">" + paragraph("0000E302", run("替代"))
+                + "</mc:Choice></mc:AlternateContent><w:p/>",
+             "0000E302\tbody\t-\t替代"),
+            ("nested table",
+             "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"1000\"/></w:tblGrid><w:tr>"
+                + "<w:tc>" + paragraph("0000E303", run("巢狀")) + "</w:tc></w:tr></w:tbl><w:p/>",
+             "0000E303\ttable-field\tt3:r1c1\t巢狀"),
+        ]
+        for item in cases {
+            let dir = try tempDir()
+            let form = dir.appendingPathComponent("form.docx")
+            let table = "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"3000\"/></w:tblGrid><w:tr>"
+                + cell(item.content, tcPr: "<w:hMerge w:val=\"restart\"/>") + "</w:tr></w:tbl><w:p/>"
+            try makeForm(at: form, extraBody: table)
+            let result = try CLITestHelper.run(["word", "form", "classify", "--grid", form.path])
+            XCTAssertEqual(result.exitCode, 0, "\(item.name): \(result.stderr)")
+            XCTAssertTrue(result.stdout.contains(item.line), "\(item.name): \(result.stdout)")
+            XCTAssertFalse(result.stderr.contains("第 2 張表格"), "\(item.name): \(result.stderr)")
+            XCTAssertFalse(result.stderr.contains("無法判讀"), "\(item.name): \(result.stderr)")
+        }
     }
 }
